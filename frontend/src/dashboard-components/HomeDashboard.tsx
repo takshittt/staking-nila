@@ -115,7 +115,7 @@ const HomeDashboard: React.FC<HomeDashboardProps> = ({ onNavigate }) => {
                         </div>
                         <div>
                             <h3 className="text-lg font-bold text-slate-900">Active Stake Summary</h3>
-                            <p className="text-slate-600">You currently have <span className="font-semibold text-slate-900">3 active staking plans</span>. Rewards are accumulating in real time.</p>
+                            <p className="text-slate-600">You currently have <span className="font-semibold text-slate-900">3 active staked packages</span>. Rewards are accumulating in real time.</p>
                         </div>
                     </div>
 
@@ -128,9 +128,9 @@ const HomeDashboard: React.FC<HomeDashboardProps> = ({ onNavigate }) => {
                     </button>
                 </div>
 
-                {/* Active Staking Plans Breakdown */}
+                {/* Active Stakes Breakdown */}
                 <div className="pb-8">
-                    <h3 className="text-xl font-bold text-slate-900 mb-4">Active Staking Plans</h3>
+                    <h3 className="text-xl font-bold text-slate-900 mb-4">Active Stakes</h3>
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                         {activeStakes.map((stake) => (
                             <div
