@@ -1,4 +1,4 @@
-import { Home, Wallet, Gift, Users, History, X } from 'lucide-react';
+import { Home, Wallet, Gift, Users, History } from 'lucide-react';
 import { useEffect } from 'react';
 
 interface SidePanelProps {
