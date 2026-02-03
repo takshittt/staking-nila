@@ -1,0 +1,9 @@
+export { default as Navbar } from './Navbar';
+export { default as HeroSection } from './HeroSection';
+export { default as ParticlesBackground } from './ParticlesBackground';
+export { default as HowItWorks } from './HowItWorks';
+export { default as LandingRewards } from './LandingRewards';
+export { default as LandingReferral } from './LandingReferral';
+export { default as FAQ } from './FAQ';
+export { default as StartStaking } from './StartStaking';
+export { default as Footer } from './Footer';
