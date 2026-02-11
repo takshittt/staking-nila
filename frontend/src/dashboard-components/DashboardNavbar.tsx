@@ -57,15 +57,15 @@ export default function DashboardNavbar({ onMenuClick }: DashboardNavbarProps) {
 
                     {/* Right Action Section */}
                     <div className="flex items-center gap-4">
-                        {/* Network Indicator */}
-                        <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-slate-50 border border-slate-200">
-                            <span className="text-xs font-semibold text-slate-600">Nila Testnet</span>
-                        </div>
+
 
                         {/* Wallet Info */}
-                        <div className="flex items-center gap-2">
-                            <div className="flex flex-col items-end mr-2">
-                                <span className="text-xs text-slate-500 font-medium">{formatAddress(address)}</span>
+                        <div className="flex items-center gap-3">
+                            <div className="flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-white border border-slate-200 shadow-sm hover:border-red-200 transition-colors group cursor-default">
+                                <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse shadow-[0_0_8px_rgba(34,197,94,0.4)]" />
+                                <span className="text-xs font-bold text-slate-900 font-mono tracking-tight">
+                                    {formatAddress(address)}
+                                </span>
                             </div>
 
                             {/* Notifications */}

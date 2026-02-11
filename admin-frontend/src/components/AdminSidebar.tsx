@@ -1,5 +1,7 @@
 import { BarChart3, TrendingUp, Users, Zap, Users2, Coins, Menu, X, LogOut } from 'lucide-react';
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { useAuthStore } from '../stores/authStore';
 
 interface AdminSidebarProps {
     activeTab: string;
@@ -7,6 +9,8 @@ interface AdminSidebarProps {
 }
 
 const AdminSidebar = ({ activeTab, onTabChange }: AdminSidebarProps) => {
+    const navigate = useNavigate();
+    const { logout } = useAuthStore();
     const [isOpen, setIsOpen] = useState(false);
 
     const menuItems = [
@@ -110,8 +114,8 @@ const AdminSidebar = ({ activeTab, onTabChange }: AdminSidebarProps) => {
                 <div className="p-4 border-t border-red-700">
                     <button
                         onClick={() => {
-                            // TODO: Implement logout logic
-                            console.log('Logout clicked');
+                            logout();
+                            navigate('/login');
                             setIsOpen(false);
                         }}
                         className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-red-100 hover:bg-white/10 hover:text-white transition-all duration-200"

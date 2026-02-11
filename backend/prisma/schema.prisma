@@ -1,0 +1,22 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+// Single admin user - only one row will ever exist
+model Admin {
+  id                Int       @id @default(1) // Always ID = 1
+  passwordHash      String
+  twoFactorSecret   String    @db.Text // Encrypted TOTP secret
+  backupCodes       String    @db.Text // JSON array of encrypted backup codes
+  isSetupComplete   Boolean   @default(false)
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  lastLoginAt       DateTime?
+  
+  @@map("admin")
+}

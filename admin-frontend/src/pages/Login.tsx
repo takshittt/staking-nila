@@ -1,7 +1,12 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Shield, Eye, EyeOff, Lock, KeyRound } from 'lucide-react';
+import { authApi } from '../api/authApi';
+import { useAuthStore } from '../stores/authStore';
 
 const Login = () => {
+    const navigate = useNavigate();
+    const { setToken } = useAuthStore();
     const [password, setPassword] = useState('');
     const [totpCode, setTotpCode] = useState('');
     const [showPassword, setShowPassword] = useState(false);
@@ -25,93 +30,89 @@ const Login = () => {
         setLoading(true);
 
         try {
-            // TODO: Call API to login
-            // const response = await fetch('/api/auth/login', {
-            //     method: 'POST',
-            //     headers: { 'Content-Type': 'application/json' },
-            //     body: JSON.stringify({ password, totpCode })
-            // });
+            const data = await authApi.login({ password, totpCode });
 
-            console.log('Login with:', { password, totpCode });
+            // Store token
+            setToken(data.token);
 
-            // Simulate API call
-            await new Promise(resolve => setTimeout(resolve, 1000));
-
-            // TODO: Store token and redirect to dashboard
-            // localStorage.setItem('token', response.token);
-            // navigate('/admin');
-        } catch (err) {
-            setError('Invalid credentials. Please try again.');
+            // Redirect to dashboard
+            navigate('/admin');
+        } catch (err: any) {
+            setError(err.response?.data?.error || 'Invalid credentials. Please try again.');
         } finally {
             setLoading(false);
         }
     };
 
     return (
-        <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
-            <div className="w-full max-w-sm">
+        <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4 font-sans">
+            <div className="w-full max-w-md">
                 {/* Header */}
                 <div className="text-center mb-8">
-                    <h1 className="text-2xl font-bold text-slate-900 mb-1">Admin Login</h1>
-                    <p className="text-sm text-slate-500 font-medium tracking-wide">Enter your credentials to continue</p>
+
+                    <h1 className="text-3xl font-bold text-slate-900 mb-2">Admin Login</h1>
+                    <p className="text-slate-600 font-medium">Enter your credentials to access the dashboard</p>
                 </div>
 
                 {/* Login Card */}
-                <div className="bg-white rounded-2xl shadow-sm p-6 border border-slate-100">
-                    <form onSubmit={handleLogin} className="space-y-5">
+                <div className="bg-white rounded-2xl shadow-xl p-8 border border-slate-200">
+                    <form onSubmit={handleLogin} className="space-y-6">
                         {/* Password Input */}
-                        <div className="space-y-1.5">
-                            <label className="block text-xs font-bold text-slate-700 uppercase tracking-widest">
+                        <div>
+                            <label className="block text-sm font-bold text-slate-700 mb-2 uppercase tracking-wider">
                                 Master Password
                             </label>
-                            <div className="relative group">
-                                <div className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-red-600 transition-colors">
-                                    <Lock className="w-4 h-4" />
+                            <div className="relative">
+                                <div className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">
+                                    <Lock className="w-5 h-5" />
                                 </div>
                                 <input
                                     type={showPassword ? 'text' : 'password'}
                                     value={password}
                                     onChange={(e) => setPassword(e.target.value)}
-                                    className="w-full pl-10 pr-10 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 text-sm focus:outline-none focus:ring-4 focus:ring-red-500/10 focus:border-red-500 transition-all font-medium"
-                                    placeholder="••••••••••••"
+                                    className="w-full pl-11 pr-11 py-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-4 focus:ring-red-500/10 focus:border-red-500 transition-all font-medium"
+                                    placeholder="Enter your password"
                                     required
                                 />
                                 <button
                                     type="button"
                                     onClick={() => setShowPassword(!showPassword)}
-                                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-red-600 transition-colors"
+                                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors"
                                 >
-                                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                                    {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
                                 </button>
                             </div>
                         </div>
 
                         {/* 2FA Code Input */}
-                        <div className="space-y-1.5">
-                            <label className="block text-xs font-bold text-slate-700 uppercase tracking-widest">
-                                Authentication Code
+                        <div>
+                            <label className="block text-sm font-bold text-slate-700 mb-2 uppercase tracking-wider">
+                                2FA Code
                             </label>
-                            <div className="relative group">
-                                <div className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-red-600 transition-colors">
-                                    <KeyRound className="w-4 h-4" />
+                            <div className="relative">
+                                <div className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">
+                                    <KeyRound className="w-5 h-5" />
                                 </div>
                                 <input
                                     type="text"
                                     value={totpCode}
                                     onChange={(e) => setTotpCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                                    className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 text-center text-xl tracking-[0.2em] placeholder-slate-300 focus:outline-none focus:ring-4 focus:ring-red-500/10 focus:border-red-500 transition-all font-mono font-bold"
+                                    className="w-full pl-11 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 text-center text-2xl tracking-[0.3em] font-mono font-bold placeholder-slate-200 focus:outline-none focus:ring-4 focus:ring-red-500/10 focus:border-red-500 transition-all shadow-inner"
                                     placeholder="000000"
                                     maxLength={6}
                                     required
                                 />
                             </div>
+                            <p className="mt-2 text-xs text-slate-500 font-medium">
+                                Enter the 6-digit code from Google Authenticator
+                            </p>
                         </div>
 
                         {/* Error Message */}
                         {error && (
-                            <div className="bg-red-50 border border-red-200 rounded-xl p-3 flex items-center gap-2">
+                            <div className="bg-red-50 border border-red-200 rounded-xl p-3.5 flex items-center gap-3">
                                 <div className="w-1.5 h-1.5 rounded-full bg-red-600 animate-pulse" />
-                                <p className="text-xs font-bold text-red-600">{error}</p>
+                                <p className="text-sm font-bold text-red-600">{error}</p>
                             </div>
                         )}
 
@@ -119,27 +120,37 @@ const Login = () => {
                         <button
                             type="submit"
                             disabled={loading}
-                            className="w-full bg-red-600 hover:bg-red-700 disabled:bg-red-600 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold py-3 rounded-xl transition-all duration-300 flex items-center justify-center gap-2 shadow-lg shadow-red-600/20 active:scale-[0.98] text-sm"
+                            className="w-full bg-red-600 hover:bg-red-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white font-bold py-3.5 rounded-xl transition-all duration-300 flex items-center justify-center gap-2 shadow-lg shadow-red-600/20 active:scale-[0.98]"
                         >
                             {loading ? (
                                 <>
-                                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                                    <span>Wait...</span>
+                                    <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                                    <span>Verifying...</span>
                                 </>
                             ) : (
                                 <>
-                                    <Shield className="w-4 h-4" />
-                                    <span>Sign In</span>
+                                    <Shield className="w-5 h-5" />
+                                    <span>Login to Dashboard</span>
                                 </>
                             )}
                         </button>
                     </form>
+
+                    {/* Additional Info */}
+                    <div className="mt-6 pt-6 border-t border-slate-100">
+                        <div className="bg-slate-50 rounded-xl p-4 flex items-center justify-center gap-2">
+                            <span className="text-lg">🔒</span>
+                            <p className="text-sm text-slate-600 font-medium">
+                                Secure Admin Access Protected by 2FA
+                            </p>
+                        </div>
+                    </div>
                 </div>
 
                 {/* Footer */}
                 <div className="text-center mt-8">
-                    <p className="text-[10px] font-bold text-slate-400 tracking-widest uppercase">
-                        Admin Interface 2.0
+                    <p className="text-sm text-slate-500 font-medium">
+                        &copy; {new Date().getFullYear()} MindwaveDAO Admin Panel
                     </p>
                 </div>
             </div>

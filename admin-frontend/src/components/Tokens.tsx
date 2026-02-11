@@ -46,7 +46,7 @@ const truncateAddress = (address: string) => {
 };
 
 const Tokens = () => {
-    const [wallets, setWallets] = useState<TokenWallet[]>(mockWallets);
+    const [wallets] = useState<TokenWallet[]>(mockWallets);
     const [selectedWallet, setSelectedWallet] = useState<TokenWallet | null>(null);
     const [isConfirmOpen, setIsConfirmOpen] = useState(false);
 

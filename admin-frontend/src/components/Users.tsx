@@ -72,7 +72,7 @@ const truncateAddress = (address: string) => {
 };
 
 const Users = () => {
-    const [users, setUsers] = useState<User[]>(mockUsers);
+    const [users] = useState<User[]>(mockUsers);
     const [selectedUser, setSelectedUser] = useState<User | null>(null);
     const [isProfileOpen, setIsProfileOpen] = useState(false);
 

@@ -1,21 +1,19 @@
 import { useState } from 'react';
-import { Smartphone, CheckCircle, ArrowLeft, Copy, Check } from 'lucide-react';
+import { CheckCircle, ArrowLeft, Copy, Check } from 'lucide-react';
 
 interface GoogleAuthenticatorProps {
     password: string;
+    qrCodeUrl: string;
+    manualEntryCode: string;
     onComplete: (totpCode: string) => void;
     onBack: () => void;
 }
 
-const GoogleAuthenticator = ({ password, onComplete, onBack }: GoogleAuthenticatorProps) => {
+const GoogleAuthenticator = ({ qrCodeUrl, manualEntryCode, onComplete, onBack }: GoogleAuthenticatorProps) => {
     const [totpCode, setTotpCode] = useState('');
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
     const [copied, setCopied] = useState(false);
-
-    // TODO: Fetch from backend
-    const qrCodeUrl = ''; // Will be fetched from API
-    const manualEntryCode = 'XXXX XXXX XXXX XXXX'; // Will be fetched from API
 
     const handleCopyCode = () => {
         navigator.clipboard.writeText(manualEntryCode.replace(/\s/g, ''));
@@ -35,11 +33,9 @@ const GoogleAuthenticator = ({ password, onComplete, onBack }: GoogleAuthenticat
         setLoading(true);
 
         try {
-            console.log('Setup complete with:', { password, totpCode });
-            await new Promise(resolve => setTimeout(resolve, 1000));
-            onComplete(totpCode);
-        } catch (err) {
-            setError('Invalid verification code. Please try again.');
+            await onComplete(totpCode);
+        } catch (err: any) {
+            setError(err.response?.data?.error || 'Invalid verification code. Please try again.');
         } finally {
             setLoading(false);
         }
