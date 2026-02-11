@@ -1,8 +1,27 @@
-import React, { useState } from 'react';
-import { Link } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+import { useAppKit } from '@reown/appkit/react';
+import { useAccount } from 'wagmi';
 
 const Navbar: React.FC = () => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const { open } = useAppKit();
+  const { address, isConnected } = useAccount();
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    if (isConnected && window.location.pathname === '/') {
+      navigate('/dashboard');
+    }
+  }, [isConnected, navigate]);
+
+  const handleConnect = () => {
+    open();
+  };
+
+  const formatAddress = (addr: string) => {
+    return `${addr.slice(0, 6)}...${addr.slice(-4)}`;
+  };
 
   return (
     <nav className="fixed top-0 left-0 right-0 z-50 bg-white/90 backdrop-blur-sm border-b border-gray-100">
@@ -48,14 +67,25 @@ const Navbar: React.FC = () => {
 
           {/* Connect Wallet Button */}
           <div className="hidden md:flex items-center gap-4 shrink-0">
-            <Link to="/dashboard">
+            {isConnected ? (
+              <Link to="/dashboard">
+                <button
+                  onClick={handleConnect}
+                  className="font-manrope font-bold text-[14px] bg-[#E31E24] text-white rounded-full hover:bg-[#c1191f] transition-all duration-200 shadow-sm hover:shadow-xl whitespace-nowrap shrink-0 flex items-center justify-center"
+                  style={{ padding: '12px 16px' }}
+                >
+                  {formatAddress(address!)}
+                </button>
+              </Link>
+            ) : (
               <button
+                onClick={handleConnect}
                 className="font-manrope font-bold text-[14px] bg-[#E31E24] text-white rounded-full hover:bg-[#c1191f] transition-all duration-200 shadow-sm hover:shadow-xl whitespace-nowrap shrink-0 flex items-center justify-center"
                 style={{ padding: '12px 16px' }}
               >
                 Connect Wallet
               </button>
-            </Link>
+            )}
           </div>
 
           {/* Mobile menu button */}
@@ -101,11 +131,23 @@ const Navbar: React.FC = () => {
               {item}
             </a>
           ))}
-          <Link to="/dashboard" className="w-full">
-            <button className="w-full mt-4 font-manrope font-bold bg-[#E31E24] text-white px-10 py-4 text-[17px] rounded-full hover:bg-[#c1191f] transition-all duration-200">
+          {isConnected ? (
+            <Link to="/dashboard" className="w-full">
+              <button 
+                onClick={handleConnect}
+                className="w-full mt-4 font-manrope font-bold bg-[#E31E24] text-white px-10 py-4 text-[17px] rounded-full hover:bg-[#c1191f] transition-all duration-200"
+              >
+                {formatAddress(address!)}
+              </button>
+            </Link>
+          ) : (
+            <button 
+              onClick={handleConnect}
+              className="w-full mt-4 font-manrope font-bold bg-[#E31E24] text-white px-10 py-4 text-[17px] rounded-full hover:bg-[#c1191f] transition-all duration-200"
+            >
               Connect Wallet
             </button>
-          </Link>
+          )}
         </div>
       </div>
     </nav>

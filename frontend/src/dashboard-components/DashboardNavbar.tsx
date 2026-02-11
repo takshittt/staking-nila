@@ -2,16 +2,34 @@ import { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Bell, LogOut, Menu } from 'lucide-react';
 import NotificationModal from './NotificationModal';
+import { useDisconnect, useAccount } from 'wagmi';
 
 interface DashboardNavbarProps {
     onMenuClick: () => void;
 }
 
 export default function DashboardNavbar({ onMenuClick }: DashboardNavbarProps) {
-    const [, setIsWalletConnected] = useState(true);
     const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
     const notificationRef = useRef<HTMLDivElement>(null);
     const navigate = useNavigate();
+    const { disconnect } = useDisconnect();
+    const { address, isConnected } = useAccount();
+
+    const formatAddress = (addr?: string) => {
+        if (!addr) return '0x000...000';
+        return `${addr.slice(0, 6)}...${addr.slice(-3)}`;
+    };
+
+    const handleDisconnect = () => {
+        disconnect();
+    };
+
+    // Monitor connection state and redirect when disconnected
+    useEffect(() => {
+        if (!isConnected) {
+            navigate('/');
+        }
+    }, [isConnected, navigate]);
 
     useEffect(() => {
         function handleClickOutside(event: MouseEvent) {
@@ -47,7 +65,7 @@ export default function DashboardNavbar({ onMenuClick }: DashboardNavbarProps) {
                         {/* Wallet Info */}
                         <div className="flex items-center gap-2">
                             <div className="flex flex-col items-end mr-2">
-                                <span className="text-xs text-slate-500 font-medium">0x123...456</span>
+                                <span className="text-xs text-slate-500 font-medium">{formatAddress(address)}</span>
                             </div>
 
                             {/* Notifications */}
@@ -64,10 +82,7 @@ export default function DashboardNavbar({ onMenuClick }: DashboardNavbarProps) {
 
                             {/* Disconnect Button */}
                             <button
-                                onClick={() => {
-                                    setIsWalletConnected(false);
-                                    navigate('/');
-                                }}
+                                onClick={handleDisconnect}
                                 className="flex items-center gap-2 px-4 py-2 rounded-full bg-red-50 text-red-600 hover:bg-red-100 border border-red-100 transition-all duration-300 text-sm font-semibold ml-2"
                             >
                                 <LogOut className="w-4 h-4" />

@@ -1,6 +1,25 @@
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
+import { useAppKit } from '@reown/appkit/react';
+import { useAccount } from 'wagmi';
+import { useEffect } from 'react';
 
 const StartStaking = () => {
+    const { open } = useAppKit();
+    const { isConnected } = useAccount();
+    const navigate = useNavigate();
+
+    useEffect(() => {
+        if (isConnected && window.location.pathname === '/') {
+            navigate('/dashboard');
+        }
+    }, [isConnected, navigate]);
+
+    const handleConnect = () => {
+        if (!isConnected) {
+            open();
+        }
+    };
+
     return (
         <section className="py-24 relative overflow-hidden bg-[#EBE9E4]">
             {/* Subtle yellow hints and gradient overlay */}
@@ -17,11 +36,20 @@ const StartStaking = () => {
                     Stake NILA and unlock instant rewards, predictable returns, and passive referral income.
                 </p>
 
-                <Link to="/dashboard">
-                    <button className="bg-white text-gray-900 px-8 py-4 rounded-full font-semibold shadow-lg hover:shadow-xl hover:scale-105 transition-all duration-300 border border-gray-100/50">
+                {isConnected ? (
+                    <Link to="/dashboard">
+                        <button className="bg-white text-gray-900 px-8 py-4 rounded-full font-semibold shadow-lg hover:shadow-xl hover:scale-105 transition-all duration-300 border border-gray-100/50">
+                            Start Staking
+                        </button>
+                    </Link>
+                ) : (
+                    <button 
+                        onClick={handleConnect}
+                        className="bg-white text-gray-900 px-8 py-4 rounded-full font-semibold shadow-lg hover:shadow-xl hover:scale-105 transition-all duration-300 border border-gray-100/50"
+                    >
                         Connect Wallet & Start Staking
                     </button>
-                </Link>
+                )}
             </div>
         </section>
     );

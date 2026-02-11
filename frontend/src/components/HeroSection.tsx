@@ -1,8 +1,26 @@
-import React from 'react';
-import { Link } from 'react-router-dom';
+import React, { useEffect } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import ParticlesBackground from './ParticlesBackground';
+import { useAppKit } from '@reown/appkit/react';
+import { useAccount } from 'wagmi';
 
 const HeroSection: React.FC = () => {
+  const { open } = useAppKit();
+  const { isConnected } = useAccount();
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    if (isConnected && window.location.pathname === '/') {
+      navigate('/dashboard');
+    }
+  }, [isConnected, navigate]);
+
+  const handleStartStaking = () => {
+    if (!isConnected) {
+      open();
+    }
+  };
+
   return (
     <section className="relative min-h-screen flex items-center justify-center bg-white overflow-hidden pt-20">
 
@@ -29,14 +47,24 @@ const HeroSection: React.FC = () => {
 
           {/* CTA Button */}
           <div className="flex flex-col font-semibold sm:flex-row gap-4 items-start !mt-5">
-            <Link to="/dashboard">
+            {isConnected ? (
+              <Link to="/dashboard">
+                <button
+                  className="font-manrope text-[16px] bg-[#E31E24] text-white rounded-full hover:bg-[#c1191f] transition-all duration-200 shadow-sm hover:shadow-xl whitespace-nowrap shrink-0 flex items-center justify-center"
+                  style={{ padding: '10px 12px' }}
+                >
+                  Start Staking
+                </button>
+              </Link>
+            ) : (
               <button
+                onClick={handleStartStaking}
                 className="font-manrope text-[16px] bg-[#E31E24] text-white rounded-full hover:bg-[#c1191f] transition-all duration-200 shadow-sm hover:shadow-xl whitespace-nowrap shrink-0 flex items-center justify-center"
                 style={{ padding: '10px 12px' }}
               >
                 Start Staking
               </button>
-            </Link>
+            )}
           </div>
         </div>
       </div>
