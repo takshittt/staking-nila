@@ -1,4 +1,4 @@
-import { BarChart3, TrendingUp, Users, Zap, Users2, Coins, Menu, X } from 'lucide-react';
+import { BarChart3, TrendingUp, Users, Zap, Users2, Coins, Menu, X, LogOut } from 'lucide-react';
 import { useState, useEffect } from 'react';
 
 interface AdminSidebarProps {
@@ -106,6 +106,20 @@ const AdminSidebar = ({ activeTab, onTabChange }: AdminSidebarProps) => {
                     ))}
                 </div>
 
+                {/* Logout Button */}
+                <div className="p-4 border-t border-red-700">
+                    <button
+                        onClick={() => {
+                            // TODO: Implement logout logic
+                            console.log('Logout clicked');
+                            setIsOpen(false);
+                        }}
+                        className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-red-100 hover:bg-white/10 hover:text-white transition-all duration-200"
+                    >
+                        <LogOut className="w-5 h-5 text-red-200" />
+                        <span>Logout</span>
+                    </button>
+                </div>
 
             </aside>
         </>
