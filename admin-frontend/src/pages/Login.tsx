@@ -136,15 +136,7 @@ const Login = () => {
                         </button>
                     </form>
 
-                    {/* Additional Info */}
-                    <div className="mt-6 pt-6 border-t border-slate-100">
-                        <div className="bg-slate-50 rounded-xl p-4 flex items-center justify-center gap-2">
-                            <span className="text-lg">🔒</span>
-                            <p className="text-sm text-slate-600 font-medium">
-                                Secure Admin Access Protected by 2FA
-                            </p>
-                        </div>
-                    </div>
+
                 </div>
 
                 {/* Footer */}

@@ -1,230 +1,378 @@
-import { Plus, Edit2, Trash2, Lock } from 'lucide-react';
-import { useState } from 'react';
-import CreatePlanModal from './CreatePlanModal';
-import type { PlanFormData } from './CreatePlanModal';
+import { Plus, Edit2, Power, PowerOff, Loader2 } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { CreateAmountConfigModal, CreateLockConfigModal } from './CreatePlanModal';
+import type { AmountConfigFormData, LockConfigFormData } from './CreatePlanModal';
+import { stakingApi } from '../api/stakingApi';
+import type { AmountConfig, LockConfig } from '../api/stakingApi';
 
-interface StakingPlan {
-    id: string;
-    name: string;
-    duration: number;
-    apy: number;
-    minStake: number;
-    maxStake: number;
-    status: 'active' | 'disabled' | 'locked';
-}
-
-const mockPlans: StakingPlan[] = [
-    {
-        id: '1',
-        name: 'Starter Plan',
-        duration: 30,
-        apy: 5,
-        minStake: 100,
-        maxStake: 10000,
-        status: 'active',
-    },
-    {
-        id: '2',
-        name: 'Premium Plan',
-        duration: 90,
-        apy: 8,
-        minStake: 1000,
-        maxStake: 100000,
-        status: 'active',
-    },
-    {
-        id: '3',
-        name: 'Elite Plan',
-        duration: 180,
-        apy: 12,
-        minStake: 10000,
-        maxStake: 1000000,
-        status: 'locked',
-    },
-    {
-        id: '4',
-        name: 'Legacy Plan',
-        duration: 60,
-        apy: 6,
-        minStake: 500,
-        maxStake: 50000,
-        status: 'disabled',
-    },
-];
-
-const getBadgeStyles = (status: string) => {
-    switch (status) {
-        case 'active':
-            return 'bg-green-100 text-green-800';
-        case 'disabled':
-            return 'bg-slate-100 text-slate-800';
-        case 'locked':
-            return 'bg-yellow-100 text-yellow-800';
-        default:
-            return 'bg-slate-100 text-slate-800';
-    }
-};
-
-const getBadgeLabel = (status: string) => {
-    return status.charAt(0).toUpperCase() + status.slice(1);
+const getBadgeStyles = (active: boolean) => {
+    return active ? 'bg-green-100 text-green-800' : 'bg-slate-100 text-slate-800';
 };
 
 const StakingPlans = () => {
-    const [plans, setPlans] = useState<StakingPlan[]>(mockPlans);
-    const [isModalOpen, setIsModalOpen] = useState(false);
+    const [activeTab, setActiveTab] = useState<'amounts' | 'locks'>('amounts');
+    const [amountConfigs, setAmountConfigs] = useState<AmountConfig[]>([]);
+    const [lockConfigs, setLockConfigs] = useState<LockConfig[]>([]);
+    const [isAmountModalOpen, setIsAmountModalOpen] = useState(false);
+    const [isLockModalOpen, setIsLockModalOpen] = useState(false);
+    const [loading, setLoading] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+    const [txPending, setTxPending] = useState(false);
 
-    const handleEdit = (id: string) => {
-        console.log('Edit plan:', id);
-        // TODO: Open edit modal
+    useEffect(() => {
+        fetchConfigs();
+    }, []);
+
+    const fetchConfigs = async () => {
+        setLoading(true);
+        setError(null);
+        try {
+            const [amounts, locks] = await Promise.all([
+                stakingApi.getAmountConfigs(),
+                stakingApi.getLockConfigs()
+            ]);
+            setAmountConfigs(amounts);
+            setLockConfigs(locks);
+        } catch (err: any) {
+            setError(err.response?.data?.error || 'Failed to fetch configurations');
+            console.error('Error fetching configs:', err);
+        } finally {
+            setLoading(false);
+        }
     };
 
-    const handleDelete = (id: string) => {
-        setPlans(plans.filter((plan) => plan.id !== id));
+    const handleToggleAmountActive = async (id: number) => {
+        const config = amountConfigs.find(c => c.id === id);
+        if (!config) return;
+
+        setTxPending(true);
+        try {
+            await stakingApi.updateAmountConfig(id, {
+                instantRewardPercent: config.instantRewardBps / 100,
+                active: !config.active
+            });
+            await fetchConfigs();
+        } catch (err: any) {
+            alert(err.response?.data?.error || 'Failed to update config');
+        } finally {
+            setTxPending(false);
+        }
     };
 
-    const handleCreateNew = () => {
-        setIsModalOpen(true);
+    const handleToggleLockActive = async (id: number) => {
+        const config = lockConfigs.find(c => c.id === id);
+        if (!config) return;
+
+        setTxPending(true);
+        try {
+            await stakingApi.updateLockConfig(id, {
+                aprPercent: config.apr / 100,
+                active: !config.active
+            });
+            await fetchConfigs();
+        } catch (err: any) {
+            alert(err.response?.data?.error || 'Failed to update config');
+        } finally {
+            setTxPending(false);
+        }
     };
 
-    const handleSubmitPlan = (planData: PlanFormData) => {
-        const newPlan: StakingPlan = {
-            id: Date.now().toString(),
-            ...planData,
-            status: 'active',
-        };
-        setPlans([...plans, newPlan]);
-        console.log('New plan created:', newPlan);
+    const handleCreateAmountConfig = async (data: AmountConfigFormData) => {
+        setTxPending(true);
+        try {
+            const result = await stakingApi.createAmountConfig(data);
+            console.log('Transaction hash:', result.txHash);
+            await fetchConfigs();
+            alert(`Amount config created! TX: ${result.txHash}`);
+        } catch (err: any) {
+            alert(err.response?.data?.error || 'Failed to create config');
+        } finally {
+            setTxPending(false);
+        }
     };
+
+    const handleCreateLockConfig = async (data: LockConfigFormData) => {
+        setTxPending(true);
+        try {
+            const result = await stakingApi.createLockConfig(data);
+            console.log('Transaction hash:', result.txHash);
+            await fetchConfigs();
+            alert(`Lock config created! TX: ${result.txHash}`);
+        } catch (err: any) {
+            alert(err.response?.data?.error || 'Failed to create config');
+        } finally {
+            setTxPending(false);
+        }
+    };
+
+    // Convert wei to NILA for display
+    const formatAmount = (amountWei: string) => {
+        const amount = BigInt(amountWei) / BigInt(10 ** 18);
+        return amount.toString();
+    };
+
+    if (loading && amountConfigs.length === 0 && lockConfigs.length === 0) {
+        return (
+            <div className="flex items-center justify-center h-64">
+                <Loader2 className="w-8 h-8 animate-spin text-red-600" />
+            </div>
+        );
+    }
 
     return (
         <div className="space-y-6">
+            {txPending && (
+                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 flex items-center gap-3">
+                    <Loader2 className="w-5 h-5 animate-spin text-yellow-600" />
+                    <span className="text-yellow-800">Transaction pending... Please wait for blockchain confirmation.</span>
+                </div>
+            )}
+
+            {error && (
+                <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+                    <span className="text-red-800">{error}</span>
+                </div>
+            )}
+
             <div className="flex items-center justify-between">
                 <div>
-                    <h1 className="text-3xl font-bold text-slate-900">Staking Plans</h1>
-                    <p className="text-slate-600 mt-1">Manage all staking plans and their configurations</p>
+                    <h1 className="text-3xl font-bold text-slate-900">Staking Configuration</h1>
+                    <p className="text-slate-600 mt-1">Manage stake amounts and lock durations</p>
                 </div>
-                <button
-                    onClick={handleCreateNew}
-                    className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-medium"
-                >
-                    <Plus className="w-5 h-5" />
-                    Create New Plan
-                </button>
             </div>
 
-            {/* Table */}
-            <div className="bg-white rounded-xl border border-slate-100 shadow-sm overflow-hidden">
-                <div className="overflow-x-auto">
-                    <table className="w-full">
-                        <thead>
-                            <tr className="border-b border-slate-100 bg-slate-50">
-                                <th className="px-6 py-4 text-left text-sm font-semibold text-slate-900">
-                                    Plan Name
-                                </th>
-                                <th className="px-6 py-4 text-left text-sm font-semibold text-slate-900">
-                                    Duration
-                                </th>
-                                <th className="px-6 py-4 text-left text-sm font-semibold text-slate-900">
-                                    APY
-                                </th>
-                                <th className="px-6 py-4 text-left text-sm font-semibold text-slate-900">
-                                    Min Stake
-                                </th>
-                                <th className="px-6 py-4 text-left text-sm font-semibold text-slate-900">
-                                    Max Stake
-                                </th>
-                                <th className="px-6 py-4 text-left text-sm font-semibold text-slate-900">
-                                    Status
-                                </th>
-                                <th className="px-6 py-4 text-left text-sm font-semibold text-slate-900">
-                                    Actions
-                                </th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {plans.map((plan) => (
-                                <tr
-                                    key={plan.id}
-                                    className="border-b border-slate-100 hover:bg-slate-50 transition-colors"
-                                >
-                                    <td className="px-6 py-4 text-sm font-medium text-slate-900">
-                                        {plan.name}
-                                    </td>
-                                    <td className="px-6 py-4 text-sm text-slate-600">
-                                        {plan.duration} days
-                                    </td>
-                                    <td className="px-6 py-4 text-sm font-semibold text-slate-900">
-                                        {plan.apy}%
-                                    </td>
-                                    <td className="px-6 py-4 text-sm text-slate-600">
-                                        {plan.minStake.toLocaleString()} NILA
-                                    </td>
-                                    <td className="px-6 py-4 text-sm text-slate-600">
-                                        {plan.maxStake.toLocaleString()} NILA
-                                    </td>
-                                    <td className="px-6 py-4">
-                                        <span
-                                            className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-semibold ${getBadgeStyles(
-                                                plan.status
-                                            )}`}
-                                        >
-                                            {plan.status === 'locked' && (
-                                                <Lock className="w-3 h-3" />
-                                            )}
-                                            {getBadgeLabel(plan.status)}
-                                        </span>
-                                    </td>
-                                    <td className="px-6 py-4">
-                                        <div className="flex items-center gap-2">
-                                            {plan.status !== 'locked' && (
-                                                <button
-                                                    onClick={() => handleEdit(plan.id)}
-                                                    className="p-2 text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
-                                                    title="Edit plan"
-                                                >
-                                                    <Edit2 className="w-4 h-4" />
-                                                </button>
-                                            )}
-                                            {plan.status === 'locked' && (
-                                                <div className="p-2 text-slate-300 cursor-not-allowed">
-                                                    <Edit2 className="w-4 h-4" />
-                                                </div>
-                                            )}
-                                            <button
-                                                onClick={() => handleDelete(plan.id)}
-                                                className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                                                title="Delete plan"
-                                            >
-                                                <Trash2 className="w-4 h-4" />
-                                            </button>
-                                        </div>
-                                    </td>
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
+            {/* Tabs */}
+            <div className="border-b border-slate-200">
+                <div className="flex gap-4">
+                    <button
+                        onClick={() => setActiveTab('amounts')}
+                        className={`px-4 py-3 font-medium border-b-2 transition-colors ${
+                            activeTab === 'amounts'
+                                ? 'border-red-600 text-red-600'
+                                : 'border-transparent text-slate-600 hover:text-slate-900'
+                        }`}
+                    >
+                        Amount Configs
+                    </button>
+                    <button
+                        onClick={() => setActiveTab('locks')}
+                        className={`px-4 py-3 font-medium border-b-2 transition-colors ${
+                            activeTab === 'locks'
+                                ? 'border-red-600 text-red-600'
+                                : 'border-transparent text-slate-600 hover:text-slate-900'
+                        }`}
+                    >
+                        Lock Configs
+                    </button>
                 </div>
+            </div>
 
-                {/* Empty State */}
-                {plans.length === 0 && (
-                    <div className="px-6 py-12 text-center">
-                        <p className="text-slate-600 mb-4">No staking plans found</p>
+            {/* Amount Configs Tab */}
+            {activeTab === 'amounts' && (
+                <div className="space-y-4">
+                    <div className="flex justify-end">
                         <button
-                            onClick={handleCreateNew}
-                            className="inline-flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-medium"
+                            onClick={() => setIsAmountModalOpen(true)}
+                            disabled={txPending}
+                            className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                             <Plus className="w-5 h-5" />
-                            Create First Plan
+                            Create Amount Config
                         </button>
                     </div>
-                )}
-            </div>
 
-            {/* Create Plan Modal */}
-            <CreatePlanModal
-                isOpen={isModalOpen}
-                onClose={() => setIsModalOpen(false)}
-                onSubmit={handleSubmitPlan}
+                    <div className="bg-white rounded-xl border border-slate-100 shadow-sm overflow-hidden">
+                        <div className="overflow-x-auto">
+                            <table className="w-full">
+                                <thead>
+                                    <tr className="border-b border-slate-100 bg-slate-50">
+                                        <th className="px-6 py-4 text-left text-sm font-semibold text-slate-900">
+                                            ID
+                                        </th>
+                                        <th className="px-6 py-4 text-left text-sm font-semibold text-slate-900">
+                                            Amount
+                                        </th>
+                                        <th className="px-6 py-4 text-left text-sm font-semibold text-slate-900">
+                                            Instant Reward
+                                        </th>
+                                        <th className="px-6 py-4 text-left text-sm font-semibold text-slate-900">
+                                            Status
+                                        </th>
+                                        <th className="px-6 py-4 text-left text-sm font-semibold text-slate-900">
+                                            Actions
+                                        </th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {amountConfigs.map((config) => (
+                                        <tr
+                                            key={config.id}
+                                            className="border-b border-slate-100 hover:bg-slate-50 transition-colors"
+                                        >
+                                            <td className="px-6 py-4 text-sm font-medium text-slate-900">
+                                                #{config.id}
+                                            </td>
+                                            <td className="px-6 py-4 text-sm font-semibold text-slate-900">
+                                                {formatAmount(config.amount)} NILA
+                                            </td>
+                                            <td className="px-6 py-4 text-sm text-slate-600">
+                                                {(config.instantRewardBps / 100).toFixed(1)}%
+                                            </td>
+                                            <td className="px-6 py-4">
+                                                <span
+                                                    className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-semibold ${getBadgeStyles(
+                                                        config.active
+                                                    )}`}
+                                                >
+                                                    {config.active ? 'Active' : 'Inactive'}
+                                                </span>
+                                            </td>
+                                            <td className="px-6 py-4">
+                                                <div className="flex items-center gap-2">
+                                                    <button
+                                                        onClick={() => handleToggleAmountActive(config.id)}
+                                                        disabled={txPending}
+                                                        className="p-2 text-slate-600 hover:bg-slate-100 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                                        title={config.active ? 'Deactivate' : 'Activate'}
+                                                    >
+                                                        {config.active ? (
+                                                            <PowerOff className="w-4 h-4" />
+                                                        ) : (
+                                                            <Power className="w-4 h-4" />
+                                                        )}
+                                                    </button>
+                                                    <button
+                                                        onClick={() => console.log('Edit', config.id)}
+                                                        disabled={txPending}
+                                                        className="p-2 text-slate-600 hover:bg-slate-100 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                                        title="Edit config"
+                                                    >
+                                                        <Edit2 className="w-4 h-4" />
+                                                    </button>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                        {amountConfigs.length === 0 && (
+                            <div className="px-6 py-12 text-center text-slate-600">
+                                No amount configs found. Create one to get started.
+                            </div>
+                        )}
+                    </div>
+                </div>
+            )}
+
+            {/* Lock Configs Tab */}
+            {activeTab === 'locks' && (
+                <div className="space-y-4">
+                    <div className="flex justify-end">
+                        <button
+                            onClick={() => setIsLockModalOpen(true)}
+                            disabled={txPending}
+                            className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                            <Plus className="w-5 h-5" />
+                            Create Lock Config
+                        </button>
+                    </div>
+
+                    <div className="bg-white rounded-xl border border-slate-100 shadow-sm overflow-hidden">
+                        <div className="overflow-x-auto">
+                            <table className="w-full">
+                                <thead>
+                                    <tr className="border-b border-slate-100 bg-slate-50">
+                                        <th className="px-6 py-4 text-left text-sm font-semibold text-slate-900">
+                                            ID
+                                        </th>
+                                        <th className="px-6 py-4 text-left text-sm font-semibold text-slate-900">
+                                            Duration
+                                        </th>
+                                        <th className="px-6 py-4 text-left text-sm font-semibold text-slate-900">
+                                            APR
+                                        </th>
+                                        <th className="px-6 py-4 text-left text-sm font-semibold text-slate-900">
+                                            Status
+                                        </th>
+                                        <th className="px-6 py-4 text-left text-sm font-semibold text-slate-900">
+                                            Actions
+                                        </th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {lockConfigs.map((config) => (
+                                        <tr
+                                            key={config.id}
+                                            className="border-b border-slate-100 hover:bg-slate-50 transition-colors"
+                                        >
+                                            <td className="px-6 py-4 text-sm font-medium text-slate-900">
+                                                #{config.id}
+                                            </td>
+                                            <td className="px-6 py-4 text-sm font-semibold text-slate-900">
+                                                {config.lockDuration} days
+                                            </td>
+                                            <td className="px-6 py-4 text-sm text-slate-600">
+                                                {(config.apr / 100).toFixed(1)}%
+                                            </td>
+                                            <td className="px-6 py-4">
+                                                <span
+                                                    className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-semibold ${getBadgeStyles(
+                                                        config.active
+                                                    )}`}
+                                                >
+                                                    {config.active ? 'Active' : 'Inactive'}
+                                                </span>
+                                            </td>
+                                            <td className="px-6 py-4">
+                                                <div className="flex items-center gap-2">
+                                                    <button
+                                                        onClick={() => handleToggleLockActive(config.id)}
+                                                        disabled={txPending}
+                                                        className="p-2 text-slate-600 hover:bg-slate-100 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                                        title={config.active ? 'Deactivate' : 'Activate'}
+                                                    >
+                                                        {config.active ? (
+                                                            <PowerOff className="w-4 h-4" />
+                                                        ) : (
+                                                            <Power className="w-4 h-4" />
+                                                        )}
+                                                    </button>
+                                                    <button
+                                                        onClick={() => console.log('Edit', config.id)}
+                                                        disabled={txPending}
+                                                        className="p-2 text-slate-600 hover:bg-slate-100 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                                        title="Edit config"
+                                                    >
+                                                        <Edit2 className="w-4 h-4" />
+                                                    </button>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                        {lockConfigs.length === 0 && (
+                            <div className="px-6 py-12 text-center text-slate-600">
+                                No lock configs found. Create one to get started.
+                            </div>
+                        )}
+                    </div>
+                </div>
+            )}
+
+            {/* Modals */}
+            <CreateAmountConfigModal
+                isOpen={isAmountModalOpen}
+                onClose={() => setIsAmountModalOpen(false)}
+                onSubmit={handleCreateAmountConfig}
+            />
+            <CreateLockConfigModal
+                isOpen={isLockModalOpen}
+                onClose={() => setIsLockModalOpen(false)}
+                onSubmit={handleCreateLockConfig}
             />
         </div>
     );

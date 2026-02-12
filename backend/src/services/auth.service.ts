@@ -26,62 +26,76 @@ export class AuthService {
   }
 
   static async completeSetup(password: string, totpCode: string, totpSecret: string) {
-    // Check if admin already exists
-    const existing = await prisma.admin.findUnique({ where: { id: 1 } });
-    if (existing && existing.isSetupComplete) {
-      throw new Error('Setup already completed');
-    }
-
-    // Verify TOTP code
-    const isValidTotp = TotpService.verifyToken(totpSecret, totpCode);
-    if (!isValidTotp) {
-      throw new Error('Invalid 2FA code');
-    }
-
-    // Hash password
-    const passwordHash = await bcrypt.hash(password, 10);
-
-    // Encrypt 2FA secret
-    const encryptedSecret = CryptoService.encrypt(totpSecret);
-
-    // Generate backup codes
-    const backupCodes = CryptoService.generateBackupCodes();
-    const encryptedBackupCodes = JSON.stringify(
-      backupCodes.map(code => CryptoService.encrypt(code))
-    );
-
-    // Create or update admin
-    const admin = await prisma.admin.upsert({
-      where: { id: 1 },
-      create: {
-        id: 1,
-        passwordHash,
-        twoFactorSecret: encryptedSecret,
-        backupCodes: encryptedBackupCodes,
-        isSetupComplete: true
-      },
-      update: {
-        passwordHash,
-        twoFactorSecret: encryptedSecret,
-        backupCodes: encryptedBackupCodes,
-        isSetupComplete: true
+    // Use transaction to prevent race conditions
+    return await prisma.$transaction(async (tx) => {
+      // Check if admin already exists with setup complete
+      const existing = await tx.admin.findUnique({ where: { id: 1 } });
+      
+      if (existing && existing.isSetupComplete) {
+        throw new Error('Setup already completed');
       }
-    });
 
-    // Generate JWT token
-    const token = jwt.sign({ adminId: admin.id }, JWT_SECRET, {
-      expiresIn: JWT_EXPIRES_IN
-    });
+      // Verify TOTP code before making any changes
+      const isValidTotp = TotpService.verifyToken(totpSecret, totpCode);
+      if (!isValidTotp) {
+        throw new Error('Invalid 2FA code');
+      }
 
-    return { token, backupCodes };
+      // Hash password
+      const passwordHash = await bcrypt.hash(password, 10);
+
+      // Encrypt 2FA secret
+      const encryptedSecret = CryptoService.encrypt(totpSecret);
+
+      // Generate backup codes
+      const backupCodes = CryptoService.generateBackupCodes();
+      const encryptedBackupCodes = JSON.stringify(
+        backupCodes.map(code => CryptoService.encrypt(code))
+      );
+
+      // Create or update admin (only if setup not complete)
+      const admin = existing 
+        ? await tx.admin.update({
+            where: { id: 1 },
+            data: {
+              passwordHash,
+              twoFactorSecret: encryptedSecret,
+              backupCodes: encryptedBackupCodes,
+              isSetupComplete: true
+            }
+          })
+        : await tx.admin.create({
+            data: {
+              id: 1,
+              passwordHash,
+              twoFactorSecret: encryptedSecret,
+              backupCodes: encryptedBackupCodes,
+              isSetupComplete: true
+            }
+          });
+
+      // Generate JWT token
+      const token = jwt.sign(
+        { adminId: admin.id }, 
+        JWT_SECRET, 
+        { expiresIn: JWT_EXPIRES_IN } as jwt.SignOptions
+      );
+
+      return { token, backupCodes };
+    });
   }
 
   static async login(password: string, totpCode: string) {
     // Get admin
     const admin = await prisma.admin.findUnique({ where: { id: 1 } });
     
-    if (!admin || !admin.isSetupComplete) {
-      throw new Error('Setup required');
+    // Strict check: admin must exist AND setup must be complete
+    if (!admin) {
+      throw new Error('Admin account not found. Setup required.');
+    }
+    
+    if (!admin.isSetupComplete) {
+      throw new Error('Setup not completed. Please complete setup first.');
     }
 
     // Verify password
@@ -106,9 +120,11 @@ export class AuthService {
     });
 
     // Generate JWT token
-    const token = jwt.sign({ adminId: admin.id }, JWT_SECRET, {
-      expiresIn: JWT_EXPIRES_IN
-    });
+    const token = jwt.sign(
+      { adminId: admin.id }, 
+      JWT_SECRET, 
+      { expiresIn: JWT_EXPIRES_IN } as jwt.SignOptions
+    );
 
     return { token };
   }

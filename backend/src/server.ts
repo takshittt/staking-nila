@@ -2,12 +2,26 @@ import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import authRoutes from './routes/auth.routes';
+import stakingRoutes from './routes/staking.routes';
+import userRoutes from './routes/user.routes';
+import stakeRoutes from './routes/stake.routes';
+import referralRoutes from './routes/referral.routes';
+import { BlockchainService } from './services/blockchain.service';
 
 // Load environment variables
 dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 3001;
+
+// Initialize blockchain service
+try {
+  BlockchainService.initialize();
+  console.log('✅ Blockchain service initialized');
+} catch (error: any) {
+  console.error('❌ Failed to initialize blockchain service:', error.message);
+  console.error('⚠️  Staking endpoints will not work until blockchain is configured');
+}
 
 // Middleware
 app.use(express.json());
@@ -18,6 +32,10 @@ app.use(cors({
 
 // Routes
 app.use('/api/auth', authRoutes);
+app.use('/api/staking', stakingRoutes);
+app.use('/api/users', userRoutes);
+app.use('/api/stakes', stakeRoutes);
+app.use('/api/referrals', referralRoutes);
 
 // Health check
 app.get('/health', (req, res) => {

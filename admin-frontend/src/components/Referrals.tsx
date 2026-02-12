@@ -1,5 +1,7 @@
-import { Users2, AlertCircle, Save } from 'lucide-react';
-import { useState } from 'react';
+import { Users2, AlertCircle, Save, RefreshCw, Link } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { referralApi } from '../api/referralApi';
+import { useAuthStore } from '../stores/authStore';
 
 interface ReferralStats {
     referralPercentage: number;
@@ -9,27 +11,96 @@ interface ReferralStats {
     isPaused: boolean;
 }
 
+interface BlockchainConfig {
+    referralPercentage: number;
+    referrerPercentage: number;
+    isPaused: boolean;
+}
+
 const Referrals = () => {
     const [stats, setStats] = useState<ReferralStats>({
         referralPercentage: 5,
         referrerPercentage: 2,
-        totalReferrals: 342,
-        totalEarnings: 15750,
+        totalReferrals: 0,
+        totalEarnings: 0,
         isPaused: false,
     });
 
+    const [blockchainConfig, setBlockchainConfig] = useState<BlockchainConfig | null>(null);
     const [editMode, setEditMode] = useState(false);
     const [tempStats, setTempStats] = useState<ReferralStats>(stats);
     const [isUpdating, setIsUpdating] = useState(false);
+    const [isSyncing, setIsSyncing] = useState(false);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
+    const { token } = useAuthStore();
+
+    useEffect(() => {
+        fetchStats();
+        fetchBlockchainConfig();
+    }, []);
+
+    const fetchStats = async () => {
+        try {
+            setLoading(true);
+            setError(null);
+            const response = await referralApi.getStats(token!);
+            setStats(response.stats);
+            setTempStats(response.stats);
+        } catch (err: any) {
+            console.error('Failed to fetch referral stats:', err);
+            setError(err.message);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const fetchBlockchainConfig = async () => {
+        try {
+            const response = await referralApi.getBlockchainConfig(token!);
+            setBlockchainConfig(response.config);
+        } catch (err: any) {
+            console.error('Failed to fetch blockchain config:', err);
+        }
+    };
+
+    const handleSync = async () => {
+        setIsSyncing(true);
+        try {
+            const response = await referralApi.syncWithBlockchain(token!);
+            setStats((prev) => ({
+                ...prev,
+                referralPercentage: response.config.referralPercentage,
+                referrerPercentage: response.config.referrerPercentage,
+                isPaused: response.config.isPaused
+            }));
+            setBlockchainConfig(response.config);
+            alert('Successfully synced with blockchain!');
+        } catch (err: any) {
+            console.error('Failed to sync:', err);
+            alert('Failed to sync with blockchain');
+        } finally {
+            setIsSyncing(false);
+        }
+    };
 
     const handleTogglePause = async () => {
         setIsUpdating(true);
-        await new Promise((resolve) => setTimeout(resolve, 500));
-        setStats((prev) => ({
-            ...prev,
-            isPaused: !prev.isPaused,
-        }));
-        setIsUpdating(false);
+        try {
+            const response = await referralApi.updateConfig(
+                { isPaused: !stats.isPaused },
+                token!
+            );
+            setStats((prev) => ({
+                ...prev,
+                isPaused: response.config.isPaused
+            }));
+        } catch (err: any) {
+            console.error('Failed to toggle pause:', err);
+            alert('Failed to update pause status');
+        } finally {
+            setIsUpdating(false);
+        }
     };
 
     const handleEditClick = () => {
@@ -44,10 +115,29 @@ const Referrals = () => {
 
     const handleSave = async () => {
         setIsUpdating(true);
-        await new Promise((resolve) => setTimeout(resolve, 500));
-        setStats(tempStats);
-        setEditMode(false);
-        setIsUpdating(false);
+        try {
+            const response = await referralApi.updateConfig(
+                {
+                    referralPercentage: tempStats.referralPercentage,
+                    referrerPercentage: tempStats.referrerPercentage
+                },
+                token!
+            );
+            setStats((prev) => ({
+                ...prev,
+                referralPercentage: response.config.referralPercentage,
+                referrerPercentage: response.config.referrerPercentage
+            }));
+            setEditMode(false);
+            // Refresh blockchain config after update
+            await fetchBlockchainConfig();
+            alert('Configuration updated on blockchain and database!');
+        } catch (err: any) {
+            console.error('Failed to save config:', err);
+            alert('Failed to save configuration: ' + err.message);
+        } finally {
+            setIsUpdating(false);
+        }
     };
 
     const handleInputChange = (field: keyof ReferralStats, value: number) => {
@@ -64,8 +154,80 @@ const Referrals = () => {
                 <p className="text-slate-600 mt-1">Manage referral program settings</p>
             </div>
 
-            {/* Main Stats Card */}
-            <div className="bg-white rounded-xl border border-slate-100 shadow-sm overflow-hidden">
+            {loading && (
+                <div className="bg-white rounded-xl border border-slate-100 shadow-sm p-12 text-center">
+                    <p className="text-slate-600">Loading referral data...</p>
+                </div>
+            )}
+
+            {error && (
+                <div className="bg-red-50 border border-red-200 rounded-xl p-4">
+                    <p className="text-red-800">Error: {error}</p>
+                    <button
+                        onClick={fetchStats}
+                        className="mt-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700"
+                    >
+                        Retry
+                    </button>
+                </div>
+            )}
+
+            {!loading && !error && (
+                <>
+                    {/* Blockchain Status Card */}
+                    <div className="bg-gradient-to-r from-purple-50 to-blue-50 rounded-xl border border-purple-200 shadow-sm p-6">
+                        <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-4">
+                                <div className="p-3 bg-purple-100 rounded-lg">
+                                    <Link className="w-6 h-6 text-purple-600" />
+                                </div>
+                                <div>
+                                    <h3 className="text-lg font-semibold text-slate-900">Blockchain Status</h3>
+                                    <p className="text-sm text-slate-600 mt-1">
+                                        {blockchainConfig ? 'Connected to smart contract' : 'Loading blockchain data...'}
+                                    </p>
+                                </div>
+                            </div>
+                            <button
+                                onClick={handleSync}
+                                disabled={isSyncing}
+                                className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors font-medium disabled:opacity-50"
+                            >
+                                <RefreshCw className={`w-4 h-4 ${isSyncing ? 'animate-spin' : ''}`} />
+                                {isSyncing ? 'Syncing...' : 'Sync with Blockchain'}
+                            </button>
+                        </div>
+
+                        {blockchainConfig && (
+                            <div className="mt-4 pt-4 border-t border-purple-200">
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                    <div className="bg-white/50 rounded-lg p-3">
+                                        <p className="text-xs text-slate-600 font-medium mb-1">On-Chain Referral %</p>
+                                        <p className="text-2xl font-bold text-purple-600">{blockchainConfig.referralPercentage}%</p>
+                                    </div>
+                                    <div className="bg-white/50 rounded-lg p-3">
+                                        <p className="text-xs text-slate-600 font-medium mb-1">On-Chain Referrer %</p>
+                                        <p className="text-2xl font-bold text-blue-600">{blockchainConfig.referrerPercentage}%</p>
+                                    </div>
+                                    <div className="bg-white/50 rounded-lg p-3">
+                                        <p className="text-xs text-slate-600 font-medium mb-1">On-Chain Status</p>
+                                        <span
+                                            className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold ${
+                                                blockchainConfig.isPaused
+                                                    ? 'bg-slate-100 text-slate-800'
+                                                    : 'bg-green-100 text-green-800'
+                                            }`}
+                                        >
+                                            {blockchainConfig.isPaused ? 'Paused' : 'Active'}
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Main Stats Card */}
+                    <div className="bg-white rounded-xl border border-slate-100 shadow-sm overflow-hidden">
                 <div className="p-8">
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
                         {/* Referral Percentage */}
@@ -263,8 +425,12 @@ const Referrals = () => {
                     <li>• Referral earnings are credited to the referrer's account</li>
                     <li>• Pausing the program prevents new referrals from being processed</li>
                     <li>• Existing referral earnings are not affected by pausing</li>
+                    <li>• Configuration is stored on-chain for transparency and immutability</li>
+                    <li>• Use the sync button to update database with blockchain state</li>
                 </ul>
             </div>
+                </>
+            )}
         </div>
     );
 };

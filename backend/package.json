@@ -9,7 +9,11 @@
     "start": "tsx src/server.ts",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
-    "prisma:studio": "prisma studio"
+    "prisma:studio": "prisma studio",
+    "admin:delete": "tsx scripts/deleteAdmin.ts",
+    "test:users": "tsx scripts/testUserTracking.ts",
+    "test:wallet": "tsx scripts/testWalletConnect.ts",
+    "check:users": "tsx scripts/checkUsers.ts"
   },
   "keywords": [],
   "author": "",

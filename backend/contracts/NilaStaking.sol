@@ -41,10 +41,22 @@ contract NilaStaking is ReentrancyGuard, Pausable, Ownable {
         bool unstaked;
     }
 
+    struct ReferralConfig {
+        uint256 referralPercentageBps;  // Commission for referrer (in basis points)
+        uint256 referrerPercentageBps;  // Bonus for referred user (in basis points)
+        bool isPaused;
+    }
+
     AmountConfig[] public amountConfigs;
     LockConfig[] public lockConfigs;
     mapping(address => StakeInfo[]) private userStakes;
     mapping(address => uint256) public activeStakeCount;
+
+    /* ================= REFERRAL SYSTEM ================= */
+    ReferralConfig public referralConfig;
+    mapping(address => address) public referrers; // referred => referrer
+    mapping(address => uint256) public referralCount; // referrer => count
+    mapping(address => uint256) public referralEarnings; // referrer => total earnings
 
     /* ================= EVENTS ================= */
     event AmountConfigAdded(uint256 indexed id, uint256 amount, uint256 instantRewardBps);
@@ -58,10 +70,22 @@ contract NilaStaking is ReentrancyGuard, Pausable, Ownable {
     event RewardFunded(address indexed from, uint256 amount);
     event ExcessRewardsWithdrawn(address indexed owner, uint256 amount);
     event ERC20Recovered(address indexed token, uint256 amount);
+    
+    // Referral Events
+    event ReferralConfigUpdated(uint256 referralPercentageBps, uint256 referrerPercentageBps, bool isPaused);
+    event ReferralRegistered(address indexed referrer, address indexed referred);
+    event ReferralRewardPaid(address indexed referrer, address indexed referred, uint256 amount);
 
     constructor(address _nila) Ownable(msg.sender) {
         require(_nila != address(0), "Invalid token");
         nila = IERC20(_nila);
+        
+        // Initialize referral config with default values (5% referral, 2% referrer bonus)
+        referralConfig = ReferralConfig({
+            referralPercentageBps: 500,  // 5%
+            referrerPercentageBps: 200,  // 2%
+            isPaused: false
+        });
     }
 
     /* ================= REWARD POOL ================= */
@@ -115,6 +139,61 @@ contract NilaStaking is ReentrancyGuard, Pausable, Ownable {
     function pause() external onlyOwner { _pause(); }
     function unpause() external onlyOwner { _unpause(); }
 
+    /* ================= REFERRAL ADMIN ================= */
+
+    function setReferralConfig(
+        uint256 referralPercentageBps,
+        uint256 referrerPercentageBps,
+        bool isPaused
+    ) external onlyOwner {
+        require(referralPercentageBps <= BPS, "Invalid referral percentage");
+        require(referrerPercentageBps <= BPS, "Invalid referrer percentage");
+        
+        referralConfig.referralPercentageBps = referralPercentageBps;
+        referralConfig.referrerPercentageBps = referrerPercentageBps;
+        referralConfig.isPaused = isPaused;
+        
+        emit ReferralConfigUpdated(referralPercentageBps, referrerPercentageBps, isPaused);
+    }
+
+    function setReferralPercentage(uint256 percentage) external onlyOwner {
+        require(percentage <= BPS, "Invalid percentage");
+        referralConfig.referralPercentageBps = percentage;
+        emit ReferralConfigUpdated(
+            referralConfig.referralPercentageBps,
+            referralConfig.referrerPercentageBps,
+            referralConfig.isPaused
+        );
+    }
+
+    function setReferrerPercentage(uint256 percentage) external onlyOwner {
+        require(percentage <= BPS, "Invalid percentage");
+        referralConfig.referrerPercentageBps = percentage;
+        emit ReferralConfigUpdated(
+            referralConfig.referralPercentageBps,
+            referralConfig.referrerPercentageBps,
+            referralConfig.isPaused
+        );
+    }
+
+    function pauseReferrals() external onlyOwner {
+        referralConfig.isPaused = true;
+        emit ReferralConfigUpdated(
+            referralConfig.referralPercentageBps,
+            referralConfig.referrerPercentageBps,
+            true
+        );
+    }
+
+    function unpauseReferrals() external onlyOwner {
+        referralConfig.isPaused = false;
+        emit ReferralConfigUpdated(
+            referralConfig.referralPercentageBps,
+            referralConfig.referrerPercentageBps,
+            false
+        );
+    }
+
     /* ================= SAFE WITHDRAWALS ================= */
 
     // Recover tokens accidentally sent (NOT NILA)
@@ -136,6 +215,16 @@ contract NilaStaking is ReentrancyGuard, Pausable, Ownable {
     /* ================= USER ================= */
 
     function stake(uint256 amountId, uint256 lockId) external nonReentrant whenNotPaused {
+        _stake(amountId, lockId, address(0));
+    }
+
+    function stakeWithReferral(uint256 amountId, uint256 lockId, address referrer) external nonReentrant whenNotPaused {
+        require(referrer != address(0), "Invalid referrer");
+        require(referrer != msg.sender, "Cannot refer yourself");
+        _stake(amountId, lockId, referrer);
+    }
+
+    function _stake(uint256 amountId, uint256 lockId, address referrer) internal {
         require(amountId < amountConfigs.length, "Invalid amountId");
         require(lockId < lockConfigs.length, "Invalid lockId");
         require(activeStakeCount[msg.sender] < MAX_STAKES_PER_USER, "Too many active stakes");
@@ -153,6 +242,34 @@ contract NilaStaking is ReentrancyGuard, Pausable, Ownable {
 
         if (instantReward > 0) {
             nila.transfer(msg.sender, instantReward);
+        }
+
+        // Handle referral logic
+        if (referrer != address(0) && !referralConfig.isPaused && referrers[msg.sender] == address(0)) {
+            referrers[msg.sender] = referrer;
+            referralCount[referrer]++;
+            
+            // Calculate and pay referral rewards
+            uint256 referralReward = (a.amount * referralConfig.referralPercentageBps) / BPS;
+            uint256 referrerBonus = (a.amount * referralConfig.referrerPercentageBps) / BPS;
+            
+            uint256 totalReferralReward = referralReward + referrerBonus;
+            
+            if (totalReferralReward > 0 && availableRewards() >= totalReferralReward) {
+                // Pay referrer commission
+                if (referralReward > 0) {
+                    nila.transfer(referrer, referralReward);
+                    referralEarnings[referrer] += referralReward;
+                }
+                
+                // Pay referred user bonus
+                if (referrerBonus > 0) {
+                    nila.transfer(msg.sender, referrerBonus);
+                }
+                
+                emit ReferralRegistered(referrer, msg.sender);
+                emit ReferralRewardPaid(referrer, msg.sender, referralReward);
+            }
         }
 
         if (!hasStaked[msg.sender]) {
@@ -317,5 +434,35 @@ contract NilaStaking is ReentrancyGuard, Pausable, Ownable {
             }
             totalInstantRewardsReceived += stakes[i].instantRewardSnapshot;
         }
+    }
+
+    /* ================= REFERRAL VIEW ================= */
+
+    function getReferralConfig() external view returns (
+        uint256 referralPercentageBps,
+        uint256 referrerPercentageBps,
+        bool isPaused
+    ) {
+        return (
+            referralConfig.referralPercentageBps,
+            referralConfig.referrerPercentageBps,
+            referralConfig.isPaused
+        );
+    }
+
+    function getReferralStats(address user) external view returns (
+        address referrer,
+        uint256 referralsMade,
+        uint256 totalEarnings
+    ) {
+        return (
+            referrers[user],
+            referralCount[user],
+            referralEarnings[user]
+        );
+    }
+
+    function hasReferrer(address user) external view returns (bool) {
+        return referrers[user] != address(0);
     }
 }

@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>API Test</title>
+</head>
+<body>
+    <h1>Wallet Connection API Test</h1>
+    <button onclick="testAPI()">Test API Connection</button>
+    <pre id="output"></pre>
+
+    <script>
+        async function testAPI() {
+            const output = document.getElementById('output');
+            output.textContent = 'Testing...\n';
+
+            try {
+                const testWallet = '0xtest' + Date.now();
+                const apiUrl = 'http://localhost:3001/api/users/connect';
+                
+                output.textContent += `Calling: ${apiUrl}\n`;
+                output.textContent += `Wallet: ${testWallet}\n\n`;
+
+                const response = await fetch(apiUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ 
+                        walletAddress: testWallet,
+                        referralCode: 'TEST'
+                    })
+                });
+
+                output.textContent += `Status: ${response.status}\n`;
+                
+                const result = await response.json();
+                output.textContent += `Response:\n${JSON.stringify(result, null, 2)}\n`;
+
+                if (result.success) {
+                    output.textContent += '\n✅ SUCCESS! API is working!\n';
+                } else {
+                    output.textContent += '\n❌ FAILED!\n';
+                }
+            } catch (error) {
+                output.textContent += `\n❌ ERROR: ${error.message}\n`;
+                console.error(error);
+            }
+        }
+    </script>
+</body>
+</html>

@@ -18,5 +18,103 @@ model Admin {
   updatedAt         DateTime  @updatedAt
   lastLoginAt       DateTime?
   
+  auditLogs         AuditLog[]
+  
   @@map("admin")
+}
+
+// Audit trail for admin actions
+model AuditLog {
+  id              String   @id @default(uuid())
+  adminId         Int
+  action          String   // "CREATE_AMOUNT_CONFIG", "UPDATE_LOCK_CONFIG", etc.
+  txHash          String?  // Blockchain transaction hash
+  createdAt       DateTime @default(now())
+  
+  admin           Admin    @relation(fields: [adminId], references: [id])
+  
+  @@index([adminId])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
+
+// Cache contract data to reduce RPC calls
+model ContractCache {
+  id              String   @id @default(uuid())
+  key             String   @unique  // "amount_configs", "lock_configs"
+  value           Json     // Cached data
+  expiresAt       DateTime
+  
+  @@index([key])
+  @@map("contract_cache")
+}
+
+// User tracking - created when wallet connects
+model User {
+  id                String    @id @default(uuid())
+  walletAddress     String    @unique
+  referralCode      String?   @unique
+  referredBy        String?
+  status            String    @default("active")  // "active" or "flagged"
+  firstConnectedAt  DateTime  @default(now())
+  lastSeenAt        DateTime  @updatedAt
+  
+  stakes            Stake[]
+  
+  @@index([walletAddress])
+  @@index([referralCode])
+  @@map("users")
+}
+
+// Individual staking positions
+model Stake {
+  id              String    @id @default(uuid())
+  stakeId         String    @unique
+  userId          String
+  walletAddress   String
+  
+  planName        String
+  planVersion     Int
+  amount          Decimal   @db.Decimal(20, 8)
+  apy             Decimal   @db.Decimal(5, 2)
+  
+  startDate       DateTime
+  endDate         DateTime
+  
+  status          String    @default("active")  // "active" or "completed"
+  txHash          String?
+  
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  
+  user            User      @relation(fields: [userId], references: [id])
+  
+  @@index([userId])
+  @@index([walletAddress])
+  @@index([status])
+  @@map("stakes")
+}
+
+// Referral tracking
+model Referral {
+  id              String    @id @default(uuid())
+  referrerWallet  String
+  referredWallet  String
+  earnings        Decimal   @db.Decimal(20, 8)
+  createdAt       DateTime  @default(now())
+  
+  @@index([referrerWallet])
+  @@index([referredWallet])
+  @@map("referrals")
+}
+
+// Referral configuration (single row)
+model ReferralConfig {
+  id                    Int       @id @default(1)
+  referralPercentage    Decimal   @db.Decimal(5, 2)
+  referrerPercentage    Decimal   @db.Decimal(5, 2)
+  isPaused              Boolean   @default(false)
+  updatedAt             DateTime  @updatedAt
+  
+  @@map("referral_config")
 }
