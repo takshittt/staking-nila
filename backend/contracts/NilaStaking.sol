@@ -57,6 +57,10 @@ contract NilaStaking is ReentrancyGuard, Pausable, Ownable {
     mapping(address => address) public referrers; // referred => referrer
     mapping(address => uint256) public referralCount; // referrer => count
     mapping(address => uint256) public referralEarnings; // referrer => total earnings
+    
+    /* ================= CLAIMABLE REWARDS ================= */
+    mapping(address => uint256) public claimableInstantRewards; // user => total instant rewards to claim
+    mapping(address => uint256) public claimableReferralRewards; // user => total referral rewards to claim
 
     /* ================= EVENTS ================= */
     event AmountConfigAdded(uint256 indexed id, uint256 amount, uint256 instantRewardBps);
@@ -75,6 +79,10 @@ contract NilaStaking is ReentrancyGuard, Pausable, Ownable {
     event ReferralConfigUpdated(uint256 referralPercentageBps, uint256 referrerPercentageBps, bool isPaused);
     event ReferralRegistered(address indexed referrer, address indexed referred);
     event ReferralRewardPaid(address indexed referrer, address indexed referred, uint256 amount);
+    
+    // New claim events
+    event InstantRewardClaimed(address indexed user, uint256 indexed stakeId, uint256 amount);
+    event ReferralBonusClaimed(address indexed user, uint256 amount);
 
     constructor(address _nila) Ownable(msg.sender) {
         require(_nila != address(0), "Invalid token");
@@ -233,43 +241,45 @@ contract NilaStaking is ReentrancyGuard, Pausable, Ownable {
         LockConfig memory l = lockConfigs[lockId];
         require(a.active && l.active, "Inactive config");
 
+        // Calculate instant reward and add to claimable
         uint256 instantReward = (a.amount * a.instantRewardBps) / BPS;
 
         nila.transferFrom(msg.sender, address(this), a.amount);
         totalStaked += a.amount;
 
+        // Verify reward pool has enough for future claims
         require(availableRewards() >= instantReward, "Insufficient reward pool");
 
+        // Add instant reward to claimable balance
         if (instantReward > 0) {
-            nila.transfer(msg.sender, instantReward);
+            claimableInstantRewards[msg.sender] += instantReward;
         }
 
-        // Handle referral logic
+        // Handle referral registration and rewards
         if (referrer != address(0) && !referralConfig.isPaused && referrers[msg.sender] == address(0)) {
             referrers[msg.sender] = referrer;
             referralCount[referrer]++;
             
-            // Calculate and pay referral rewards
+            // Calculate referral rewards
             uint256 referralReward = (a.amount * referralConfig.referralPercentageBps) / BPS;
             uint256 referrerBonus = (a.amount * referralConfig.referrerPercentageBps) / BPS;
             
             uint256 totalReferralReward = referralReward + referrerBonus;
             
-            if (totalReferralReward > 0 && availableRewards() >= totalReferralReward) {
-                // Pay referrer commission
-                if (referralReward > 0) {
-                    nila.transfer(referrer, referralReward);
-                    referralEarnings[referrer] += referralReward;
-                }
-                
-                // Pay referred user bonus
-                if (referrerBonus > 0) {
-                    nila.transfer(msg.sender, referrerBonus);
-                }
-                
-                emit ReferralRegistered(referrer, msg.sender);
-                emit ReferralRewardPaid(referrer, msg.sender, referralReward);
+            // Verify reward pool has enough
+            require(availableRewards() >= instantReward + totalReferralReward, "Insufficient reward pool for referrals");
+            
+            // Add to claimable balances
+            if (referralReward > 0) {
+                claimableReferralRewards[referrer] += referralReward;
+                referralEarnings[referrer] += referralReward;
             }
+            
+            if (referrerBonus > 0) {
+                claimableReferralRewards[msg.sender] += referrerBonus;
+            }
+            
+            emit ReferralRegistered(referrer, msg.sender);
         }
 
         if (!hasStaked[msg.sender]) {
@@ -307,6 +317,50 @@ contract NilaStaking is ReentrancyGuard, Pausable, Ownable {
         s.lastClaimTime = block.timestamp;
         nila.transfer(msg.sender, reward);
         emit RewardClaimed(msg.sender, index, reward);
+    }
+
+    // Claim instant cashback rewards
+    function claimInstantRewards() external nonReentrant {
+        uint256 amount = claimableInstantRewards[msg.sender];
+        require(amount > 0, "No instant rewards to claim");
+        require(availableRewards() >= amount, "Insufficient reward pool");
+
+        claimableInstantRewards[msg.sender] = 0;
+        nila.transfer(msg.sender, amount);
+        emit InstantRewardClaimed(msg.sender, 0, amount);
+    }
+
+    // Claim referral rewards
+    function claimReferralRewards() external nonReentrant {
+        uint256 amount = claimableReferralRewards[msg.sender];
+        require(amount > 0, "No referral rewards to claim");
+        require(availableRewards() >= amount, "Insufficient reward pool");
+
+        claimableReferralRewards[msg.sender] = 0;
+        nila.transfer(msg.sender, amount);
+        emit ReferralBonusClaimed(msg.sender, amount);
+    }
+
+    // Claim all rewards (instant + referral)
+    function claimAllRewards() external nonReentrant {
+        uint256 instantAmount = claimableInstantRewards[msg.sender];
+        uint256 referralAmount = claimableReferralRewards[msg.sender];
+        uint256 totalAmount = instantAmount + referralAmount;
+        
+        require(totalAmount > 0, "No rewards to claim");
+        require(availableRewards() >= totalAmount, "Insufficient reward pool");
+
+        if (instantAmount > 0) {
+            claimableInstantRewards[msg.sender] = 0;
+            emit InstantRewardClaimed(msg.sender, 0, instantAmount);
+        }
+
+        if (referralAmount > 0) {
+            claimableReferralRewards[msg.sender] = 0;
+            emit ReferralBonusClaimed(msg.sender, referralAmount);
+        }
+
+        nila.transfer(msg.sender, totalAmount);
     }
 
     function unstake(uint256 index) external nonReentrant {
@@ -464,5 +518,17 @@ contract NilaStaking is ReentrancyGuard, Pausable, Ownable {
 
     function hasReferrer(address user) external view returns (bool) {
         return referrers[user] != address(0);
+    }
+
+    /* ================= CLAIMABLE REWARDS VIEW ================= */
+
+    function getClaimableRewards(address user) external view returns (
+        uint256 instantRewards,
+        uint256 referralRewards,
+        uint256 totalClaimable
+    ) {
+        instantRewards = claimableInstantRewards[user];
+        referralRewards = claimableReferralRewards[user];
+        totalClaimable = instantRewards + referralRewards;
     }
 }

@@ -5,9 +5,6 @@ import { body, param, validationResult } from 'express-validator';
 
 const router = Router();
 
-// Apply auth middleware to all routes
-router.use(authMiddleware);
-
 // Validation middleware
 const validate = (req: any, res: any, next: any) => {
   const errors = validationResult(req);
@@ -18,11 +15,11 @@ const validate = (req: any, res: any, next: any) => {
 };
 
 // ============================================
-// AMOUNT CONFIGS
+// AMOUNT CONFIGS (Public GET, Protected POST/PUT)
 // ============================================
 
-// Get all amount configs
-router.get('/amount-configs', async (req: AuthRequest, res) => {
+// Get all amount configs (PUBLIC - users need to see available options)
+router.get('/amount-configs', async (req, res) => {
   try {
     const configs = await StakingService.getAllAmountConfigs();
     res.json(configs);
@@ -31,13 +28,13 @@ router.get('/amount-configs', async (req: AuthRequest, res) => {
   }
 });
 
-// Get single amount config
+// Get single amount config (PUBLIC)
 router.get('/amount-configs/:id', 
   param('id').isInt({ min: 0 }),
   validate,
-  async (req: AuthRequest, res) => {
+  async (req, res) => {
     try {
-      const id = parseInt(req.params.id);
+      const id = parseInt(req.params.id as string);
       const config = await StakingService.getAmountConfig(id);
       res.json(config);
     } catch (error: any) {
@@ -46,8 +43,9 @@ router.get('/amount-configs/:id',
   }
 );
 
-// Create amount config
+// Create amount config (PROTECTED)
 router.post('/amount-configs',
+  authMiddleware,
   body('amount').isFloat({ min: 0.01 }),
   body('instantRewardPercent').isFloat({ min: 0, max: 100 }),
   validate,
@@ -70,15 +68,16 @@ router.post('/amount-configs',
   }
 );
 
-// Update amount config
+// Update amount config (PROTECTED)
 router.put('/amount-configs/:id',
+  authMiddleware,
   param('id').isInt({ min: 0 }),
   body('instantRewardPercent').isFloat({ min: 0, max: 100 }),
   body('active').isBoolean(),
   validate,
   async (req: AuthRequest, res) => {
     try {
-      const id = parseInt(req.params.id);
+      const id = parseInt(req.params.id as string);
       const { instantRewardPercent, active } = req.body;
       
       const result = await StakingService.updateAmountConfig(
@@ -99,11 +98,11 @@ router.put('/amount-configs/:id',
 );
 
 // ============================================
-// LOCK CONFIGS
+// LOCK CONFIGS (Public GET, Protected POST/PUT)
 // ============================================
 
-// Get all lock configs
-router.get('/lock-configs', async (req: AuthRequest, res) => {
+// Get all lock configs (PUBLIC)
+router.get('/lock-configs', async (req, res) => {
   try {
     const configs = await StakingService.getAllLockConfigs();
     res.json(configs);
@@ -112,13 +111,13 @@ router.get('/lock-configs', async (req: AuthRequest, res) => {
   }
 });
 
-// Get single lock config
+// Get single lock config (PUBLIC)
 router.get('/lock-configs/:id',
   param('id').isInt({ min: 0 }),
   validate,
-  async (req: AuthRequest, res) => {
+  async (req, res) => {
     try {
-      const id = parseInt(req.params.id);
+      const id = parseInt(req.params.id as string);
       const config = await StakingService.getLockConfig(id);
       res.json(config);
     } catch (error: any) {
@@ -127,8 +126,9 @@ router.get('/lock-configs/:id',
   }
 );
 
-// Create lock config
+// Create lock config (PROTECTED)
 router.post('/lock-configs',
+  authMiddleware,
   body('lockDays').isInt({ min: 1 }),
   body('aprPercent').isFloat({ min: 0, max: 500 }),
   validate,
@@ -151,15 +151,16 @@ router.post('/lock-configs',
   }
 );
 
-// Update lock config
+// Update lock config (PROTECTED)
 router.put('/lock-configs/:id',
+  authMiddleware,
   param('id').isInt({ min: 0 }),
   body('aprPercent').isFloat({ min: 0, max: 500 }),
   body('active').isBoolean(),
   validate,
   async (req: AuthRequest, res) => {
     try {
-      const id = parseInt(req.params.id);
+      const id = parseInt(req.params.id as string);
       const { aprPercent, active } = req.body;
       
       const result = await StakingService.updateLockConfig(
@@ -180,11 +181,11 @@ router.put('/lock-configs/:id',
 );
 
 // ============================================
-// STATS
+// STATS (Protected - Admin only)
 // ============================================
 
-// Get staking stats
-router.get('/stats', async (req: AuthRequest, res) => {
+// Get staking stats (PROTECTED)
+router.get('/stats', authMiddleware, async (req: AuthRequest, res) => {
   try {
     const stats = await StakingService.getStakingStats();
     res.json(stats);

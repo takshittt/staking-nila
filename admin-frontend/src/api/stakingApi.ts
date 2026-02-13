@@ -30,7 +30,7 @@ api.interceptors.response.use(
   }
 );
 
-export type { AmountConfig, LockConfig, StakingStats, CreateAmountConfigDto, UpdateAmountConfigDto, CreateLockConfigDto, UpdateLockConfigDto, TransactionResult };
+
 
 export interface AmountConfig {
   id: number;

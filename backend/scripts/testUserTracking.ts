@@ -23,7 +23,6 @@ async function testUserTracking() {
       data: {
         stakeId: 'STK-TEST-001',
         userId: user.id,
-        walletAddress: user.walletAddress,
         planName: 'Test Plan',
         planVersion: 1,
         amount: 1000,

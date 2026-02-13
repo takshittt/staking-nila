@@ -13,7 +13,10 @@
     "admin:delete": "tsx scripts/deleteAdmin.ts",
     "test:users": "tsx scripts/testUserTracking.ts",
     "test:wallet": "tsx scripts/testWalletConnect.ts",
-    "check:users": "tsx scripts/checkUsers.ts"
+    "test:transactions": "tsx scripts/testTransactions.ts",
+    "sample:transactions": "tsx scripts/createSampleTransactions.ts",
+    "check:users": "tsx scripts/checkUsers.ts",
+    "rewards:sync": "tsx scripts/syncAllAPYRewards.ts"
   },
   "keywords": [],
   "author": "",

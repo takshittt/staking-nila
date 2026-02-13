@@ -6,7 +6,7 @@ export const userApi = {
     try {
       console.log('📡 Calling API:', `${API_URL}/users/connect`);
       console.log('📤 Payload:', { walletAddress, referralCode });
-      
+
       const response = await fetch(`${API_URL}/users/connect`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -29,5 +29,54 @@ export const userApi = {
       // Don't throw - we don't want to block the user if API fails
       return null;
     }
+  },
+
+  // Set referrer
+  setReferrer: async (walletAddress: string, referralCode: string) => {
+    const response = await fetch(`${API_URL}/users/referral`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ walletAddress, referralCode })
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw { response: { data: error } };
+    }
+
+    return await response.json();
+  },
+
+  // Skip referral
+  skipReferral: async (walletAddress: string) => {
+    const response = await fetch(`${API_URL}/users/referral/skip`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ walletAddress })
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw { response: { data: error } };
+    }
+
+    return await response.json();
+  },
+
+  // Get user details
+  getUser: async (walletAddress: string) => {
+    const response = await fetch(`${API_URL}/users/info/${walletAddress}`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json'
+      }
+    });
+
+    if (!response.ok) {
+      throw new Error('Failed to fetch user');
+    }
+
+    const data = await response.json();
+    return data.user;
   }
 };

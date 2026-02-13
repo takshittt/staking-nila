@@ -35,6 +35,64 @@ router.post('/connect', async (req, res) => {
   }
 });
 
+// Set referral code
+router.post('/referral', async (req, res) => {
+  try {
+    const { walletAddress, referralCode } = req.body;
+
+    if (!walletAddress || !referralCode) {
+      return res.status(400).json({ error: 'Wallet address and referral code are required' });
+    }
+
+    await UserService.setReferrer(walletAddress, referralCode);
+    res.json({ success: true });
+  } catch (error: any) {
+    console.error('Set referral error:', error);
+    res.status(400).json({ error: error.message });
+  }
+});
+
+// Skip referral
+router.post('/referral/skip', async (req, res) => {
+  try {
+    const { walletAddress } = req.body;
+
+    if (!walletAddress) {
+      return res.status(400).json({ error: 'Wallet address is required' });
+    }
+
+    await UserService.skipReferral(walletAddress);
+    res.json({ success: true });
+  } catch (error: any) {
+    console.error('Skip referral error:', error);
+    res.status(400).json({ error: error.message });
+  }
+});
+
+// Public endpoint - get user info
+router.get('/info/:walletAddress', async (req, res) => {
+  try {
+    const walletAddress = Array.isArray(req.params.walletAddress)
+      ? req.params.walletAddress[0]
+      : req.params.walletAddress;
+
+    if (!walletAddress) {
+      return res.status(400).json({ error: 'Wallet address is required' });
+    }
+
+    const user = await UserService.getUserByWallet(walletAddress);
+
+    res.json({
+      success: true,
+      user
+    });
+  } catch (error: any) {
+    console.error('Get user info error:', error);
+    res.status(404).json({ error: error.message });
+  }
+});
+
+
 // Admin endpoints - require authentication
 router.get('/', authMiddleware, async (req, res) => {
   try {
@@ -48,8 +106,8 @@ router.get('/', authMiddleware, async (req, res) => {
 
 router.get('/:walletAddress', authMiddleware, async (req, res) => {
   try {
-    const walletAddress = Array.isArray(req.params.walletAddress) 
-      ? req.params.walletAddress[0] 
+    const walletAddress = Array.isArray(req.params.walletAddress)
+      ? req.params.walletAddress[0]
       : req.params.walletAddress;
     const user = await UserService.getUserByWallet(walletAddress);
     const stakes = await StakeService.getUserStakes(walletAddress);
@@ -67,8 +125,8 @@ router.get('/:walletAddress', authMiddleware, async (req, res) => {
 
 router.patch('/:walletAddress/status', authMiddleware, async (req, res) => {
   try {
-    const walletAddress = Array.isArray(req.params.walletAddress) 
-      ? req.params.walletAddress[0] 
+    const walletAddress = Array.isArray(req.params.walletAddress)
+      ? req.params.walletAddress[0]
       : req.params.walletAddress;
     const { status } = req.body;
 

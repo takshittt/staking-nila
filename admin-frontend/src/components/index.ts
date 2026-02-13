@@ -1,10 +1,9 @@
 export { default as AdminSidebar } from './AdminSidebar';
 export { default as Overview } from './Overview';
 export { default as StakingPlans } from './StakingPlans';
-export { default as CreatePlanModal } from './CreatePlanModal';
+export { CreateAmountConfigModal, CreateLockConfigModal } from './CreatePlanModal';
 export { default as Users } from './Users';
 export { default as UserProfileModal } from './UserProfileModal';
 export { default as Stakes } from './Stakes';
 export { default as Referrals } from './Referrals';
 export { default as Tokens } from './Tokens';
-export { default as WithdrawConfirmModal } from './WithdrawConfirmModal';

@@ -1,0 +1,464 @@
+import { PrismaClient } from '@prisma/client';
+import { BlockchainService } from './blockchain.service';
+
+const prisma = new PrismaClient();
+
+export class RewardService {
+  // Create pending reward
+  static async createPendingReward(data: {
+    userId: string;
+    walletAddress: string;
+    type: 'INSTANT_CASHBACK' | 'APY_REWARD' | 'REFERRAL_REWARD';
+    amount: number;
+    sourceId?: string;
+    metadata?: any;
+  }) {
+    const reward = await prisma.pendingReward.create({
+      data: {
+        userId: data.userId,
+        walletAddress: data.walletAddress.toLowerCase(),
+        type: data.type,
+        amount: data.amount,
+        sourceId: data.sourceId,
+        metadata: data.metadata || {}
+      }
+    });
+
+    return reward;
+  }
+
+  // Get all pending rewards for a user
+  static async getUserPendingRewards(walletAddress: string) {
+    const normalizedAddress = walletAddress.toLowerCase();
+
+    try {
+      // Get claimable rewards from smart contract
+      const contractRewards = await BlockchainService.getClaimableRewards(normalizedAddress);
+
+      const instantCashback = Number(contractRewards.instantRewards) / 1e18;
+      const referralRewards = Number(contractRewards.referralRewards) / 1e18;
+
+      // Get APY rewards from database (these are synced separately)
+      const apyRewards = await prisma.pendingReward.findMany({
+        where: {
+          walletAddress: normalizedAddress,
+          type: 'APY_REWARD',
+          status: 'pending'
+        },
+        orderBy: {
+          createdAt: 'desc'
+        }
+      });
+
+      const stakingRewards = apyRewards.reduce((sum, r) => sum + Number(r.amount), 0);
+      const totalClaimable = instantCashback + stakingRewards + referralRewards;
+
+      // Combine contract rewards with database APY rewards
+      const breakdown = [
+        ...apyRewards.map(r => ({
+          id: r.id,
+          type: r.type,
+          amount: Number(r.amount),
+          createdAt: r.createdAt,
+          sourceId: r.sourceId,
+          metadata: r.metadata
+        }))
+      ];
+
+      // Add instant cashback if available
+      if (instantCashback > 0) {
+        breakdown.push({
+          id: 'contract-instant',
+          type: 'INSTANT_CASHBACK' as const,
+          amount: instantCashback,
+          createdAt: new Date(),
+          sourceId: null,
+          metadata: { fromContract: true }
+        });
+      }
+
+      // Add referral rewards if available
+      if (referralRewards > 0) {
+        breakdown.push({
+          id: 'contract-referral',
+          type: 'REFERRAL_REWARD' as const,
+          amount: referralRewards,
+          createdAt: new Date(),
+          sourceId: null,
+          metadata: { fromContract: true }
+        });
+      }
+
+      return {
+        instantCashback,
+        stakingRewards,
+        referralRewards,
+        totalClaimable,
+        breakdown
+      };
+    } catch (error: any) {
+      console.error('Error getting pending rewards:', error);
+      throw new Error(`Failed to get pending rewards: ${error.message}`);
+    }
+  }
+
+  // Get reward history (claimed rewards)
+  static async getUserRewardHistory(walletAddress: string, limit = 50) {
+    const normalizedAddress = walletAddress.toLowerCase();
+
+    const history = await prisma.pendingReward.findMany({
+      where: {
+        walletAddress: normalizedAddress,
+        status: 'claimed'
+      },
+      orderBy: {
+        claimedAt: 'desc'
+      },
+      take: limit
+    });
+
+    return history.map(r => ({
+      id: r.id,
+      type: r.type,
+      amount: Number(r.amount),
+      createdAt: r.createdAt,
+      claimedAt: r.claimedAt,
+      txHash: r.txHash,
+      sourceId: r.sourceId
+    }));
+  }
+
+  // Get lifetime earnings
+  static async getUserLifetimeEarnings(walletAddress: string) {
+    const normalizedAddress = walletAddress.toLowerCase();
+
+    const claimed = await prisma.pendingReward.aggregate({
+      where: {
+        walletAddress: normalizedAddress,
+        status: 'claimed'
+      },
+      _sum: {
+        amount: true
+      }
+    });
+
+    const pending = await prisma.pendingReward.aggregate({
+      where: {
+        walletAddress: normalizedAddress,
+        status: 'pending'
+      },
+      _sum: {
+        amount: true
+      }
+    });
+
+    return {
+      totalClaimed: Number(claimed._sum.amount || 0),
+      totalPending: Number(pending._sum.amount || 0),
+      totalLifetime: Number(claimed._sum.amount || 0) + Number(pending._sum.amount || 0)
+    };
+  }
+
+  // Record a claim that happened on-chain (for instant cashback and referral rewards)
+  static async recordClaim(data: {
+    walletAddress: string;
+    type: 'INSTANT_CASHBACK' | 'REFERRAL_REWARD' | 'ALL';
+    instantAmount?: number;
+    referralAmount?: number;
+    txHash: string;
+  }) {
+    const normalizedAddress = data.walletAddress.toLowerCase();
+
+    try {
+      // Find or create user
+      let user = await prisma.user.findUnique({
+        where: { walletAddress: normalizedAddress }
+      });
+
+      if (!user) {
+        user = await prisma.user.create({
+          data: {
+            walletAddress: normalizedAddress
+          }
+        });
+      }
+
+      // Create claimed reward records based on type
+      if (data.type === 'INSTANT_CASHBACK' && data.instantAmount && data.instantAmount > 0) {
+        await prisma.pendingReward.create({
+          data: {
+            userId: user.id,
+            walletAddress: normalizedAddress,
+            type: 'INSTANT_CASHBACK',
+            amount: data.instantAmount,
+            status: 'claimed',
+            claimedAt: new Date(),
+            txHash: data.txHash
+          }
+        });
+      } else if (data.type === 'REFERRAL_REWARD' && data.referralAmount && data.referralAmount > 0) {
+        await prisma.pendingReward.create({
+          data: {
+            userId: user.id,
+            walletAddress: normalizedAddress,
+            type: 'REFERRAL_REWARD',
+            amount: data.referralAmount,
+            status: 'claimed',
+            claimedAt: new Date(),
+            txHash: data.txHash
+          }
+        });
+      } else if (data.type === 'ALL') {
+        // Create records for both instant and referral if they were claimed
+        if (data.instantAmount && data.instantAmount > 0) {
+          await prisma.pendingReward.create({
+            data: {
+              userId: user.id,
+              walletAddress: normalizedAddress,
+              type: 'INSTANT_CASHBACK',
+              amount: data.instantAmount,
+              status: 'claimed',
+              claimedAt: new Date(),
+              txHash: data.txHash
+            }
+          });
+        }
+        if (data.referralAmount && data.referralAmount > 0) {
+          await prisma.pendingReward.create({
+            data: {
+              userId: user.id,
+              walletAddress: normalizedAddress,
+              type: 'REFERRAL_REWARD',
+              amount: data.referralAmount,
+              status: 'claimed',
+              claimedAt: new Date(),
+              txHash: data.txHash
+            }
+          });
+        }
+      }
+
+      return { success: true };
+    } catch (error: any) {
+      console.error('Error recording claim:', error);
+      throw new Error(`Failed to record claim: ${error.message}`);
+    }
+  }
+
+  // Claim rewards
+  static async claimRewards(data: {
+    walletAddress: string;
+    type?: 'ALL' | 'INSTANT_CASHBACK' | 'APY_REWARD' | 'REFERRAL_REWARD';
+    rewardIds?: string[];
+  }) {
+    const normalizedAddress = data.walletAddress.toLowerCase();
+
+    try {
+      let txHash: string = '';
+      let amount = 0;
+      let rewardsClaimed = 0;
+
+      if (data.type === 'INSTANT_CASHBACK') {
+        // Claim instant rewards from contract
+        const contractRewards = await BlockchainService.getClaimableRewards(normalizedAddress);
+        amount = Number(contractRewards.instantRewards) / 1e18;
+
+        if (amount === 0) {
+          throw new Error('No instant rewards to claim');
+        }
+
+        txHash = await BlockchainService.claimInstantRewards(normalizedAddress);
+        rewardsClaimed = 1;
+
+      } else if (data.type === 'REFERRAL_REWARD') {
+        // Claim referral rewards from contract
+        const contractRewards = await BlockchainService.getClaimableRewards(normalizedAddress);
+        amount = Number(contractRewards.referralRewards) / 1e18;
+
+        if (amount === 0) {
+          throw new Error('No referral rewards to claim');
+        }
+
+        txHash = await BlockchainService.claimReferralRewards(normalizedAddress);
+        rewardsClaimed = 1;
+
+      } else if (data.type === 'APY_REWARD') {
+        // Claim APY rewards from database (these are managed separately)
+        const apyRewards = await prisma.pendingReward.findMany({
+          where: {
+            walletAddress: normalizedAddress,
+            type: 'APY_REWARD',
+            status: 'pending'
+          }
+        });
+
+        if (apyRewards.length === 0) {
+          throw new Error('No APY rewards to claim');
+        }
+
+        amount = apyRewards.reduce((sum, r) => sum + Number(r.amount), 0);
+        txHash = await BlockchainService.transferRewards(normalizedAddress, amount);
+
+        // Mark as claimed
+        await prisma.pendingReward.updateMany({
+          where: {
+            id: { in: apyRewards.map(r => r.id) }
+          },
+          data: {
+            status: 'claimed',
+            claimedAt: new Date(),
+            txHash
+          }
+        });
+
+        rewardsClaimed = apyRewards.length;
+
+      } else {
+        // Claim ALL rewards
+        const contractRewards = await BlockchainService.getClaimableRewards(normalizedAddress);
+        const instantAmount = Number(contractRewards.instantRewards) / 1e18;
+        const referralAmount = Number(contractRewards.referralRewards) / 1e18;
+
+        const apyRewards = await prisma.pendingReward.findMany({
+          where: {
+            walletAddress: normalizedAddress,
+            type: 'APY_REWARD',
+            status: 'pending'
+          }
+        });
+
+        const apyAmount = apyRewards.reduce((sum, r) => sum + Number(r.amount), 0);
+        amount = instantAmount + referralAmount + apyAmount;
+
+        if (amount === 0) {
+          throw new Error('No rewards to claim');
+        }
+
+        // Claim instant + referral from contract
+        if (instantAmount > 0 || referralAmount > 0) {
+          txHash = await BlockchainService.claimAllRewards(normalizedAddress);
+          rewardsClaimed += (instantAmount > 0 ? 1 : 0) + (referralAmount > 0 ? 1 : 0);
+        }
+
+        // Claim APY rewards separately if any
+        if (apyAmount > 0) {
+          const apyTxHash = await BlockchainService.transferRewards(normalizedAddress, apyAmount);
+          txHash = txHash || apyTxHash;
+
+          await prisma.pendingReward.updateMany({
+            where: {
+              id: { in: apyRewards.map(r => r.id) }
+            },
+            data: {
+              status: 'claimed',
+              claimedAt: new Date(),
+              txHash: apyTxHash
+            }
+          });
+
+          rewardsClaimed += apyRewards.length;
+        }
+      }
+
+      return {
+        success: true,
+        txHash: txHash!,
+        amount,
+        rewardsClaimed
+      };
+    } catch (error: any) {
+      console.error('Error claiming rewards:', error);
+      throw new Error(`Failed to claim rewards: ${error.message}`);
+    }
+  }
+
+  // Sync APY rewards from blockchain
+  static async syncAPYRewards(walletAddress: string) {
+    const normalizedAddress = walletAddress.toLowerCase();
+
+    try {
+      // Get user
+      const user = await prisma.user.findUnique({
+        where: { walletAddress: normalizedAddress }
+      });
+
+      if (!user) {
+        throw new Error('User not found');
+      }
+
+      // Get pending rewards from blockchain
+      const blockchainRewards = await BlockchainService.getUserPendingRewards(normalizedAddress);
+
+      // Get active stakes
+      const activeStakes = await prisma.stake.findMany({
+        where: {
+          user: { walletAddress: normalizedAddress },
+          status: 'active'
+        }
+      });
+
+      // Create pending rewards for each stake with rewards
+      for (const stakeData of blockchainRewards.breakdown) {
+        const stake = activeStakes.find(s => s.stakeId === stakeData.stakeId.toString());
+
+        if (stake && Number(stakeData.pendingReward) > 0) {
+          // Check if reward already exists
+          const existing = await prisma.pendingReward.findFirst({
+            where: {
+              userId: user.id,
+              type: 'APY_REWARD',
+              sourceId: stake.stakeId,
+              status: 'pending'
+            }
+          });
+
+          const rewardAmount = Number(stakeData.pendingReward) / 1e18; // Convert from wei
+
+          if (!existing) {
+            // Create new reward
+            await this.createPendingReward({
+              userId: user.id,
+              walletAddress: normalizedAddress,
+              type: 'APY_REWARD',
+              amount: rewardAmount,
+              sourceId: stake.stakeId,
+              metadata: {
+                stakeAmount: Number(stakeData.amount),
+                apr: stakeData.apr
+              }
+            });
+          } else {
+            // Update existing reward amount
+            await prisma.pendingReward.update({
+              where: { id: existing.id },
+              data: { amount: rewardAmount }
+            });
+          }
+        }
+      }
+
+      return { success: true, synced: true };
+    } catch (error: any) {
+      console.error('Error syncing APY rewards:', error);
+      throw new Error(`Failed to sync APY rewards: ${error.message}`);
+    }
+  }
+
+  // Get all pending rewards across all users (for admin)
+  static async getAllPendingRewards() {
+    const rewards = await prisma.pendingReward.groupBy({
+      by: ['type', 'status'],
+      _sum: {
+        amount: true
+      },
+      _count: true
+    });
+
+    return rewards.map(r => ({
+      type: r.type,
+      status: r.status,
+      totalAmount: Number(r._sum.amount || 0),
+      count: r._count
+    }));
+  }
+}

@@ -29,7 +29,7 @@ export class UserService {
 
       // Create new user
       const newReferralCode = this.generateReferralCode();
-      
+
       user = await prisma.user.create({
         data: {
           walletAddress: normalizedAddress,
@@ -56,6 +56,7 @@ export class UserService {
       }
 
       return user;
+      return user;
     } catch (error: any) {
       // Handle race condition - if user was created between check and create
       if (error.code === 'P2002') {
@@ -69,6 +70,62 @@ export class UserService {
       }
       throw error;
     }
+  }
+
+  // Set referrer for a user
+  static async setReferrer(walletAddress: string, referralCode: string) {
+    const normalizedAddress = walletAddress.toLowerCase();
+
+    const user = await prisma.user.findUnique({
+      where: { walletAddress: normalizedAddress }
+    });
+
+    if (!user) throw new Error('User not found');
+    if (user.referredBy) throw new Error('User already has a referrer');
+    if (user.isReferralSkipped) throw new Error('User has skipped referral');
+    if (user.referralCode === referralCode) throw new Error('Cannot refer yourself');
+
+    const referrer = await prisma.user.findUnique({
+      where: { referralCode }
+    });
+
+    if (!referrer) throw new Error('Invalid referral code');
+
+    // Update user
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { referredBy: referralCode }
+    });
+
+    // Create referral record
+    await prisma.referral.create({
+      data: {
+        referrerWallet: referrer.walletAddress,
+        referredWallet: normalizedAddress,
+        earnings: 0
+      }
+    });
+
+    return { success: true };
+  }
+
+  // Skip referral for a user
+  static async skipReferral(walletAddress: string) {
+    const normalizedAddress = walletAddress.toLowerCase();
+
+    const user = await prisma.user.findUnique({
+      where: { walletAddress: normalizedAddress }
+    });
+
+    if (!user) throw new Error('User not found');
+    if (user.referredBy) throw new Error('User already has a referrer');
+
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { isReferralSkipped: true }
+    });
+
+    return { success: true };
   }
 
   // Get all users with calculated stats
@@ -131,7 +188,7 @@ export class UserService {
   // Get single user with stats
   static async getUserByWallet(walletAddress: string) {
     const normalizedAddress = walletAddress.toLowerCase();
-    
+
     const user = await prisma.user.findUnique({
       where: { walletAddress: normalizedAddress },
       include: {
@@ -141,6 +198,17 @@ export class UserService {
 
     if (!user) {
       throw new Error('User not found');
+    }
+
+    // Get referrer wallet if exists
+    let referrerWallet = null;
+    if (user.referredBy) {
+      const referrer = await prisma.user.findUnique({
+        where: { referralCode: user.referredBy }
+      });
+      if (referrer) {
+        referrerWallet = referrer.walletAddress;
+      }
     }
 
     const activeStakes = user.stakes.filter(s => s.status === 'active');
@@ -166,10 +234,16 @@ export class UserService {
       id: user.id,
       walletAddress: user.walletAddress,
       referralCode: user.referralCode,
+      referredBy: user.referredBy,
+      referrerWallet,
+      isReferralSkipped: user.isReferralSkipped,
       totalStaked,
       activeStakes: activeStakes.length,
       rewardsClaimed: Math.round(rewardsClaimed),
       referralEarnings: Number(referralEarnings._sum.earnings || 0),
+      referralCount: await prisma.referral.count({
+        where: { referrerWallet: user.walletAddress }
+      }),
       status: user.status,
       joinDate: user.firstConnectedAt.toISOString()
     };
@@ -178,7 +252,7 @@ export class UserService {
   // Update user status
   static async updateUserStatus(walletAddress: string, status: string) {
     const normalizedAddress = walletAddress.toLowerCase();
-    
+
     return await prisma.user.update({
       where: { walletAddress: normalizedAddress },
       data: { status }

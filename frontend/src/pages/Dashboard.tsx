@@ -6,11 +6,41 @@ import Rewards from '../dashboard-components/Rewards';
 import Referrals from '../dashboard-components/Referrals';
 import Transactions from '../dashboard-components/Transactions';
 
+import ReferenceModal from '../components/ReferenceModal';
+import { useWallet } from '../hooks/useWallet';
+import { userApi } from '../services/userApi';
+import { useEffect } from 'react';
+
 import HomeDashboard from '../dashboard-components/HomeDashboard';
 
 const Dashboard = () => {
     const [activeTab, setActiveTab] = useState('Home');
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+    const [showReferenceModal, setShowReferenceModal] = useState(false);
+    const { address } = useWallet();
+
+    useEffect(() => {
+        const checkReferralStatus = async () => {
+            if (!address) return;
+            try {
+                const user = await userApi.getUser(address);
+                console.log('User referral status:', {
+                    referredBy: user.referredBy,
+                    isReferralSkipped: user.isReferralSkipped,
+                    referralCode: user.referralCode
+                });
+
+                // Show modal if user hasn't been referred and hasn't skipped
+                if (!user.referredBy && !user.isReferralSkipped) {
+                    setTimeout(() => setShowReferenceModal(true), 500);
+                }
+            } catch (error) {
+                console.error('Failed to check referral status:', error);
+            }
+        };
+
+        checkReferralStatus();
+    }, [address]);
 
     return (
         <div className="min-h-screen bg-slate-50">
@@ -36,6 +66,15 @@ const Dashboard = () => {
 
                 {activeTab === 'Transactions' && <Transactions />}
             </div>
+
+            <ReferenceModal
+                isOpen={showReferenceModal}
+                onClose={() => setShowReferenceModal(false)}
+                onSuccess={() => {
+                    setShowReferenceModal(false);
+                    // Refresh data if needed
+                }}
+            />
         </div>
     );
 };

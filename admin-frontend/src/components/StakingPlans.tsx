@@ -1,4 +1,4 @@
-import { Plus, Edit2, Power, PowerOff, Loader2 } from 'lucide-react';
+import { Plus, Power, PowerOff, Loader2, Pencil } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { CreateAmountConfigModal, CreateLockConfigModal } from './CreatePlanModal';
 import type { AmountConfigFormData, LockConfigFormData } from './CreatePlanModal';
@@ -13,8 +13,17 @@ const StakingPlans = () => {
     const [activeTab, setActiveTab] = useState<'amounts' | 'locks'>('amounts');
     const [amountConfigs, setAmountConfigs] = useState<AmountConfig[]>([]);
     const [lockConfigs, setLockConfigs] = useState<LockConfig[]>([]);
+
+    // Modal states
     const [isAmountModalOpen, setIsAmountModalOpen] = useState(false);
     const [isLockModalOpen, setIsLockModalOpen] = useState(false);
+
+    // Edit states
+    const [editingAmountId, setEditingAmountId] = useState<number | null>(null);
+    const [editingLockId, setEditingLockId] = useState<number | null>(null);
+    const [amountInitialData, setAmountInitialData] = useState<AmountConfigFormData | undefined>(undefined);
+    const [lockInitialData, setLockInitialData] = useState<LockConfigFormData | undefined>(undefined);
+
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [txPending, setTxPending] = useState(false);
@@ -84,8 +93,33 @@ const StakingPlans = () => {
             console.log('Transaction hash:', result.txHash);
             await fetchConfigs();
             alert(`Amount config created! TX: ${result.txHash}`);
+            handleCloseAmountModal();
         } catch (err: any) {
             alert(err.response?.data?.error || 'Failed to create config');
+        } finally {
+            setTxPending(false);
+        }
+    };
+
+    const handleUpdateAmountConfig = async (data: AmountConfigFormData) => {
+        if (editingAmountId === null) return;
+
+        // Find existing config to preserve active state
+        const config = amountConfigs.find(c => c.id === editingAmountId);
+        if (!config) return;
+
+        setTxPending(true);
+        try {
+            const result = await stakingApi.updateAmountConfig(editingAmountId, {
+                instantRewardPercent: data.instantRewardPercent,
+                active: config.active // Preserve existing active state
+            });
+            console.log('Transaction hash:', result.txHash);
+            await fetchConfigs();
+            alert(`Amount config updated! TX: ${result.txHash}`);
+            handleCloseAmountModal();
+        } catch (err: any) {
+            alert(err.response?.data?.error || 'Failed to update config');
         } finally {
             setTxPending(false);
         }
@@ -98,11 +132,78 @@ const StakingPlans = () => {
             console.log('Transaction hash:', result.txHash);
             await fetchConfigs();
             alert(`Lock config created! TX: ${result.txHash}`);
+            handleCloseLockModal();
         } catch (err: any) {
             alert(err.response?.data?.error || 'Failed to create config');
         } finally {
             setTxPending(false);
         }
+    };
+
+    const handleUpdateLockConfig = async (data: LockConfigFormData) => {
+        if (editingLockId === null) return;
+
+        // Find existing config to preserve active state
+        const config = lockConfigs.find(c => c.id === editingLockId);
+        if (!config) return;
+
+        setTxPending(true);
+        try {
+            const result = await stakingApi.updateLockConfig(editingLockId, {
+                aprPercent: data.aprPercent,
+                active: config.active // Preserve existing active state
+            });
+            console.log('Transaction hash:', result.txHash);
+            await fetchConfigs();
+            alert(`Lock config updated! TX: ${result.txHash}`);
+            handleCloseLockModal();
+        } catch (err: any) {
+            alert(err.response?.data?.error || 'Failed to update config');
+        } finally {
+            setTxPending(false);
+        }
+    };
+
+    const openCreateAmountModal = () => {
+        setEditingAmountId(null);
+        setAmountInitialData(undefined);
+        setIsAmountModalOpen(true);
+    };
+
+    const openEditAmountModal = (config: AmountConfig) => {
+        setEditingAmountId(config.id);
+        setAmountInitialData({
+            amount: Number(BigInt(config.amount) / BigInt(10 ** 18)),
+            instantRewardPercent: config.instantRewardBps / 100
+        });
+        setIsAmountModalOpen(true);
+    };
+
+    const handleCloseAmountModal = () => {
+        setIsAmountModalOpen(false);
+        setEditingAmountId(null);
+        setAmountInitialData(undefined);
+    };
+
+    const openCreateLockModal = () => {
+        setEditingLockId(null);
+        setLockInitialData(undefined);
+        setIsLockModalOpen(true);
+    };
+
+    const openEditLockModal = (config: LockConfig) => {
+        setEditingLockId(config.id);
+        setLockInitialData({
+            lockDays: config.lockDuration,
+            aprPercent: config.apr / 100
+        });
+        setIsLockModalOpen(true);
+    };
+
+    const handleCloseLockModal = () => {
+        setIsLockModalOpen(false);
+        setEditingLockId(null);
+        setLockInitialData(undefined);
     };
 
     // Convert wei to NILA for display
@@ -146,21 +247,19 @@ const StakingPlans = () => {
                 <div className="flex gap-4">
                     <button
                         onClick={() => setActiveTab('amounts')}
-                        className={`px-4 py-3 font-medium border-b-2 transition-colors ${
-                            activeTab === 'amounts'
-                                ? 'border-red-600 text-red-600'
-                                : 'border-transparent text-slate-600 hover:text-slate-900'
-                        }`}
+                        className={`px-4 py-3 font-medium border-b-2 transition-colors ${activeTab === 'amounts'
+                            ? 'border-red-600 text-red-600'
+                            : 'border-transparent text-slate-600 hover:text-slate-900'
+                            }`}
                     >
                         Amount Configs
                     </button>
                     <button
                         onClick={() => setActiveTab('locks')}
-                        className={`px-4 py-3 font-medium border-b-2 transition-colors ${
-                            activeTab === 'locks'
-                                ? 'border-red-600 text-red-600'
-                                : 'border-transparent text-slate-600 hover:text-slate-900'
-                        }`}
+                        className={`px-4 py-3 font-medium border-b-2 transition-colors ${activeTab === 'locks'
+                            ? 'border-red-600 text-red-600'
+                            : 'border-transparent text-slate-600 hover:text-slate-900'
+                            }`}
                     >
                         Lock Configs
                     </button>
@@ -172,7 +271,7 @@ const StakingPlans = () => {
                 <div className="space-y-4">
                     <div className="flex justify-end">
                         <button
-                            onClick={() => setIsAmountModalOpen(true)}
+                            onClick={openCreateAmountModal}
                             disabled={txPending}
                             className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
                         >
@@ -230,6 +329,14 @@ const StakingPlans = () => {
                                             <td className="px-6 py-4">
                                                 <div className="flex items-center gap-2">
                                                     <button
+                                                        onClick={() => openEditAmountModal(config)}
+                                                        disabled={txPending}
+                                                        className="p-2 text-slate-600 hover:bg-slate-100 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                                        title="Edit"
+                                                    >
+                                                        <Pencil className="w-4 h-4" />
+                                                    </button>
+                                                    <button
                                                         onClick={() => handleToggleAmountActive(config.id)}
                                                         disabled={txPending}
                                                         className="p-2 text-slate-600 hover:bg-slate-100 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
@@ -240,14 +347,6 @@ const StakingPlans = () => {
                                                         ) : (
                                                             <Power className="w-4 h-4" />
                                                         )}
-                                                    </button>
-                                                    <button
-                                                        onClick={() => console.log('Edit', config.id)}
-                                                        disabled={txPending}
-                                                        className="p-2 text-slate-600 hover:bg-slate-100 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                                                        title="Edit config"
-                                                    >
-                                                        <Edit2 className="w-4 h-4" />
                                                     </button>
                                                 </div>
                                             </td>
@@ -270,7 +369,7 @@ const StakingPlans = () => {
                 <div className="space-y-4">
                     <div className="flex justify-end">
                         <button
-                            onClick={() => setIsLockModalOpen(true)}
+                            onClick={openCreateLockModal}
                             disabled={txPending}
                             className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
                         >
@@ -328,6 +427,14 @@ const StakingPlans = () => {
                                             <td className="px-6 py-4">
                                                 <div className="flex items-center gap-2">
                                                     <button
+                                                        onClick={() => openEditLockModal(config)}
+                                                        disabled={txPending}
+                                                        className="p-2 text-slate-600 hover:bg-slate-100 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                                        title="Edit"
+                                                    >
+                                                        <Pencil className="w-4 h-4" />
+                                                    </button>
+                                                    <button
                                                         onClick={() => handleToggleLockActive(config.id)}
                                                         disabled={txPending}
                                                         className="p-2 text-slate-600 hover:bg-slate-100 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
@@ -338,14 +445,6 @@ const StakingPlans = () => {
                                                         ) : (
                                                             <Power className="w-4 h-4" />
                                                         )}
-                                                    </button>
-                                                    <button
-                                                        onClick={() => console.log('Edit', config.id)}
-                                                        disabled={txPending}
-                                                        className="p-2 text-slate-600 hover:bg-slate-100 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                                                        title="Edit config"
-                                                    >
-                                                        <Edit2 className="w-4 h-4" />
                                                     </button>
                                                 </div>
                                             </td>
@@ -366,13 +465,17 @@ const StakingPlans = () => {
             {/* Modals */}
             <CreateAmountConfigModal
                 isOpen={isAmountModalOpen}
-                onClose={() => setIsAmountModalOpen(false)}
-                onSubmit={handleCreateAmountConfig}
+                onClose={handleCloseAmountModal}
+                onSubmit={editingAmountId !== null ? handleUpdateAmountConfig : handleCreateAmountConfig}
+                initialData={amountInitialData}
+                isEditing={editingAmountId !== null}
             />
             <CreateLockConfigModal
                 isOpen={isLockModalOpen}
-                onClose={() => setIsLockModalOpen(false)}
-                onSubmit={handleCreateLockConfig}
+                onClose={handleCloseLockModal}
+                onSubmit={editingLockId !== null ? handleUpdateLockConfig : handleCreateLockConfig}
+                initialData={lockInitialData}
+                isEditing={editingLockId !== null}
             />
         </div>
     );

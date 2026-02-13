@@ -1,190 +1,261 @@
-import { Send, AlertCircle } from 'lucide-react';
-import { useState } from 'react';
-import WithdrawConfirmModal from './WithdrawConfirmModal';
-
-export interface TokenWallet {
-    id: string;
-    address: string;
-    nila: number;
-    rewards: number;
-    totalValue: number;
-}
-
-const mockWallets: TokenWallet[] = [
-    {
-        id: '1',
-        address: '0x742d35Cc6634C0532925a3b844Bc9e7595f42e1',
-        nila: 50000,
-        rewards: 2500,
-        totalValue: 52500,
-    },
-    {
-        id: '2',
-        address: '0x8ba1f109551bD432803012645Ac136ddd64DBA72',
-        nila: 125000,
-        rewards: 8750,
-        totalValue: 133750,
-    },
-    {
-        id: '3',
-        address: '0x1234567890123456789012345678901234567890',
-        nila: 25000,
-        rewards: 500,
-        totalValue: 25500,
-    },
-    {
-        id: '4',
-        address: '0xabcdefabcdefabcdefabcdefabcdefabcdefabcd',
-        nila: 75000,
-        rewards: 4500,
-        totalValue: 79500,
-    },
-];
-
-const truncateAddress = (address: string) => {
-    return `${address.slice(0, 6)}...${address.slice(-4)}`;
-};
+import { useState, useEffect } from 'react';
+import { ShieldCheck, AlertTriangle, AlertOctagon, Wallet, ArrowDownCircle, ArrowUpCircle } from 'lucide-react';
+import { DepositModal, WithdrawModal } from './TreasuryModals';
+import { treasuryApi } from '../api/treasuryApi';
+import type { TreasuryStats } from '../api/treasuryApi';
 
 const Tokens = () => {
-    const [wallets] = useState<TokenWallet[]>(mockWallets);
-    const [selectedWallet, setSelectedWallet] = useState<TokenWallet | null>(null);
-    const [isConfirmOpen, setIsConfirmOpen] = useState(false);
+    const [stats, setStats] = useState<TreasuryStats | null>(null);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
+    const [isDepositOpen, setIsDepositOpen] = useState(false);
+    const [isWithdrawOpen, setIsWithdrawOpen] = useState(false);
+    const [isProcessing, setIsProcessing] = useState(false);
 
-    const handleWithdrawClick = (wallet: TokenWallet) => {
-        setSelectedWallet(wallet);
-        setIsConfirmOpen(true);
+    // Fetch treasury stats
+    const fetchStats = async () => {
+        try {
+            setLoading(true);
+            setError(null);
+            const data = await treasuryApi.getStats();
+            setStats(data);
+        } catch (err: any) {
+            setError(err.response?.data?.error || 'Failed to fetch treasury stats');
+            console.error('Error fetching treasury stats:', err);
+        } finally {
+            setLoading(false);
+        }
     };
 
-    const handleConfirmWithdraw = async () => {
-        if (selectedWallet) {
-            // Simulate API call
-            await new Promise((resolve) => setTimeout(resolve, 1000));
-            console.log(`Withdrew ${selectedWallet.totalValue} NILA from ${selectedWallet.address}`);
-            setIsConfirmOpen(false);
-            setSelectedWallet(null);
+    useEffect(() => {
+        fetchStats();
+        // Refresh every 30 seconds
+        const interval = setInterval(fetchStats, 30000);
+        return () => clearInterval(interval);
+    }, []);
+
+    const handleDeposit = async (amount: number) => {
+        try {
+            setIsProcessing(true);
+            await treasuryApi.deposit(amount);
+            setIsDepositOpen(false);
+            // Refresh stats after deposit
+            await fetchStats();
+        } catch (err: any) {
+            alert(err.response?.data?.error || 'Failed to deposit tokens');
+            console.error('Deposit error:', err);
+        } finally {
+            setIsProcessing(false);
+        }
+    };
+
+    const handleWithdraw = async (amount: number) => {
+        try {
+            setIsProcessing(true);
+            await treasuryApi.withdraw(amount);
+            setIsWithdrawOpen(false);
+            // Refresh stats after withdrawal
+            await fetchStats();
+        } catch (err: any) {
+            alert(err.response?.data?.error || 'Failed to withdraw tokens');
+            console.error('Withdraw error:', err);
+        } finally {
+            setIsProcessing(false);
+        }
+    };
+
+    if (loading && !stats) {
+        return (
+            <div className="flex items-center justify-center h-64">
+                <div className="text-slate-600">Loading treasury data...</div>
+            </div>
+        );
+    }
+
+    if (error && !stats) {
+        return (
+            <div className="flex items-center justify-center h-64">
+                <div className="text-red-600">Error: {error}</div>
+            </div>
+        );
+    }
+
+    if (!stats) return null;
+
+    // Convert wei to tokens (18 decimals)
+    const contractBalance = Number(stats.contractBalance) / 1e18;
+    const pendingRewards = Number(stats.pendingRewards) / 1e18;
+    const healthStatus = stats.healthStatus;
+    const tokensNeeded = Math.max(0, pendingRewards - contractBalance);
+
+    const renderHealthBanner = () => {
+        switch (healthStatus) {
+            case 'healthy':
+                return (
+                    <div className="bg-green-50 border border-green-200 rounded-xl p-4 flex items-center gap-4">
+                        <div className="p-2 bg-green-100 rounded-full">
+                            <ShieldCheck className="w-6 h-6 text-green-600" />
+                        </div>
+                        <div>
+                            <h3 className="font-semibold text-green-900">Treasury is Healthy</h3>
+                            <p className="text-sm text-green-700">Contract balance is sufficient to cover all pending rewards.</p>
+                        </div>
+                    </div>
+                );
+            case 'low':
+                return (
+                    <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 flex items-center gap-4">
+                        <div className="p-2 bg-amber-100 rounded-full">
+                            <AlertTriangle className="w-6 h-6 text-amber-600" />
+                        </div>
+                        <div>
+                            <h3 className="font-semibold text-amber-900">Treasury Needs Attention</h3>
+                            <p className="text-sm text-amber-700">Balance is low relative to pending obligations. Consider depositing more tokens.</p>
+                        </div>
+                    </div>
+                );
+            case 'critical':
+                return (
+                    <div className="bg-red-50 border border-red-200 rounded-xl p-4 flex items-center gap-4">
+                        <div className="p-2 bg-red-100 rounded-full">
+                            <AlertOctagon className="w-6 h-6 text-red-600" />
+                        </div>
+                        <div>
+                            <h3 className="font-semibold text-red-900">Treasury Critical</h3>
+                            <p className="text-sm text-red-700">
+                                <strong>{tokensNeeded.toLocaleString()} NILA</strong> deficit. Immediate deposit required to ensure solvency.
+                            </p>
+                        </div>
+                    </div>
+                );
         }
     };
 
     return (
         <div className="space-y-6">
-            <div>
-                <h1 className="text-3xl font-bold text-slate-900">Tokens</h1>
-                <p className="text-slate-600 mt-1">Manage token balances and withdrawals</p>
-            </div>
-
-            {/* Summary Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="bg-white p-6 rounded-xl border border-slate-100 shadow-sm">
-                    <p className="text-slate-600 text-sm font-medium">Total NILA</p>
-                    <p className="text-3xl font-bold text-slate-900 mt-2">
-                        {wallets.reduce((sum, w) => sum + w.nila, 0).toLocaleString()}
-                    </p>
+            <div className="flex items-center justify-between">
+                <div>
+                    <h1 className="text-3xl font-bold text-slate-900">Token Treasury</h1>
+                    <p className="text-slate-600 mt-1">Monitor contract liquidity and manage funds</p>
                 </div>
-                <div className="bg-white p-6 rounded-xl border border-slate-100 shadow-sm">
-                    <p className="text-slate-600 text-sm font-medium">Total Rewards</p>
-                    <p className="text-3xl font-bold text-slate-900 mt-2">
-                        {wallets.reduce((sum, w) => sum + w.rewards, 0).toLocaleString()}
-                    </p>
-                </div>
-                <div className="bg-white p-6 rounded-xl border border-slate-100 shadow-sm">
-                    <p className="text-slate-600 text-sm font-medium">Total Value</p>
-                    <p className="text-3xl font-bold text-slate-900 mt-2">
-                        {wallets.reduce((sum, w) => sum + w.totalValue, 0).toLocaleString()}
-                    </p>
-                </div>
-            </div>
-
-            {/* Wallets Table */}
-            <div className="bg-white rounded-xl border border-slate-100 shadow-sm overflow-hidden">
-                <div className="overflow-x-auto">
-                    <table className="w-full">
-                        <thead>
-                            <tr className="border-b border-slate-100 bg-slate-50">
-                                <th className="px-6 py-4 text-left text-sm font-semibold text-slate-900">
-                                    Wallet Address
-                                </th>
-                                <th className="px-6 py-4 text-left text-sm font-semibold text-slate-900">
-                                    NILA Balance
-                                </th>
-                                <th className="px-6 py-4 text-left text-sm font-semibold text-slate-900">
-                                    Rewards
-                                </th>
-                                <th className="px-6 py-4 text-left text-sm font-semibold text-slate-900">
-                                    Total Value
-                                </th>
-                                <th className="px-6 py-4 text-left text-sm font-semibold text-slate-900">
-                                    Actions
-                                </th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {wallets.map((wallet) => (
-                                <tr
-                                    key={wallet.id}
-                                    className="border-b border-slate-100 hover:bg-slate-50 transition-colors"
-                                >
-                                    <td className="px-6 py-4 text-sm font-medium text-slate-900">
-                                        <span title={wallet.address}>
-                                            {truncateAddress(wallet.address)}
-                                        </span>
-                                    </td>
-                                    <td className="px-6 py-4 text-sm text-slate-600">
-                                        {wallet.nila.toLocaleString()} NILA
-                                    </td>
-                                    <td className="px-6 py-4 text-sm text-slate-600">
-                                        {wallet.rewards.toLocaleString()} NILA
-                                    </td>
-                                    <td className="px-6 py-4 text-sm font-semibold text-slate-900">
-                                        {wallet.totalValue.toLocaleString()} NILA
-                                    </td>
-                                    <td className="px-6 py-4">
-                                        <button
-                                            onClick={() => handleWithdrawClick(wallet)}
-                                            className="inline-flex items-center gap-2 px-3 py-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors font-medium text-sm"
-                                        >
-                                            <Send className="w-4 h-4" />
-                                            Withdraw
-                                        </button>
-                                    </td>
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
-                </div>
-
-                {/* Empty State */}
-                {wallets.length === 0 && (
-                    <div className="px-6 py-12 text-center">
-                        <p className="text-slate-600">No wallets found</p>
-                    </div>
-                )}
-            </div>
-
-            {/* Info Section */}
-            <div className="bg-blue-50 border border-blue-200 rounded-xl p-6">
                 <div className="flex gap-3">
-                    <AlertCircle className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
-                    <div>
-                        <h4 className="font-semibold text-blue-900 mb-2">Withdrawal Information</h4>
-                        <ul className="space-y-1 text-sm text-blue-800">
-                            <li>• Withdrawals are processed immediately to the wallet address</li>
-                            <li>• All pending rewards will be included in the withdrawal</li>
-                            <li>• A confirmation is required before processing any withdrawal</li>
-                            <li>• Ensure the wallet address is correct before confirming</li>
-                        </ul>
+                    <button
+                        onClick={() => setIsWithdrawOpen(true)}
+                        className="flex items-center gap-2 px-4 py-2 border border-slate-200 text-slate-700 rounded-lg hover:bg-slate-50 transition-colors font-medium"
+                    >
+                        <ArrowUpCircle className="w-5 h-5" />
+                        Withdraw
+                    </button>
+                    <button
+                        onClick={() => setIsDepositOpen(true)}
+                        className="flex items-center gap-2 px-4 py-2 bg-slate-900 text-white rounded-lg hover:bg-slate-800 transition-colors font-medium shadow-sm"
+                    >
+                        <ArrowDownCircle className="w-5 h-5" />
+                        Deposit
+                    </button>
+                </div>
+            </div>
+
+            {renderHealthBanner()}
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                {/* Contract Balance */}
+                <div className="bg-white p-6 rounded-xl border border-slate-100 shadow-sm relative overflow-hidden">
+                    <div className="absolute top-0 right-0 p-4 opacity-10">
+                        <Wallet className="w-24 h-24 text-blue-600" />
+                    </div>
+                    <p className="text-slate-500 font-medium mb-1">Total Assets</p>
+                    <h2 className="text-4xl font-bold text-slate-900 mb-2">
+                        {contractBalance.toLocaleString()}
+                        <span className="text-lg text-slate-500 font-normal ml-2">NILA</span>
+                    </h2>
+                    <p className="text-sm text-slate-400">held in smart contract</p>
+                </div>
+
+                {/* Pending Rewards */}
+                <div className="bg-white p-6 rounded-xl border border-slate-100 shadow-sm">
+                    <p className="text-slate-500 font-medium mb-1">Liabilities</p>
+                    <h2 className="text-4xl font-bold text-slate-900 mb-2">
+                        {pendingRewards.toLocaleString()}
+                        <span className="text-lg text-slate-500 font-normal ml-2">NILA</span>
+                    </h2>
+                    <p className="text-sm text-slate-400">pending user rewards</p>
+                </div>
+
+                {/* Net Position */}
+                <div className="bg-white p-6 rounded-xl border border-slate-100 shadow-sm">
+                    <p className="text-slate-500 font-medium mb-1">Net Position</p>
+                    <h2 className={`text-4xl font-bold mb-2 ${contractBalance >= pendingRewards ? 'text-green-600' : 'text-red-600'}`}>
+                        {(contractBalance - pendingRewards).toLocaleString()}
+                        <span className="text-lg text-slate-500 font-normal ml-2">NILA</span>
+                    </h2>
+                    <p className="text-sm text-slate-400">
+                        {contractBalance >= pendingRewards ? 'Surplus available' : 'Deficit - Action needed'}
+                    </p>
+                </div>
+            </div>
+
+            {/* Quick Actions / Explainer */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="bg-slate-50 rounded-xl p-6 border border-slate-200">
+                    <h3 className="font-semibold text-slate-900 mb-3">About Treasury Health</h3>
+                    <ul className="space-y-2 text-sm text-slate-600">
+                        <li className="flex gap-2">
+                            <div className="w-1.5 h-1.5 rounded-full bg-green-500 mt-1.5" />
+                            <span>
+                                <strong>Healthy:</strong> Assets cover at least 120% of liabilities. Safe buffer.
+                            </span>
+                        </li>
+                        <li className="flex gap-2">
+                            <div className="w-1.5 h-1.5 rounded-full bg-amber-500 mt-1.5" />
+                            <span>
+                                <strong>Low:</strong> Assets cover 100-120% of liabilities. Monitor closely.
+                            </span>
+                        </li>
+                        <li className="flex gap-2">
+                            <div className="w-1.5 h-1.5 rounded-full bg-red-500 mt-1.5" />
+                            <span>
+                                <strong>Critical:</strong> Assets are less than liabilities.
+                                <span className="text-red-600 font-medium"> Deposits may fail.</span>
+                            </span>
+                        </li>
+                    </ul>
+                </div>
+
+                <div className="bg-slate-50 rounded-xl p-6 border border-slate-200">
+                    <h3 className="font-semibold text-slate-900 mb-3">Contract Info</h3>
+                    <div className="space-y-3">
+                        <div>
+                            <p className="text-xs text-slate-500 uppercase tracking-wider font-semibold">Contract Address</p>
+                            <div className="flex items-center gap-2 mt-1">
+                                <code className="bg-white px-2 py-1 rounded border border-slate-200 text-sm font-mono text-slate-700">
+                                    {stats.contractAddress ? `${stats.contractAddress.slice(0, 6)}...${stats.contractAddress.slice(-4)}` : 'N/A'}
+                                </code>
+                                <span className="text-xs text-green-600 bg-green-100 px-2 py-0.5 rounded-full font-medium">Active</span>
+                            </div>
+                        </div>
+                        <div>
+                            <p className="text-xs text-slate-500 uppercase tracking-wider font-semibold">Network</p>
+                            <p className="text-sm text-slate-700 font-medium">BSC Testnet</p>
+                        </div>
                     </div>
                 </div>
             </div>
 
-            {/* Withdraw Confirmation Modal */}
-            {selectedWallet && (
-                <WithdrawConfirmModal
-                    isOpen={isConfirmOpen}
-                    onClose={() => setIsConfirmOpen(false)}
-                    onConfirm={handleConfirmWithdraw}
-                    wallet={selectedWallet}
-                />
-            )}
+            <DepositModal
+                isOpen={isDepositOpen}
+                onClose={() => setIsDepositOpen(false)}
+                onConfirm={handleDeposit}
+                isProcessing={isProcessing}
+            />
+
+            <WithdrawModal
+                isOpen={isWithdrawOpen}
+                onClose={() => setIsWithdrawOpen(false)}
+                onConfirm={handleWithdraw}
+                isProcessing={isProcessing}
+                maxAmount={contractBalance}
+            />
         </div>
     );
 };
