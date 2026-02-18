@@ -1,0 +1,21 @@
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+  RewriteBase /
+
+  # Handle /check-status -> check-status.html
+  RewriteRule ^check-status$ check-status.html [L]
+
+  # Handle /kudoadmin -> kudoadmin.html
+  RewriteRule ^kudoadmin$ kudoadmin.html [L]
+
+  # Handle /payment-success -> payment-success.html
+  RewriteRule ^payment-success$ payment-success.html [L]
+
+  # Handle /payment-cancelled -> payment-cancelled.html
+  RewriteRule ^payment-cancelled$ payment-cancelled.html [L]
+
+  # For SPA routing (everything else to index.html if not a real file)
+  RewriteCond %{REQUEST_FILENAME} !-f
+  RewriteCond %{REQUEST_FILENAME} !-d
+  RewriteRule . index.html [L]
+</IfModule>

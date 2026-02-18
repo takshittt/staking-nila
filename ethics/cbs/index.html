@@ -1,0 +1,211 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Buy NILA | Simple. Secure. Compliant.</title>
+  <link rel="icon" href="https://www.mindwavedao.com/wp-content/uploads/nila-logo-alt.png" type="image/png">
+
+  <!-- Tailwind CSS CDN -->
+  <!-- Tailwind CSS CDN Removed for Production -->
+
+  <!-- Google Fonts: Inter -->
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+
+  <!-- Font Awesome -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+
+
+  <style>
+    :root {
+      --mw-primary-red: #CE2029;
+      --mw-bg-dark: #0B0E14;
+      --mw-text-main: #0B0E14;
+      --mw-text-muted: #6B7280;
+      --mw-border-light: #F3F4F6;
+    }
+
+    body {
+      background-color: #FFFFFF;
+      /* Pure White */
+      color: var(--mw-text-main);
+      overflow-x: hidden;
+    }
+
+    /* Light Theme Panel Utilities */
+    .glass-panel {
+      background: rgba(255, 255, 255, 0.95);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border: 1px solid var(--mw-border-light);
+      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
+      transition: transform 0.3s ease, background 0.3s ease, box-shadow 0.3s ease;
+    }
+
+    .glass-card {
+      background: #ffffff;
+      border: 1px solid var(--mw-border-light);
+      box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.05), 0 4px 6px -2px rgba(0, 0, 0, 0.025);
+    }
+
+    .glass-input {
+      background: #ffffff;
+      border: 1px solid #e2e8f0;
+      /* Slate-200 */
+      color: #1e293b;
+      transition: all 0.2s ease;
+    }
+
+    .glass-input:focus {
+      background: #ffffff;
+      border-color: var(--mw-primary-red);
+      outline: none;
+      box-shadow: 0 0 0 3px rgba(206, 32, 41, 0.1);
+    }
+
+    .glass-input::placeholder {
+      color: #94a3b8;
+      /* Slate-400 */
+    }
+
+    .text-gradient {
+      background: linear-gradient(to right, #CE2029, #1F2937);
+      -webkit-background-clip: text;
+      background-clip: text;
+      -webkit-text-fill-color: transparent;
+      color: #CE2029;
+      /* Fallback */
+    }
+
+    /* Select styling override */
+    select option {
+      background-color: #ffffff;
+      color: var(--mw-text-main);
+    }
+
+    /* Floating Blobs - REMOVED for cleaner look */
+    /*
+    .blob-1 {
+      top: -10%;
+      left: -10%;
+      width: 500px;
+      height: 500px;
+      background: rgba(206, 32, 41, 0.08);
+      filter: blur(120px);
+      opacity: 0.5;
+    }
+
+    .blob-2 {
+      bottom: -10%;
+      right: -10%;
+      width: 600px;
+      height: 600px;
+      background: rgba(254, 226, 226, 0.4);
+      filter: blur(100px);
+      opacity: 0.6;
+    }
+
+    .blob-3 {
+      top: 40%;
+      left: 40%;
+      width: 300px;
+      height: 300px;
+      background: rgba(255, 255, 255, 0.05);
+      filter: blur(60px);
+    }
+    */
+
+    /* Scroll Reveal Animation Classes */
+    .reveal {
+      opacity: 0;
+      transform: translateY(30px);
+      transition: all 0.8s cubic-bezier(0.5, 0, 0, 1);
+    }
+
+    .reveal.active {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    /* Staggered delays for grid items */
+    .delay-100 {
+      transition-delay: 100ms;
+    }
+
+    .delay-200 {
+      transition-delay: 200ms;
+    }
+
+    .delay-300 {
+      transition-delay: 300ms;
+    }
+
+    /* Spotlight Effect Class - Mixed Color */
+    .spotlight-card::before {
+      content: '';
+      position: absolute;
+      background: radial-gradient(800px circle at var(--mouse-x) var(--mouse-y), rgba(220, 38, 38, 0.08), transparent 40%);
+      border-radius: inherit;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 2;
+      opacity: 0;
+      transition: opacity 0.5s;
+      pointer-events: none;
+    }
+
+    .spotlight-card:hover::before {
+      opacity: 1;
+    }
+
+    /* 3D Tilt Effect */
+    .tilt-card {
+      transform-style: preserve-3d;
+      transform: perspective(1000px);
+    }
+
+    .tilt-inner {
+      transform: translateZ(20px);
+    }
+
+    /* Red Gradient Text */
+    .text-gradient {
+      background: linear-gradient(to right, #CE2029, #1F2937);
+      -webkit-background-clip: text;
+      background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    /* Disclaimer Modal */
+    #disclaimer-modal {
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.3s ease;
+    }
+
+    #disclaimer-modal.open {
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    .modal-content {
+      transform: scale(0.95);
+      transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    #disclaimer-modal.open .modal-content {
+      transform: scale(1);
+    }
+  </style>
+</head>
+
+<body class="antialiased min-h-screen flex flex-col">
+  <div id="root"></div>
+  <script type="module" src="/src/main.jsx"></script>
+</body>
+
+</html>

@@ -6,6 +6,7 @@ import { userApi } from '../services/userApi';
 import { ContractService } from '../services/contractService';
 import { useWallet } from '../hooks/useWallet';
 import { useAccount } from 'wagmi';
+import EthicsPaymentModal from './EthicsPaymentModal';
 
 const StakeNila = () => {
     const [selectedPackage, setSelectedPackage] = useState<string | null>(null);
@@ -19,6 +20,9 @@ const StakeNila = () => {
     const [isCorrectNetwork, setIsCorrectNetwork] = useState<boolean>(true);
     const [referrerAddress, setReferrerAddress] = useState<string | undefined>(undefined);
     const [paymentMethod, setPaymentMethod] = useState<'crypto' | 'card'>('crypto');
+    const [showEthicsModal, setShowEthicsModal] = useState(false);
+    const [cardPaymentError, setCardPaymentError] = useState<string | null>(null);
+    const [tokenPrice, setTokenPrice] = useState<number>(5); // Default price
 
     const { address, isConnected, chain } = useAccount();
     const { connect } = useWallet();
@@ -79,6 +83,21 @@ const StakeNila = () => {
     }, []);
 
     const handleStake = async () => {
+        if (!selectedPackage || !selectedDuration) {
+            alert('Please select a package and duration');
+            return;
+        }
+
+        // Route based on payment method
+        if (paymentMethod === 'crypto') {
+            await handleCryptoStake();
+        } else {
+            // Open Ethics payment modal for card payment
+            setShowEthicsModal(true);
+        }
+    };
+
+    const handleCryptoStake = async () => {
         if (!isConnected || !address) {
             connect();
             return;
@@ -140,7 +159,7 @@ const StakeNila = () => {
                 amount: amountInNila,
                 apy: lockConfig.apr / 100,
                 lockDays: lockConfig.lockDuration,
-                instantRewardPercent: paymentMethod === 'card' ? 0 : amountConfig.instantRewardBps / 100,
+                instantRewardPercent: amountConfig.instantRewardBps / 100,
                 txHash
             });
 
@@ -168,6 +187,74 @@ const StakeNila = () => {
         } finally {
             setStaking(false);
             setApproving(false);
+        }
+    };
+
+    const handleCardPaymentSuccess = async (invoiceId: string, intentId: string) => {
+        try {
+            setStaking(true);
+            setStatusMessage('Verifying payment...');
+
+            if (!address) {
+                throw new Error('Wallet not connected');
+            }
+
+            const amountConfig = amountConfigs.find(c => c.amount === selectedPackage);
+            const lockConfig = lockConfigs.find(c => c.lockDuration === selectedDuration);
+
+            if (!amountConfig || !lockConfig) {
+                throw new Error('Invalid configuration');
+            }
+
+            const amountInNila = Number(BigInt(amountConfig.amount) / BigInt(10 ** 18));
+
+            setStatusMessage('Processing your stake...');
+
+            // Stake tokens (no approval needed for card payment)
+            const txHash = await ContractService.stake({
+                amountConfigId: amountConfig.id,
+                lockConfigId: lockConfig.id,
+                referrerAddress
+            });
+
+            setStatusMessage('Recording stake in database...');
+
+            // Record stake in backend with invoice link
+            await stakingApi.recordStake({
+                walletAddress: address,
+                planName: 'NILA Staking',
+                planVersion: 1,
+                amount: amountInNila,
+                apy: lockConfig.apr / 100,
+                lockDays: lockConfig.lockDuration,
+                instantRewardPercent: 0, // No instant reward for card payments
+                txHash
+            });
+
+            // Record transaction
+            await transactionApi.createTransaction({
+                txHash,
+                walletAddress: address,
+                type: 'STAKE',
+                amount: amountInNila,
+                status: 'confirmed'
+            });
+
+            setStatusMessage('');
+            setShowEthicsModal(false);
+            alert(`Successfully staked ${amountInNila.toLocaleString()} NILA!\n\nTransaction: ${txHash}`);
+
+            // Reset selections
+            setSelectedPackage(null);
+            setSelectedDuration(null);
+
+        } catch (error: any) {
+            console.error('Card payment staking error:', error);
+            setStatusMessage('');
+            setCardPaymentError(error.message || 'Failed to complete staking');
+            alert(error.message || 'Failed to stake tokens. Please try again.');
+        } finally {
+            setStaking(false);
         }
     };
 
@@ -483,7 +570,7 @@ const StakeNila = () => {
                         {/* Action Button */}
                         <button
                             onClick={handleStake}
-                            disabled={isProcessing || !selectedPackage || !selectedDuration}
+                            disabled={isProcessing || !selectedPackage || !selectedDuration || (paymentMethod === 'crypto' && !isConnected)}
                             className="w-full bg-red-600 hover:bg-red-700 text-white font-bold py-4 rounded-xl transition-all shadow-lg hover:shadow-red-600/20 active:scale-[0.98] mt-2 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-red-600 flex items-center justify-center gap-2"
                         >
                             {isProcessing ? (
@@ -491,7 +578,7 @@ const StakeNila = () => {
                                     <Loader2 className="w-5 h-5 animate-spin" />
                                     {approving ? 'Approving...' : 'Staking...'}
                                 </>
-                            ) : !isConnected ? (
+                            ) : paymentMethod === 'crypto' && !isConnected ? (
                                 'Connect Wallet to Stake'
                             ) : (
                                 'Buy & Stake NILA'
@@ -505,6 +592,21 @@ const StakeNila = () => {
                     </div>
                 </div>
             </div>
+
+            {/* Ethics Payment Modal */}
+            <EthicsPaymentModal
+                show={showEthicsModal}
+                amount={calculations.amountInNila}
+                usdPrice={calculations.amountInNila * tokenPrice}
+                referralBonus={referrerAddress ? 3 : 0}
+                paymentMethod={paymentMethod}
+                onSuccess={handleCardPaymentSuccess}
+                onCancel={() => {
+                    setShowEthicsModal(false);
+                    setCardPaymentError(null);
+                }}
+                onError={(error) => setCardPaymentError(error)}
+            />
         </div>
     );
 };

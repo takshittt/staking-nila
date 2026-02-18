@@ -1,0 +1,20 @@
+{
+    "rewrites": [
+        {
+            "source": "/kudoadmin.html",
+            "destination": "/kudoadmin.html"
+        },
+        {
+            "source": "/kudoadmin/**",
+            "destination": "/kudoadmin.html"
+        },
+        {
+            "source": "/check-status",
+            "destination": "/check-status.html"
+        },
+        {
+            "source": "/(.*)",
+            "destination": "/index.html"
+        }
+    ]
+}
