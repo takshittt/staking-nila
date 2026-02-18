@@ -40,6 +40,10 @@ artifacts/
 typechain-types/
 */typechain-types/
 
+# Keep deployment records but ignore sensitive data
+# backend/deployments/*.json files are tracked
+# Add specific files to .gitignore if they contain sensitive info
+
 # Testing
 coverage/
 .nyc_output/

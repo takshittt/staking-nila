@@ -21,6 +21,7 @@ export interface CreateStakeDto {
   amount: number;
   apy: number;
   lockDays: number;
+  instantRewardPercent?: number;
   txHash?: string;
 }
 
@@ -29,7 +30,7 @@ export const stakingApi = {
   getActiveAmountConfigs: async (): Promise<AmountConfig[]> => {
     try {
       const response = await fetch(`${API_URL}/staking/amount-configs`);
-      
+
       if (!response.ok) {
         throw new Error('Failed to fetch amount configs');
       }
@@ -47,7 +48,7 @@ export const stakingApi = {
   getActiveLockConfigs: async (): Promise<LockConfig[]> => {
     try {
       const response = await fetch(`${API_URL}/staking/lock-configs`);
-      
+
       if (!response.ok) {
         throw new Error('Failed to fetch lock configs');
       }

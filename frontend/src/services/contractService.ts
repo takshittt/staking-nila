@@ -26,6 +26,7 @@ const STAKING_ABI = [
   'function claimReferralRewards() external',
   'function claimAllRewards() external',
   'function getClaimableRewards(address user) external view returns (uint256 instantRewards, uint256 referralRewards, uint256 totalClaimable)',
+  'function getReferralConfig() external view returns (uint256 referralPercentageBps, uint256 referrerPercentageBps, bool isPaused)',
 ];
 
 const ERC20_ABI = [
@@ -135,13 +136,13 @@ export class ContractService {
     try {
       const tokenContract = await this.getTokenContract();
       const amountWei = parseUnits(amount, 18);
-      
+
       const tx = await tokenContract.approve(STAKING_CONTRACT_ADDRESS, amountWei);
       console.log('Approval transaction sent:', tx.hash);
-      
+
       await tx.wait();
       console.log('Approval confirmed');
-      
+
       return tx.hash;
     } catch (error: any) {
       console.error('Error approving token:', error);
@@ -165,7 +166,7 @@ export class ContractService {
   static async stake(params: StakeParams): Promise<string> {
     try {
       const stakingContract = await this.getStakingContract();
-      
+
       let tx;
       if (params.referrerAddress) {
         // Stake with referral
@@ -181,17 +182,17 @@ export class ContractService {
           params.lockConfigId
         );
       }
-      
+
       console.log('Stake transaction sent:', tx.hash);
-      
+
       // Wait for confirmation
       const receipt = await tx.wait();
       console.log('Stake confirmed:', receipt);
-      
+
       return tx.hash;
     } catch (error: any) {
       console.error('Error staking:', error);
-      
+
       // Parse common errors
       if (error.message?.includes('user rejected')) {
         throw new Error('Transaction rejected by user');
@@ -202,7 +203,7 @@ export class ContractService {
       } else if (error.message?.includes('Invalid lock config')) {
         throw new Error('Invalid lock duration selected');
       }
-      
+
       throw new Error(error.message || 'Failed to stake tokens');
     }
   }
@@ -216,7 +217,7 @@ export class ContractService {
     try {
       const stakingContract = await this.getStakingContract();
       const rewards = await stakingContract.getClaimableRewards(userAddress);
-      
+
       return {
         instantRewards: rewards.instantRewards.toString(),
         referralRewards: rewards.referralRewards.toString(),
@@ -233,15 +234,15 @@ export class ContractService {
     try {
       const stakingContract = await this.getStakingContract();
       const tx = await stakingContract.claimInstantRewards();
-      
+
       console.log('Claim instant rewards transaction sent:', tx.hash);
       await tx.wait();
       console.log('Claim confirmed');
-      
+
       return tx.hash;
     } catch (error: any) {
       console.error('Error claiming instant rewards:', error);
-      
+
       if (error.message?.includes('user rejected')) {
         throw new Error('Transaction rejected by user');
       } else if (error.message?.includes('No instant rewards to claim')) {
@@ -249,7 +250,7 @@ export class ContractService {
       } else if (error.message?.includes('Insufficient reward pool')) {
         throw new Error('Something went wrong. The reward pool is temporarily insufficient. Please wait a moment and try again, or contact support if the issue persists.');
       }
-      
+
       throw new Error(error.message || 'Failed to claim instant rewards');
     }
   }
@@ -259,15 +260,15 @@ export class ContractService {
     try {
       const stakingContract = await this.getStakingContract();
       const tx = await stakingContract.claimReferralRewards();
-      
+
       console.log('Claim referral rewards transaction sent:', tx.hash);
       await tx.wait();
       console.log('Claim confirmed');
-      
+
       return tx.hash;
     } catch (error: any) {
       console.error('Error claiming referral rewards:', error);
-      
+
       if (error.message?.includes('user rejected')) {
         throw new Error('Transaction rejected by user');
       } else if (error.message?.includes('No referral rewards to claim')) {
@@ -275,7 +276,7 @@ export class ContractService {
       } else if (error.message?.includes('Insufficient reward pool')) {
         throw new Error('Something went wrong. The reward pool is temporarily insufficient. Please wait a moment and try again, or contact support if the issue persists.');
       }
-      
+
       throw new Error(error.message || 'Failed to claim referral rewards');
     }
   }
@@ -285,15 +286,15 @@ export class ContractService {
     try {
       const stakingContract = await this.getStakingContract();
       const tx = await stakingContract.claimAllRewards();
-      
+
       console.log('Claim all rewards transaction sent:', tx.hash);
       await tx.wait();
       console.log('Claim confirmed');
-      
+
       return tx.hash;
     } catch (error: any) {
       console.error('Error claiming all rewards:', error);
-      
+
       if (error.message?.includes('user rejected')) {
         throw new Error('Transaction rejected by user');
       } else if (error.message?.includes('No rewards to claim')) {
@@ -301,8 +302,38 @@ export class ContractService {
       } else if (error.message?.includes('Insufficient reward pool')) {
         throw new Error('Something went wrong. The reward pool is temporarily insufficient. Please wait a moment and try again, or contact support if the issue persists.');
       }
-      
+
       throw new Error(error.message || 'Failed to claim all rewards');
+    }
+  }
+
+  // Get referral configuration
+  static async getReferralConfig(): Promise<{
+    referralPercent: number;
+    referrerPercent: number;
+    isPaused: boolean;
+  }> {
+    try {
+      // Use a read-only provider if no wallet connected, otherwise signer
+      const provider = window.ethereum ? await this.getProvider() : new BrowserProvider(window.ethereum as any);
+      // Note: In a real app, you might want a fallback JSON-RPC provider if window.ethereum is missing
+
+      const stakingContract = new Contract(STAKING_CONTRACT_ADDRESS, STAKING_ABI, provider);
+      const config = await stakingContract.getReferralConfig();
+
+      return {
+        referralPercent: Number(config.referralPercentageBps) / 100,
+        referrerPercent: Number(config.referrerPercentageBps) / 100,
+        isPaused: config.isPaused
+      };
+    } catch (error: any) {
+      console.error('Error getting referral config:', error);
+      // Return defaults if fetch fails
+      return {
+        referralPercent: 5,
+        referrerPercent: 3,
+        isPaused: false
+      };
     }
   }
 }

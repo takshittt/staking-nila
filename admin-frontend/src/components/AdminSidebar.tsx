@@ -1,4 +1,4 @@
-import { BarChart3, TrendingUp, Users, Zap, Users2, Coins, Menu, X, LogOut } from 'lucide-react';
+import { BarChart3, TrendingUp, Users, Zap, Users2, Coins, Menu, X, LogOut, PlusCircle } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../stores/authStore';
@@ -15,6 +15,7 @@ const AdminSidebar = ({ activeTab, onTabChange }: AdminSidebarProps) => {
 
     const menuItems = [
         { name: 'Overview', icon: BarChart3 },
+        { name: 'Create Stake', icon: PlusCircle },
         { name: 'Staking Plans', icon: TrendingUp },
         { name: 'Users', icon: Users },
         { name: 'Stakes', icon: Zap },
@@ -55,17 +56,15 @@ const AdminSidebar = ({ activeTab, onTabChange }: AdminSidebarProps) => {
 
             {/* Mobile Backdrop */}
             <div
-                className={`fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-30 md:hidden transition-opacity duration-300 ${
-                    isOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'
-                }`}
+                className={`fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-30 md:hidden transition-opacity duration-300 ${isOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'
+                    }`}
                 onClick={() => setIsOpen(false)}
             />
 
             {/* Sidebar */}
             <aside
-                className={`fixed left-0 top-0 h-screen w-64 bg-red-600 border-r border-red-700 z-50 flex flex-col transition-transform duration-300 ease-in-out md:translate-x-0 ${
-                    isOpen ? 'translate-x-0' : '-translate-x-full'
-                }`}
+                className={`fixed left-0 top-0 h-screen w-64 bg-red-600 border-r border-red-700 z-50 flex flex-col transition-transform duration-300 ease-in-out md:translate-x-0 ${isOpen ? 'translate-x-0' : '-translate-x-full'
+                    }`}
             >
                 {/* Logo Section */}
                 <div className="h-20 flex items-center justify-between px-6 border-b border-red-700">
@@ -92,18 +91,16 @@ const AdminSidebar = ({ activeTab, onTabChange }: AdminSidebarProps) => {
                         <button
                             key={item.name}
                             onClick={() => handleTabChange(item.name)}
-                            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 ${
-                                activeTab === item.name
-                                    ? 'bg-white/20 text-white font-semibold'
-                                    : 'text-red-100 hover:bg-white/10 hover:text-white'
-                            }`}
+                            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 ${activeTab === item.name
+                                ? 'bg-white/20 text-white font-semibold'
+                                : 'text-red-100 hover:bg-white/10 hover:text-white'
+                                }`}
                         >
                             <item.icon
-                                className={`w-5 h-5 ${
-                                    activeTab === item.name
-                                        ? 'text-white'
-                                        : 'text-red-200 group-hover:text-white'
-                                }`}
+                                className={`w-5 h-5 ${activeTab === item.name
+                                    ? 'text-white'
+                                    : 'text-red-200 group-hover:text-white'
+                                    }`}
                             />
                             <span>{item.name}</span>
                         </button>

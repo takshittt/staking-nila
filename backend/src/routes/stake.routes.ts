@@ -7,7 +7,7 @@ const router = Router();
 // Public endpoint - create stake
 router.post('/', async (req, res) => {
   try {
-    const { walletAddress, planName, planVersion, amount, apy, lockDays, txHash } = req.body;
+    const { walletAddress, planName, planVersion, amount, apy, lockDays, instantRewardPercent, txHash } = req.body;
 
     if (!walletAddress || !planName || !planVersion || !amount || !apy || !lockDays) {
       return res.status(400).json({ error: 'Missing required fields' });
@@ -20,6 +20,7 @@ router.post('/', async (req, res) => {
       amount,
       apy,
       lockDays,
+      instantRewardPercent,
       txHash
     });
 
@@ -39,6 +40,20 @@ router.post('/', async (req, res) => {
   }
 });
 
+// Public endpoint - get user stakes
+router.get('/user/:walletAddress', async (req, res) => {
+  try {
+    const walletAddress = Array.isArray(req.params.walletAddress)
+      ? req.params.walletAddress[0]
+      : req.params.walletAddress;
+    const stakes = await StakeService.getUserStakes(walletAddress);
+    res.json({ success: true, stakes });
+  } catch (error: any) {
+    console.error('Get user stakes error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Admin endpoints
 router.get('/', authMiddleware, async (req, res) => {
   try {
@@ -50,7 +65,7 @@ router.get('/', authMiddleware, async (req, res) => {
   }
 });
 
-router.get('/user/:walletAddress', authMiddleware, async (req, res) => {
+router.get('/admin/user/:walletAddress', authMiddleware, async (req, res) => {
   try {
     const walletAddress = Array.isArray(req.params.walletAddress)
       ? req.params.walletAddress[0]

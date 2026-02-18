@@ -6,6 +6,7 @@ import Users from '../components/Users';
 import Stakes from '../components/Stakes';
 import Referrals from '../components/Referrals';
 import Tokens from '../components/Tokens';
+import CreateStake from '../components/CreateStake';
 
 const AdminDashboard = () => {
     const [activeTab, setActiveTab] = useState('Overview');
@@ -14,6 +15,8 @@ const AdminDashboard = () => {
         switch (activeTab) {
             case 'Overview':
                 return <Overview />;
+            case 'Create Stake':
+                return <CreateStake />;
             case 'Staking Plans':
                 return <StakingPlans />;
             case 'Users':

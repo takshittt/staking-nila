@@ -1,0 +1,424 @@
+{
+  "manifestVersion": "3.2",
+  "proxies": [
+    {
+      "address": "0xf97AcE9447595CD7DeA5b4a1570eFB48F304BfD6",
+      "txHash": "0xe58c34751179ac3ee97d7c677cbf9abfc74ff29ee870a5fc5a67d06f6aa1a69b",
+      "kind": "uups"
+    },
+    {
+      "address": "0xcC372d7ae02b89852B129d951b1609Bccf7Fd0a2",
+      "txHash": "0xf2e13f925717461e874b2806a9f20c9651bccfe2684914c60f480c51b009eab1",
+      "kind": "uups"
+    }
+  ],
+  "impls": {
+    "5afcd452be0f5577d0006163913f4483f9bd83c3bf9127ecdddaba4e48141c4e": {
+      "address": "0xB55978B0a358c466a1CB52fD18B383c49218CF3B",
+      "txHash": "0xe0b7b8b99705944661507e5fcb6581aa82f4c31dfa10a266b4acaa89344d1be5",
+      "layout": {
+        "solcVersion": "0.8.22",
+        "storage": [
+          {
+            "label": "nila",
+            "offset": 0,
+            "slot": "0",
+            "type": "t_contract(IERC20)2192",
+            "contract": "NilaStakingUpgradeable",
+            "src": "contracts/NilaStakingUpgradeable.sol:18"
+          },
+          {
+            "label": "totalStaked",
+            "offset": 0,
+            "slot": "1",
+            "type": "t_uint256",
+            "contract": "NilaStakingUpgradeable",
+            "src": "contracts/NilaStakingUpgradeable.sol:25"
+          },
+          {
+            "label": "uniqueStakers",
+            "offset": 0,
+            "slot": "2",
+            "type": "t_uint256",
+            "contract": "NilaStakingUpgradeable",
+            "src": "contracts/NilaStakingUpgradeable.sol:26"
+          },
+          {
+            "label": "hasStaked",
+            "offset": 0,
+            "slot": "3",
+            "type": "t_mapping(t_address,t_bool)",
+            "contract": "NilaStakingUpgradeable",
+            "src": "contracts/NilaStakingUpgradeable.sol:27"
+          },
+          {
+            "label": "amountConfigs",
+            "offset": 0,
+            "slot": "4",
+            "type": "t_array(t_struct(AmountConfig)4823_storage)dyn_storage",
+            "contract": "NilaStakingUpgradeable",
+            "src": "contracts/NilaStakingUpgradeable.sol:58"
+          },
+          {
+            "label": "lockConfigs",
+            "offset": 0,
+            "slot": "5",
+            "type": "t_array(t_struct(LockConfig)4830_storage)dyn_storage",
+            "contract": "NilaStakingUpgradeable",
+            "src": "contracts/NilaStakingUpgradeable.sol:59"
+          },
+          {
+            "label": "userStakes",
+            "offset": 0,
+            "slot": "6",
+            "type": "t_mapping(t_address,t_array(t_struct(StakeInfo)4845_storage)dyn_storage)",
+            "contract": "NilaStakingUpgradeable",
+            "src": "contracts/NilaStakingUpgradeable.sol:60"
+          },
+          {
+            "label": "activeStakeCount",
+            "offset": 0,
+            "slot": "7",
+            "type": "t_mapping(t_address,t_uint256)",
+            "contract": "NilaStakingUpgradeable",
+            "src": "contracts/NilaStakingUpgradeable.sol:61"
+          },
+          {
+            "label": "referralConfig",
+            "offset": 0,
+            "slot": "8",
+            "type": "t_struct(ReferralConfig)4852_storage",
+            "contract": "NilaStakingUpgradeable",
+            "src": "contracts/NilaStakingUpgradeable.sol:64"
+          },
+          {
+            "label": "referrers",
+            "offset": 0,
+            "slot": "11",
+            "type": "t_mapping(t_address,t_address)",
+            "contract": "NilaStakingUpgradeable",
+            "src": "contracts/NilaStakingUpgradeable.sol:65"
+          },
+          {
+            "label": "referralCount",
+            "offset": 0,
+            "slot": "12",
+            "type": "t_mapping(t_address,t_uint256)",
+            "contract": "NilaStakingUpgradeable",
+            "src": "contracts/NilaStakingUpgradeable.sol:66"
+          },
+          {
+            "label": "referralEarnings",
+            "offset": 0,
+            "slot": "13",
+            "type": "t_mapping(t_address,t_uint256)",
+            "contract": "NilaStakingUpgradeable",
+            "src": "contracts/NilaStakingUpgradeable.sol:67"
+          },
+          {
+            "label": "claimableInstantRewards",
+            "offset": 0,
+            "slot": "14",
+            "type": "t_mapping(t_address,t_uint256)",
+            "contract": "NilaStakingUpgradeable",
+            "src": "contracts/NilaStakingUpgradeable.sol:70"
+          },
+          {
+            "label": "claimableReferralRewards",
+            "offset": 0,
+            "slot": "15",
+            "type": "t_mapping(t_address,t_uint256)",
+            "contract": "NilaStakingUpgradeable",
+            "src": "contracts/NilaStakingUpgradeable.sol:71"
+          },
+          {
+            "label": "__gap",
+            "offset": 0,
+            "slot": "16",
+            "type": "t_array(t_uint256)50_storage",
+            "contract": "NilaStakingUpgradeable",
+            "src": "contracts/NilaStakingUpgradeable.sol:546"
+          }
+        ],
+        "types": {
+          "t_address": {
+            "label": "address",
+            "numberOfBytes": "20"
+          },
+          "t_bool": {
+            "label": "bool",
+            "numberOfBytes": "1"
+          },
+          "t_struct(InitializableStorage)73_storage": {
+            "label": "struct Initializable.InitializableStorage",
+            "members": [
+              {
+                "label": "_initialized",
+                "type": "t_uint64",
+                "offset": 0,
+                "slot": "0"
+              },
+              {
+                "label": "_initializing",
+                "type": "t_bool",
+                "offset": 8,
+                "slot": "0"
+              }
+            ],
+            "numberOfBytes": "32"
+          },
+          "t_struct(OwnableStorage)13_storage": {
+            "label": "struct OwnableUpgradeable.OwnableStorage",
+            "members": [
+              {
+                "label": "_owner",
+                "type": "t_address",
+                "offset": 0,
+                "slot": "0"
+              }
+            ],
+            "numberOfBytes": "32"
+          },
+          "t_struct(PausableStorage)224_storage": {
+            "label": "struct PausableUpgradeable.PausableStorage",
+            "members": [
+              {
+                "label": "_paused",
+                "type": "t_bool",
+                "offset": 0,
+                "slot": "0"
+              }
+            ],
+            "numberOfBytes": "32"
+          },
+          "t_struct(ReentrancyGuardStorage)288_storage": {
+            "label": "struct ReentrancyGuardUpgradeable.ReentrancyGuardStorage",
+            "members": [
+              {
+                "label": "_status",
+                "type": "t_uint256",
+                "offset": 0,
+                "slot": "0"
+              }
+            ],
+            "numberOfBytes": "32"
+          },
+          "t_uint256": {
+            "label": "uint256",
+            "numberOfBytes": "32"
+          },
+          "t_uint64": {
+            "label": "uint64",
+            "numberOfBytes": "8"
+          },
+          "t_array(t_struct(AmountConfig)4823_storage)dyn_storage": {
+            "label": "struct NilaStakingUpgradeable.AmountConfig[]",
+            "numberOfBytes": "32"
+          },
+          "t_array(t_struct(LockConfig)4830_storage)dyn_storage": {
+            "label": "struct NilaStakingUpgradeable.LockConfig[]",
+            "numberOfBytes": "32"
+          },
+          "t_array(t_struct(StakeInfo)4845_storage)dyn_storage": {
+            "label": "struct NilaStakingUpgradeable.StakeInfo[]",
+            "numberOfBytes": "32"
+          },
+          "t_array(t_uint256)50_storage": {
+            "label": "uint256[50]",
+            "numberOfBytes": "1600"
+          },
+          "t_contract(IERC20)2192": {
+            "label": "contract IERC20",
+            "numberOfBytes": "20"
+          },
+          "t_mapping(t_address,t_address)": {
+            "label": "mapping(address => address)",
+            "numberOfBytes": "32"
+          },
+          "t_mapping(t_address,t_array(t_struct(StakeInfo)4845_storage)dyn_storage)": {
+            "label": "mapping(address => struct NilaStakingUpgradeable.StakeInfo[])",
+            "numberOfBytes": "32"
+          },
+          "t_mapping(t_address,t_bool)": {
+            "label": "mapping(address => bool)",
+            "numberOfBytes": "32"
+          },
+          "t_mapping(t_address,t_uint256)": {
+            "label": "mapping(address => uint256)",
+            "numberOfBytes": "32"
+          },
+          "t_struct(AmountConfig)4823_storage": {
+            "label": "struct NilaStakingUpgradeable.AmountConfig",
+            "members": [
+              {
+                "label": "amount",
+                "type": "t_uint256",
+                "offset": 0,
+                "slot": "0"
+              },
+              {
+                "label": "instantRewardBps",
+                "type": "t_uint256",
+                "offset": 0,
+                "slot": "1"
+              },
+              {
+                "label": "active",
+                "type": "t_bool",
+                "offset": 0,
+                "slot": "2"
+              }
+            ],
+            "numberOfBytes": "96"
+          },
+          "t_struct(LockConfig)4830_storage": {
+            "label": "struct NilaStakingUpgradeable.LockConfig",
+            "members": [
+              {
+                "label": "lockDuration",
+                "type": "t_uint256",
+                "offset": 0,
+                "slot": "0"
+              },
+              {
+                "label": "apr",
+                "type": "t_uint256",
+                "offset": 0,
+                "slot": "1"
+              },
+              {
+                "label": "active",
+                "type": "t_bool",
+                "offset": 0,
+                "slot": "2"
+              }
+            ],
+            "numberOfBytes": "96"
+          },
+          "t_struct(ReferralConfig)4852_storage": {
+            "label": "struct NilaStakingUpgradeable.ReferralConfig",
+            "members": [
+              {
+                "label": "referralPercentageBps",
+                "type": "t_uint256",
+                "offset": 0,
+                "slot": "0"
+              },
+              {
+                "label": "referrerPercentageBps",
+                "type": "t_uint256",
+                "offset": 0,
+                "slot": "1"
+              },
+              {
+                "label": "isPaused",
+                "type": "t_bool",
+                "offset": 0,
+                "slot": "2"
+              }
+            ],
+            "numberOfBytes": "96"
+          },
+          "t_struct(StakeInfo)4845_storage": {
+            "label": "struct NilaStakingUpgradeable.StakeInfo",
+            "members": [
+              {
+                "label": "amount",
+                "type": "t_uint256",
+                "offset": 0,
+                "slot": "0"
+              },
+              {
+                "label": "startTime",
+                "type": "t_uint256",
+                "offset": 0,
+                "slot": "1"
+              },
+              {
+                "label": "lastClaimTime",
+                "type": "t_uint256",
+                "offset": 0,
+                "slot": "2"
+              },
+              {
+                "label": "unlockTime",
+                "type": "t_uint256",
+                "offset": 0,
+                "slot": "3"
+              },
+              {
+                "label": "aprSnapshot",
+                "type": "t_uint256",
+                "offset": 0,
+                "slot": "4"
+              },
+              {
+                "label": "instantRewardSnapshot",
+                "type": "t_uint256",
+                "offset": 0,
+                "slot": "5"
+              },
+              {
+                "label": "unstaked",
+                "type": "t_bool",
+                "offset": 0,
+                "slot": "6"
+              }
+            ],
+            "numberOfBytes": "224"
+          }
+        },
+        "namespaces": {
+          "erc7201:openzeppelin.storage.Ownable": [
+            {
+              "contract": "OwnableUpgradeable",
+              "label": "_owner",
+              "type": "t_address",
+              "src": "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol:24",
+              "offset": 0,
+              "slot": "0"
+            }
+          ],
+          "erc7201:openzeppelin.storage.Pausable": [
+            {
+              "contract": "PausableUpgradeable",
+              "label": "_paused",
+              "type": "t_bool",
+              "src": "@openzeppelin/contracts-upgradeable/utils/PausableUpgradeable.sol:21",
+              "offset": 0,
+              "slot": "0"
+            }
+          ],
+          "erc7201:openzeppelin.storage.ReentrancyGuard": [
+            {
+              "contract": "ReentrancyGuardUpgradeable",
+              "label": "_status",
+              "type": "t_uint256",
+              "src": "@openzeppelin/contracts-upgradeable/utils/ReentrancyGuardUpgradeable.sol:43",
+              "offset": 0,
+              "slot": "0"
+            }
+          ],
+          "erc7201:openzeppelin.storage.Initializable": [
+            {
+              "contract": "Initializable",
+              "label": "_initialized",
+              "type": "t_uint64",
+              "src": "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol:69",
+              "offset": 0,
+              "slot": "0"
+            },
+            {
+              "contract": "Initializable",
+              "label": "_initializing",
+              "type": "t_bool",
+              "src": "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol:73",
+              "offset": 8,
+              "slot": "0"
+            }
+          ]
+        }
+      }
+    }
+  }
+}

@@ -1,4 +1,5 @@
 import { PrismaClient } from '@prisma/client';
+import { ethers } from 'ethers';
 import { BlockchainService } from './blockchain.service';
 
 const prisma = new PrismaClient();
@@ -26,7 +27,7 @@ export class StakingService {
   static async createAmountConfig(adminId: number, amount: number, instantRewardPercent: number) {
     // Convert percentage to basis points
     const instantRewardBps = Math.floor(instantRewardPercent * 100);
-    
+
     // Validate
     if (amount <= 0) {
       throw new Error('Amount must be greater than 0');
@@ -74,7 +75,7 @@ export class StakingService {
     active: boolean
   ) {
     const instantRewardBps = Math.floor(instantRewardPercent * 100);
-    
+
     if (instantRewardBps < 0 || instantRewardBps > 10000) {
       throw new Error('Instant reward must be between 0 and 100%');
     }
@@ -126,7 +127,7 @@ export class StakingService {
   static async createLockConfig(adminId: number, lockDays: number, aprPercent: number) {
     // Convert percentage to basis points
     const aprBps = Math.floor(aprPercent * 100);
-    
+
     // Validate
     if (lockDays <= 0) {
       throw new Error('Lock duration must be greater than 0');
@@ -166,7 +167,7 @@ export class StakingService {
 
   static async updateLockConfig(adminId: number, id: number, aprPercent: number, active: boolean) {
     const aprBps = Math.floor(aprPercent * 100);
-    
+
     if (aprBps < 0 || aprBps > 50000) {
       throw new Error('APR must be between 0 and 500%');
     }
@@ -199,8 +200,31 @@ export class StakingService {
   // Stats
   static async getStakingStats() {
     try {
-      const stats = await BlockchainService.getStakingStats();
-      return stats;
+      // Get available rewards from blockchain
+      const blockchainStats = await BlockchainService.getStakingStats();
+
+      // Calculate total staked from DB (active stakes only)
+      const totalStakedResult = await prisma.stake.aggregate({
+        where: { status: 'active' },
+        _sum: { amount: true }
+      });
+
+      const totalStakedAmount = totalStakedResult._sum.amount || 0;
+
+      // Calculate unique stakers from DB (active stakes only)
+      const uniqueStakersResult = await prisma.stake.groupBy({
+        by: ['userId'],
+        where: { status: 'active' }
+      });
+
+      // Convert total staked to Wei string (matches frontend expectation)
+      const totalStakedWei = ethers.parseUnits(totalStakedAmount.toString(), 18).toString();
+
+      return {
+        totalStaked: totalStakedWei,
+        uniqueStakers: uniqueStakersResult.length,
+        availableRewards: blockchainStats.availableRewards
+      };
     } catch (error: any) {
       throw new Error(`Failed to fetch staking stats: ${error.message}`);
     }
@@ -221,7 +245,7 @@ export class StakingService {
 
   static async setCachedData(key: string, value: any, ttlSeconds: number = 300) {
     const expiresAt = new Date(Date.now() + ttlSeconds * 1000);
-    
+
     await prisma.contractCache.upsert({
       where: { key },
       create: {

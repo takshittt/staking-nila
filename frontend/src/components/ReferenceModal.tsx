@@ -2,18 +2,30 @@ import React, { useState } from 'react';
 import { UserCheck, ArrowRight, ShieldCheck, Loader2 } from 'lucide-react';
 import { userApi } from '../services/userApi';
 import { useWallet } from '../hooks/useWallet';
+import { ContractService } from '../services/contractService';
+import { useEffect } from 'react';
 
 interface ReferenceModalProps {
     isOpen: boolean;
     onClose: () => void;
     onSuccess: () => void;
+    showSkip?: boolean;
 }
 
-const ReferenceModal: React.FC<ReferenceModalProps> = ({ isOpen, onClose, onSuccess }) => {
+const ReferenceModal: React.FC<ReferenceModalProps> = ({ isOpen, onClose, onSuccess, showSkip = true }) => {
     const { address } = useWallet();
     const [referralCode, setReferralCode] = useState('');
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [bonusPercent, setBonusPercent] = useState<number>(3); // Default to 3%
+
+    useEffect(() => {
+        if (isOpen) {
+            ContractService.getReferralConfig().then(config => {
+                setBonusPercent(config.referrerPercent);
+            }).catch(err => console.error(err));
+        }
+    }, [isOpen]);
 
     if (!isOpen) return null;
 
@@ -76,7 +88,7 @@ const ReferenceModal: React.FC<ReferenceModalProps> = ({ isOpen, onClose, onSucc
                             <ShieldCheck size={16} />
                         </div>
                         <p className="text-sm font-medium">
-                            Apply code for <span className="font-bold">3% Bonus Reward</span>
+                            Apply code for <span className="font-bold">{bonusPercent}% Bonus Reward</span>
                         </p>
                     </div>
 
@@ -117,16 +129,30 @@ const ReferenceModal: React.FC<ReferenceModalProps> = ({ isOpen, onClose, onSucc
                         </button>
                     </form>
 
-                    <div className="mt-6 flex flex-col items-center">
-                        <button
-                            onClick={handleSkip}
-                            disabled={loading}
-                            className="text-slate-400 text-sm font-medium hover:text-slate-600 transition-colors flex items-center gap-1 group py-2"
-                        >
-                            I don't have a code, skip
-                            <ArrowRight size={14} className="group-hover:translate-x-0.5 transition-transform" />
-                        </button>
-                    </div>
+                    {showSkip && (
+                        <div className="mt-6 flex flex-col items-center">
+                            <button
+                                onClick={handleSkip}
+                                disabled={loading}
+                                className="text-slate-400 text-sm font-medium hover:text-slate-600 transition-colors flex items-center gap-1 group py-2"
+                            >
+                                I don't have a code, skip
+                                <ArrowRight size={14} className="group-hover:translate-x-0.5 transition-transform" />
+                            </button>
+                        </div>
+                    )}
+
+                    {!showSkip && (
+                        <div className="mt-4 flex flex-col items-center">
+                            <button
+                                onClick={onClose}
+                                disabled={loading}
+                                className="text-slate-400 text-sm font-medium hover:text-slate-600 transition-colors py-2"
+                            >
+                                Cancel
+                            </button>
+                        </div>
+                    )}
                 </div>
             </div>
         </div>

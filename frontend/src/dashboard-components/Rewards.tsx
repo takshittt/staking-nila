@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Trophy, Zap, Users, Clock, AlertCircle, TrendingUp, CheckCircle, ArrowUpRight, History, RefreshCw } from 'lucide-react';
+import { Trophy, Zap, Users, AlertCircle, TrendingUp, CheckCircle, ArrowUpRight, History, RefreshCw } from 'lucide-react';
 import { rewardApi } from '../services/rewardApi';
 import { transactionApi } from '../services/transactionApi';
 import type { PendingRewards, RewardHistory, LifetimeEarnings } from '../services/rewardApi';
@@ -241,10 +241,6 @@ const Rewards = () => {
                         <div className="p-3 bg-blue-50 text-blue-600 rounded-xl">
                             <TrendingUp size={24} />
                         </div>
-                        <span className="bg-blue-100 text-blue-700 text-xs font-bold px-2 py-1 rounded-full flex items-center gap-1">
-                            <Clock size={12} />
-                            30d Cooldown
-                        </span>
                     </div>
                     <h3 className="text-slate-500 font-medium text-sm mb-1 relative z-10">Staking Rewards</h3>
                     <div className="text-3xl font-bold text-slate-900 relative z-10">
@@ -330,12 +326,7 @@ const Rewards = () => {
                                 </>
                             )}
                         </button>
-                        {rewards && rewards.stakingRewards > 0 && (
-                            <p className="text-xs text-slate-500 flex items-center gap-1">
-                                <AlertCircle size={12} />
-                                Staking rewards subject to 30-day cooldown
-                            </p>
-                        )}
+
                     </div>
                 </div>
             </div>

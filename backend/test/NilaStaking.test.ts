@@ -136,7 +136,6 @@ describe("NilaStaking", function () {
 
     it("Stake works with correct amount", async function () {
       const stakeAmount = ethers.parseEther("100");
-      const instantReward = (stakeAmount * 500n) / BPS;
 
       const balanceBefore = await nila.balanceOf(user1.address);
 
@@ -146,19 +145,19 @@ describe("NilaStaking", function () {
 
       const balanceAfter = await nila.balanceOf(user1.address);
 
-      // User should have paid principal but received instant reward
-      expect(balanceBefore - balanceAfter).to.equal(stakeAmount - instantReward);
+      // User should have paid the full principal (instant reward is claimable, not paid immediately)
+      expect(balanceBefore - balanceAfter).to.equal(stakeAmount);
     });
 
     it("Instant reward is paid", async function () {
       const stakeAmount = ethers.parseEther("100");
       const instantReward = (stakeAmount * 500n) / BPS;
 
-      const balanceBefore = await nila.balanceOf(user1.address);
       await nilaStaking.connect(user1).stake(0, 0);
-      const balanceAfter = await nila.balanceOf(user1.address);
-
-      expect(balanceBefore - balanceAfter).to.equal(stakeAmount - instantReward);
+      
+      // Instant reward should be claimable
+      const claimable = await nilaStaking.claimableInstantRewards(user1.address);
+      expect(claimable).to.equal(instantReward);
     });
 
     it("totalStaked is updated", async function () {

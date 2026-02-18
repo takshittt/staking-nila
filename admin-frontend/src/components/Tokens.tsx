@@ -159,42 +159,41 @@ const Tokens = () => {
             {renderHealthBanner()}
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                {/* Contract Balance */}
+                {/* Contract Balance (Treasury Assets) */}
                 <div className="bg-white p-6 rounded-xl border border-slate-100 shadow-sm relative overflow-hidden">
                     <div className="absolute top-0 right-0 p-4 opacity-10">
                         <Wallet className="w-24 h-24 text-blue-600" />
                     </div>
                     <p className="text-slate-500 font-medium mb-1">Total Assets</p>
                     <h2 className="text-4xl font-bold text-slate-900 mb-2">
-                        {contractBalance.toLocaleString()}
+                        {(contractBalance - (Number(stats.totalStaked) / 1e18)).toLocaleString()}
                         <span className="text-lg text-slate-500 font-normal ml-2">NILA</span>
                     </h2>
-                    <p className="text-sm text-slate-400">held in smart contract</p>
+                    <p className="text-sm text-slate-400">Excludes user staked tokens</p>
                 </div>
 
-                {/* Pending Rewards */}
+                {/* Pending Rewards (Liabilities) */}
                 <div className="bg-white p-6 rounded-xl border border-slate-100 shadow-sm">
                     <p className="text-slate-500 font-medium mb-1">Liabilities</p>
                     <h2 className="text-4xl font-bold text-slate-900 mb-2">
                         {pendingRewards.toLocaleString()}
                         <span className="text-lg text-slate-500 font-normal ml-2">NILA</span>
                     </h2>
-                    <p className="text-sm text-slate-400">pending user rewards</p>
+                    <p className="text-sm text-slate-400">Pending rewards (APY + Instant + Ref)</p>
                 </div>
 
                 {/* Net Position */}
                 <div className="bg-white p-6 rounded-xl border border-slate-100 shadow-sm">
                     <p className="text-slate-500 font-medium mb-1">Net Position</p>
-                    <h2 className={`text-4xl font-bold mb-2 ${contractBalance >= pendingRewards ? 'text-green-600' : 'text-red-600'}`}>
-                        {(contractBalance - pendingRewards).toLocaleString()}
+                    <h2 className={`text-4xl font-bold mb-2 ${(contractBalance - (Number(stats.totalStaked) / 1e18)) >= pendingRewards ? 'text-green-600' : 'text-red-600'}`}>
+                        {((contractBalance - (Number(stats.totalStaked) / 1e18)) - pendingRewards).toLocaleString()}
                         <span className="text-lg text-slate-500 font-normal ml-2">NILA</span>
                     </h2>
                     <p className="text-sm text-slate-400">
-                        {contractBalance >= pendingRewards ? 'Surplus available' : 'Deficit - Action needed'}
+                        {(contractBalance - (Number(stats.totalStaked) / 1e18)) >= pendingRewards ? 'Surplus available' : 'Deficit - Action needed'}
                     </p>
                 </div>
             </div>
-
             {/* Quick Actions / Explainer */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="bg-slate-50 rounded-xl p-6 border border-slate-200">
@@ -256,7 +255,7 @@ const Tokens = () => {
                 isProcessing={isProcessing}
                 maxAmount={contractBalance}
             />
-        </div>
+        </div >
     );
 };
 

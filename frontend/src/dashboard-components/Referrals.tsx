@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
-import { Copy, CheckCircle, Users, Gift, Share2, TrendingUp, Loader2 } from 'lucide-react';
+import { Copy, CheckCircle, Users, Gift, Share2, TrendingUp, Loader2, ArrowRight } from 'lucide-react';
 import { useWallet } from '../hooks/useWallet';
 import { userApi } from '../services/userApi';
+import { ContractService } from '../services/contractService';
 
 const Referrals = () => {
     const { address } = useWallet();
@@ -9,28 +10,52 @@ const Referrals = () => {
     const [stats, setStats] = useState({
         referralCode: '...',
         referralCount: 0,
-        referralEarnings: 0
+        referralEarnings: 0,
+        referredBy: null as string | null
+    });
+    const [referralConfig, setReferralConfig] = useState({
+        referralPercent: 5,
+        referrerPercent: 3
     });
     const [loading, setLoading] = useState(true);
 
+    // New state for inline referral input
+    const [referralInput, setReferralInput] = useState('');
+    const [submittingCode, setSubmittingCode] = useState(false);
+    const [referralError, setReferralError] = useState<string | null>(null);
+
     useEffect(() => {
-        const fetchReferralStats = async () => {
-            if (!address) return;
+        const fetchData = async () => {
+            // Fetch referral config (public)
             try {
-                const user = await userApi.getUser(address);
-                setStats({
-                    referralCode: user.referralCode || 'Pending...',
-                    referralCount: user.referralCount || 0,
-                    referralEarnings: user.referralEarnings || 0
+                const config = await ContractService.getReferralConfig();
+                setReferralConfig({
+                    referralPercent: config.referralPercent,
+                    referrerPercent: config.referrerPercent
                 });
             } catch (error) {
-                console.error('Failed to fetch referral stats:', error);
-            } finally {
-                setLoading(false);
+                console.error('Failed to fetch referral config:', error);
             }
+
+            // Fetch user stats (private)
+            if (address) {
+                try {
+                    const user = await userApi.getUser(address);
+                    setStats({
+                        referralCode: user.referralCode || 'Pending...',
+                        referralCount: user.referralCount || 0,
+                        referralEarnings: user.referralEarnings || 0,
+                        referredBy: user.referredBy || null
+                    });
+                } catch (error) {
+                    console.error('Failed to fetch referral stats:', error);
+                }
+            }
+
+            setLoading(false);
         };
 
-        fetchReferralStats();
+        fetchData();
     }, [address]);
 
     const handleCopy = () => {
@@ -38,6 +63,29 @@ const Referrals = () => {
         navigator.clipboard.writeText(stats.referralCode);
         setCopied(true);
         setTimeout(() => setCopied(false), 2000);
+    };
+
+    const handleApplyCode = async () => {
+        if (!referralInput.trim() || !address) return;
+
+        setSubmittingCode(true);
+        setReferralError(null);
+
+        try {
+            await userApi.setReferrer(address, referralInput.trim());
+            // Update local state on success
+            const user = await userApi.getUser(address);
+            setStats(prev => ({
+                ...prev,
+                referredBy: user.referredBy
+            }));
+            setReferralInput(''); // Clear input
+        } catch (err: any) {
+            console.error('Referral error:', err);
+            setReferralError(err.response?.data?.error || 'Invalid referral code or request failed');
+        } finally {
+            setSubmittingCode(false);
+        }
     };
 
     return (
@@ -97,6 +145,59 @@ const Referrals = () => {
                         </div>
                     </div>
 
+                    {/* Enter Referral Code Section (Inline) */}
+                    {!loading && !stats.referredBy && (
+                        <div className="bg-white rounded-xl p-5 shadow-sm border border-slate-100">
+                            <div className="mb-4">
+                                <h3 className="font-bold text-slate-800 text-sm">Have a referral code?</h3>
+                                <p className="text-xs text-slate-500 mt-1">Enter code to get {referralConfig.referrerPercent}% bonus reward</p>
+                            </div>
+
+                            <div className="flex gap-2">
+                                <input
+                                    type="text"
+                                    value={referralInput}
+                                    onChange={(e) => setReferralInput(e.target.value)}
+                                    placeholder="Enter code"
+                                    disabled={submittingCode}
+                                    className="flex-1 px-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 focus:bg-white transition-all"
+                                />
+                                <button
+                                    onClick={handleApplyCode}
+                                    disabled={submittingCode || !referralInput.trim()}
+                                    className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-sm font-semibold transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                    {submittingCode ? (
+                                        <Loader2 className="animate-spin" size={16} />
+                                    ) : (
+                                        <>
+                                            Apply <ArrowRight size={16} />
+                                        </>
+                                    )}
+                                </button>
+                            </div>
+                            {referralError && (
+                                <div className="mt-3 text-xs text-red-600 flex items-center gap-1.5 bg-red-50 p-2 rounded-lg">
+                                    <span className="w-1.5 h-1.5 bg-red-500 rounded-full shrink-0"></span>
+                                    {referralError}
+                                </div>
+                            )}
+                        </div>
+                    )}
+
+                    {/* Display Referred By (Fixed Display) */}
+                    {!loading && stats.referredBy && (
+                        <div className="bg-white rounded-xl p-4 shadow-sm border border-slate-100 flex items-center gap-3">
+                            <div className="p-2 bg-green-100 text-green-600 rounded-lg">
+                                <CheckCircle size={18} />
+                            </div>
+                            <div>
+                                <p className="text-xs text-slate-500 font-medium">Referred by</p>
+                                <p className="text-sm font-bold text-slate-800 font-mono">{stats.referredBy}</p>
+                            </div>
+                        </div>
+                    )}
+
                     {/* Reward Rules */}
                     <div className="bg-white rounded-xl p-5 shadow-sm border border-slate-100">
                         <div className="flex items-center gap-2 mb-4">
@@ -106,8 +207,8 @@ const Referrals = () => {
 
                         <ul className="space-y-3">
                             {[
-                                { text: "You earn 5% when a referred user stakes", highlight: "5%" },
-                                { text: "New user receives 3% bonus reward", highlight: "3%" },
+                                { text: `You earn ${referralConfig.referralPercent}% when a referred user stakes`, highlight: `${referralConfig.referralPercent}%` },
+                                { text: `New user receives ${referralConfig.referrerPercent}% bonus reward`, highlight: `${referralConfig.referrerPercent}%` },
                                 { text: "Rewards are credited instantly to your wallet", highlight: "instantly" },
                                 { text: "No limit on the number of referrals", highlight: "No limit" }
                             ].map((rule, idx) => (
@@ -180,7 +281,7 @@ const Referrals = () => {
                     </div>
                 </div>
             </div>
-        </div>
+        </div >
     );
 };
 

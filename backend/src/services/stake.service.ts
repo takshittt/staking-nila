@@ -149,18 +149,27 @@ export class StakeService {
       orderBy: { createdAt: 'desc' }
     });
 
-    return stakes.map(stake => ({
-      id: stake.id,
-      stakeId: stake.stakeId,
-      wallet: stake.user.walletAddress,
-      planVersion: `${stake.planName} v${stake.planVersion}`,
-      amount: Number(stake.amount),
-      apy: Number(stake.apy),
-      startDate: stake.startDate.toISOString(),
-      endDate: stake.endDate.toISOString(),
-      status: stake.status,
-      txHash: stake.txHash
-    }));
+    return stakes.map(stake => {
+      // Calculate lock days from start and end dates
+      const startDate = new Date(stake.startDate);
+      const endDate = new Date(stake.endDate);
+      const lockDays = Math.round((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24));
+
+      return {
+        id: stake.id,
+        stakeId: stake.stakeId,
+        wallet: stake.user.walletAddress,
+        planName: stake.planName,
+        planVersion: stake.planVersion,
+        amount: Number(stake.amount),
+        apy: Number(stake.apy),
+        lockDays,
+        startDate: stake.startDate.toISOString(),
+        endDate: stake.endDate.toISOString(),
+        status: stake.status,
+        txHash: stake.txHash
+      };
+    });
   }
 
   // Get stakes for a user
@@ -169,20 +178,31 @@ export class StakeService {
 
     const stakes = await prisma.stake.findMany({
       where: { user: { walletAddress: normalizedAddress } },
+      include: { user: true },
       orderBy: { createdAt: 'desc' }
     });
 
-    return stakes.map(stake => ({
-      id: stake.id,
-      stakeId: stake.stakeId,
-      planVersion: `${stake.planName} v${stake.planVersion}`,
-      amount: Number(stake.amount),
-      apy: Number(stake.apy),
-      startDate: stake.startDate.toISOString(),
-      endDate: stake.endDate.toISOString(),
-      status: stake.status,
-      txHash: stake.txHash
-    }));
+    return stakes.map(stake => {
+      // Calculate lock days from start and end dates
+      const startDate = new Date(stake.startDate);
+      const endDate = new Date(stake.endDate);
+      const lockDays = Math.round((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24));
+
+      return {
+        id: stake.id,
+        stakeId: stake.stakeId,
+        walletAddress: stake.user.walletAddress,
+        planName: stake.planName,
+        planVersion: stake.planVersion,
+        amount: Number(stake.amount),
+        apy: Number(stake.apy),
+        lockDays,
+        startDate: stake.startDate.toISOString(),
+        endDate: stake.endDate.toISOString(),
+        status: stake.status,
+        txHash: stake.txHash
+      };
+    });
   }
 
   // Complete stake (when lock period ends)
@@ -265,6 +285,31 @@ export class StakeService {
       const reward = Number(stake.amount) * (Number(stake.apy) / 100) * (durationDays / yearInDays);
       estimatedRewardsPaid += reward;
     }
+
+    // NEW: Add claimed rewards (INSTANT and REFERRAL) from DB
+    const claimedRewards = await prisma.pendingReward.aggregate({
+      where: {
+        status: 'claimed',
+        // We include all types because 'claimed' means it was paid out.
+        // Even APY_REWARD that are marked 'claimed' in DB should be included if they weren't covered by the loop above.
+        // However, the loop above calculates *theoretical* APY paid for completed stakes.
+        // The DB tracks *actual* claimed rewards.
+        // To avoid double counting APY rewards:
+        // The loop above is for "Completed stakes * APY * duration". 
+        // If a stake is completed, its APY rewards might have been claimed already or claimed upon completion.
+        // But the user specifically asked for "Instant and Referral" to be included.
+        // So let's add INSTANT and REFERRAL specifically.
+        type: {
+          in: ['INSTANT_CASHBACK', 'REFERRAL_REWARD']
+        }
+      },
+      _sum: {
+        amount: true
+      }
+    });
+
+    const claimedAmount = Number(claimedRewards._sum.amount || 0);
+    estimatedRewardsPaid += claimedAmount;
 
     return {
       expiringStakesCount,

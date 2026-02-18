@@ -39,7 +39,7 @@ export class RewardService {
       const referralRewards = Number(contractRewards.referralRewards) / 1e18;
 
       // Get APY rewards from database (these are synced separately)
-      const apyRewards = await prisma.pendingReward.findMany({
+      let apyRewards = await prisma.pendingReward.findMany({
         where: {
           walletAddress: normalizedAddress,
           type: 'APY_REWARD',
@@ -47,6 +47,57 @@ export class RewardService {
         },
         orderBy: {
           createdAt: 'desc'
+        }
+      });
+
+      // Auto-sync if no APY rewards found but user has active stakes
+      if (apyRewards.length === 0) {
+        const activeStakesCount = await prisma.stake.count({
+          where: {
+            user: { walletAddress: normalizedAddress },
+            status: 'active'
+          }
+        });
+
+        if (activeStakesCount > 0) {
+          // Trigger sync
+          await this.syncAPYRewards(normalizedAddress);
+
+          // Refetch rewards
+          apyRewards = await prisma.pendingReward.findMany({
+            where: {
+              walletAddress: normalizedAddress,
+              type: 'APY_REWARD',
+              status: 'pending'
+            },
+            orderBy: {
+              createdAt: 'desc'
+            }
+          });
+        }
+      }
+
+      // Get pending instant cashback from database (with sourceId for stake association)
+      const pendingInstantCashback = await prisma.pendingReward.findMany({
+        where: {
+          walletAddress: normalizedAddress,
+          type: 'INSTANT_CASHBACK',
+          status: 'pending'
+        },
+        orderBy: {
+          createdAt: 'desc'
+        }
+      });
+
+      // Get claimed instant cashback and referral rewards from database
+      const claimedRewards = await prisma.pendingReward.findMany({
+        where: {
+          walletAddress: normalizedAddress,
+          type: { in: ['INSTANT_CASHBACK', 'REFERRAL_REWARD'] },
+          status: 'claimed'
+        },
+        orderBy: {
+          claimedAt: 'desc'
         }
       });
 
@@ -65,8 +116,30 @@ export class RewardService {
         }))
       ];
 
-      // Add instant cashback if available
-      if (instantCashback > 0) {
+      // Add pending instant cashback from database (these have sourceIds)
+      breakdown.push(...pendingInstantCashback.map(r => ({
+        id: r.id,
+        type: r.type,
+        amount: Number(r.amount),
+        createdAt: r.createdAt,
+        sourceId: r.sourceId,
+        metadata: r.metadata
+      })));
+
+      // Add claimed instant cashback and referral rewards to breakdown
+      breakdown.push(...claimedRewards.map(r => ({
+        id: r.id,
+        type: r.type,
+        amount: Number(r.amount),
+        createdAt: r.createdAt,
+        claimedAt: r.claimedAt,
+        sourceId: r.sourceId,
+        metadata: r.metadata
+      })));
+
+      // Only add contract instant cashback if no database records exist (fallback)
+      // This handles cases where rewards might be claimed on-chain but not tracked in DB
+      if (instantCashback > 0 && pendingInstantCashback.length === 0) {
         breakdown.push({
           id: 'contract-instant',
           type: 'INSTANT_CASHBACK' as const,
@@ -183,59 +256,38 @@ export class RewardService {
         });
       }
 
-      // Create claimed reward records based on type
-      if (data.type === 'INSTANT_CASHBACK' && data.instantAmount && data.instantAmount > 0) {
-        await prisma.pendingReward.create({
-          data: {
-            userId: user.id,
+      // Mark existing pending instant cashback rewards as claimed
+      if ((data.type === 'INSTANT_CASHBACK' || data.type === 'ALL') && data.instantAmount && data.instantAmount > 0) {
+        // Find all pending instant cashback rewards for this user
+        await prisma.pendingReward.updateMany({
+          where: {
             walletAddress: normalizedAddress,
             type: 'INSTANT_CASHBACK',
-            amount: data.instantAmount,
+            status: 'pending'
+          },
+          data: {
             status: 'claimed',
             claimedAt: new Date(),
             txHash: data.txHash
           }
         });
-      } else if (data.type === 'REFERRAL_REWARD' && data.referralAmount && data.referralAmount > 0) {
-        await prisma.pendingReward.create({
-          data: {
-            userId: user.id,
+      }
+
+      // Mark existing pending referral rewards as claimed  
+      if ((data.type === 'REFERRAL_REWARD' || data.type === 'ALL') && data.referralAmount && data.referralAmount > 0) {
+        // Find all pending referral rewards for this user
+        await prisma.pendingReward.updateMany({
+          where: {
             walletAddress: normalizedAddress,
             type: 'REFERRAL_REWARD',
-            amount: data.referralAmount,
+            status: 'pending'
+          },
+          data: {
             status: 'claimed',
             claimedAt: new Date(),
             txHash: data.txHash
           }
         });
-      } else if (data.type === 'ALL') {
-        // Create records for both instant and referral if they were claimed
-        if (data.instantAmount && data.instantAmount > 0) {
-          await prisma.pendingReward.create({
-            data: {
-              userId: user.id,
-              walletAddress: normalizedAddress,
-              type: 'INSTANT_CASHBACK',
-              amount: data.instantAmount,
-              status: 'claimed',
-              claimedAt: new Date(),
-              txHash: data.txHash
-            }
-          });
-        }
-        if (data.referralAmount && data.referralAmount > 0) {
-          await prisma.pendingReward.create({
-            data: {
-              userId: user.id,
-              walletAddress: normalizedAddress,
-              type: 'REFERRAL_REWARD',
-              amount: data.referralAmount,
-              status: 'claimed',
-              claimedAt: new Date(),
-              txHash: data.txHash
-            }
-          });
-        }
       }
 
       return { success: true };

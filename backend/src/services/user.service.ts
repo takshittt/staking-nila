@@ -82,7 +82,6 @@ export class UserService {
 
     if (!user) throw new Error('User not found');
     if (user.referredBy) throw new Error('User already has a referrer');
-    if (user.isReferralSkipped) throw new Error('User has skipped referral');
     if (user.referralCode === referralCode) throw new Error('Cannot refer yourself');
 
     const referrer = await prisma.user.findUnique({

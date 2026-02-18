@@ -1,0 +1,10 @@
+{
+  "network": "bscTestnet",
+  "chainId": "97",
+  "proxy": "0xcC372d7ae02b89852B129d951b1609Bccf7Fd0a2",
+  "implementation": "0xB55978B0a358c466a1CB52fD18B383c49218CF3B",
+  "admin": "0x0000000000000000000000000000000000000000",
+  "nilaToken": "0xA31fb7667F80306690F5DF0d9A6ea272aBF97926",
+  "deployedAt": "2026-02-18T06:10:46.421Z",
+  "deployer": "0x0b23Ad9a0F1Da9b04D43de60a0371501991e33ef"
+}

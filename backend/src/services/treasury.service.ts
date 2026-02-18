@@ -77,10 +77,29 @@ export class TreasuryService {
 
       const result = totalPending.toString();
 
-      // Cache for 5 minutes
-      await this.cachePendingRewards(result, 300);
+      // NEW: Add pending INSTANT and REFERRAL rewards from DB
+      // These may not be on-chain yet if they are pending admin approval or similar, 
+      // or if we just want to include all pending types.
+      const dbPendingRewards = await prisma.pendingReward.aggregate({
+        where: {
+          status: 'pending',
+          type: {
+            in: ['INSTANT_CASHBACK', 'REFERRAL_REWARD']
+          }
+        },
+        _sum: {
+          amount: true
+        }
+      });
 
-      return result;
+      const dbPendingAmount = BigInt(Number(dbPendingRewards._sum.amount || 0) * 1e18);
+      const totalWithDb = BigInt(result) + dbPendingAmount;
+      const finalResult = totalWithDb.toString();
+
+      // Cache for 5 minutes
+      await this.cachePendingRewards(finalResult, 300);
+
+      return finalResult;
     } catch (error: any) {
       console.error('Error calculating all pending rewards:', error);
       // Return 0 if calculation fails to prevent blocking
