@@ -4,7 +4,7 @@ import dotenv from 'dotenv';
 dotenv.config();
 
 // Import contract ABI (using upgradeable version)
-const NilaStakingABI = require('../../artifacts/contracts/NilaStakingUpgradeable.sol/NilaStakingUpgradeable.json').abi;
+const NilaStakingABI = require('../abis/NilaStakingUpgradeable.json');
 
 export class BlockchainService {
   private static provider: ethers.JsonRpcProvider;
