@@ -1,5 +1,6 @@
 import { PrismaClient } from '@prisma/client';
 import { BlockchainService } from './blockchain.service';
+import { REFERRAL_CONFIG_ID } from '../utils/mongodb-constants';
 
 const prisma = new PrismaClient();
 
@@ -7,24 +8,24 @@ export class ReferralService {
   // Get referral configuration (hybrid: blockchain + database)
   static async getConfig() {
     let config = await prisma.referralConfig.findUnique({
-      where: { id: 1 }
+      where: { id: REFERRAL_CONFIG_ID }
     });
 
     // Create default config if doesn't exist
     if (!config) {
       config = await prisma.referralConfig.create({
         data: {
-          id: 1,
-          referralPercentage: 5.0,
-          referrerPercentage: 2.0,
+          id: REFERRAL_CONFIG_ID,
+          referralPercentage: '5.0',
+          referrerPercentage: '2.0',
           isPaused: false
         }
       });
     }
 
     return {
-      referralPercentage: Number(config.referralPercentage),
-      referrerPercentage: Number(config.referrerPercentage),
+      referralPercentage: parseFloat(config.referralPercentage),
+      referrerPercentage: parseFloat(config.referrerPercentage),
       isPaused: config.isPaused
     };
   }
@@ -47,23 +48,23 @@ export class ReferralService {
       
       // Update database to match blockchain
       const updated = await prisma.referralConfig.upsert({
-        where: { id: 1 },
+        where: { id: REFERRAL_CONFIG_ID },
         update: {
-          referralPercentage: blockchainConfig.referralPercentage,
-          referrerPercentage: blockchainConfig.referrerPercentage,
+          referralPercentage: blockchainConfig.referralPercentage.toString(),
+          referrerPercentage: blockchainConfig.referrerPercentage.toString(),
           isPaused: blockchainConfig.isPaused
         },
         create: {
-          id: 1,
-          referralPercentage: blockchainConfig.referralPercentage,
-          referrerPercentage: blockchainConfig.referrerPercentage,
+          id: REFERRAL_CONFIG_ID,
+          referralPercentage: blockchainConfig.referralPercentage.toString(),
+          referrerPercentage: blockchainConfig.referrerPercentage.toString(),
           isPaused: blockchainConfig.isPaused
         }
       });
 
       return {
-        referralPercentage: Number(updated.referralPercentage),
-        referrerPercentage: Number(updated.referrerPercentage),
+        referralPercentage: parseFloat(updated.referralPercentage),
+        referrerPercentage: parseFloat(updated.referrerPercentage),
         isPaused: updated.isPaused,
         synced: true
       };
@@ -84,15 +85,15 @@ export class ReferralService {
 
     // Get current config
     const currentConfig = await prisma.referralConfig.findUnique({
-      where: { id: 1 }
+      where: { id: REFERRAL_CONFIG_ID }
     });
 
     if (!currentConfig) {
       throw new Error('Config not found');
     }
 
-    const newReferralPercentage = data.referralPercentage ?? Number(currentConfig.referralPercentage);
-    const newReferrerPercentage = data.referrerPercentage ?? Number(currentConfig.referrerPercentage);
+    const newReferralPercentage = data.referralPercentage ?? parseFloat(currentConfig.referralPercentage);
+    const newReferrerPercentage = data.referrerPercentage ?? parseFloat(currentConfig.referrerPercentage);
     const newIsPaused = data.isPaused ?? currentConfig.isPaused;
 
     // Update blockchain first
@@ -109,17 +110,17 @@ export class ReferralService {
 
     // Update database
     const updated = await prisma.referralConfig.update({
-      where: { id: 1 },
+      where: { id: REFERRAL_CONFIG_ID },
       data: {
-        referralPercentage: newReferralPercentage,
-        referrerPercentage: newReferrerPercentage,
+        referralPercentage: newReferralPercentage.toString(),
+        referrerPercentage: newReferrerPercentage.toString(),
         isPaused: newIsPaused
       }
     });
 
     return {
-      referralPercentage: Number(updated.referralPercentage),
-      referrerPercentage: Number(updated.referrerPercentage),
+      referralPercentage: parseFloat(updated.referralPercentage),
+      referrerPercentage: parseFloat(updated.referrerPercentage),
       isPaused: updated.isPaused
     };
   }
@@ -131,16 +132,18 @@ export class ReferralService {
     // Total referrals
     const totalReferrals = await prisma.referral.count();
 
-    // Total earnings
-    const earnings = await prisma.referral.aggregate({
-      _sum: { earnings: true }
+    // Get all referrals and sum earnings
+    const referrals = await prisma.referral.findMany({
+      select: { earnings: true }
     });
+    
+    const totalEarnings = referrals.reduce((sum, ref) => sum + parseFloat(ref.earnings), 0);
 
     return {
       referralPercentage: config.referralPercentage,
       referrerPercentage: config.referrerPercentage,
       totalReferrals,
-      totalEarnings: Number(earnings._sum.earnings || 0),
+      totalEarnings,
       isPaused: config.isPaused
     };
   }
@@ -157,7 +160,7 @@ export class ReferralService {
     return referrals.map(ref => ({
       id: ref.id,
       referredWallet: ref.referredWallet,
-      earnings: Number(ref.earnings),
+      earnings: parseFloat(ref.earnings),
       createdAt: ref.createdAt.toISOString()
     }));
   }

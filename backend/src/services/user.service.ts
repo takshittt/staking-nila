@@ -101,7 +101,7 @@ export class UserService {
       data: {
         referrerWallet: referrer.walletAddress,
         referredWallet: normalizedAddress,
-        earnings: 0
+        earnings: '0'
       }
     });
 
@@ -142,7 +142,7 @@ export class UserService {
     const usersWithStats = await Promise.all(
       users.map(async (user) => {
         const totalStaked = user.stakes.reduce(
-          (sum, stake) => sum + Number(stake.amount),
+          (sum, stake) => sum + parseFloat(stake.amount),
           0
         );
 
@@ -158,15 +158,18 @@ export class UserService {
 
         const rewardsClaimed = completedStakes.reduce((sum, stake) => {
           const duration = (new Date(stake.endDate).getTime() - new Date(stake.startDate).getTime()) / (1000 * 60 * 60 * 24);
-          const reward = Number(stake.amount) * (Number(stake.apy) / 100) * (duration / 365);
+          const reward = parseFloat(stake.amount) * (parseFloat(stake.apy) / 100) * (duration / 365);
           return sum + reward;
         }, 0);
 
         // Get referral earnings
-        const referralEarnings = await prisma.referral.aggregate({
+        // MongoDB doesn't support aggregate _sum on string fields, fetch and sum manually
+        const referrals = await prisma.referral.findMany({
           where: { referrerWallet: user.walletAddress },
-          _sum: { earnings: true }
+          select: { earnings: true }
         });
+
+        const referralEarningsSum = referrals.reduce((sum, r) => sum + parseFloat(r.earnings), 0);
 
         return {
           id: user.id,
@@ -174,7 +177,7 @@ export class UserService {
           totalStaked,
           activeStakes,
           rewardsClaimed: Math.round(rewardsClaimed),
-          referralEarnings: Number(referralEarnings._sum.earnings || 0),
+          referralEarnings: referralEarningsSum,
           status: user.status,
           joinDate: user.firstConnectedAt.toISOString()
         };
@@ -214,20 +217,23 @@ export class UserService {
     const completedStakes = user.stakes.filter(s => s.status === 'completed');
 
     const totalStaked = activeStakes.reduce(
-      (sum, stake) => sum + Number(stake.amount),
+      (sum, stake) => sum + parseFloat(stake.amount),
       0
     );
 
     const rewardsClaimed = completedStakes.reduce((sum, stake) => {
       const duration = (new Date(stake.endDate).getTime() - new Date(stake.startDate).getTime()) / (1000 * 60 * 60 * 24);
-      const reward = Number(stake.amount) * (Number(stake.apy) / 100) * (duration / 365);
+      const reward = parseFloat(stake.amount) * (parseFloat(stake.apy) / 100) * (duration / 365);
       return sum + reward;
     }, 0);
 
-    const referralEarnings = await prisma.referral.aggregate({
+    // MongoDB doesn't support aggregate _sum on string fields, fetch and sum manually
+    const referrals = await prisma.referral.findMany({
       where: { referrerWallet: user.walletAddress },
-      _sum: { earnings: true }
+      select: { earnings: true }
     });
+
+    const referralEarningsSum = referrals.reduce((sum, r) => sum + parseFloat(r.earnings), 0);
 
     return {
       id: user.id,
@@ -239,7 +245,7 @@ export class UserService {
       totalStaked,
       activeStakes: activeStakes.length,
       rewardsClaimed: Math.round(rewardsClaimed),
-      referralEarnings: Number(referralEarnings._sum.earnings || 0),
+      referralEarnings: referralEarningsSum,
       referralCount: await prisma.referral.count({
         where: { referrerWallet: user.walletAddress }
       }),

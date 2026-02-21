@@ -3,15 +3,15 @@ generator client {
 }
 
 datasource db {
-  provider = "mysql"
+  provider = "mongodb"
   url      = env("DATABASE_URL")
 }
 
 model Admin {
-  id              Int        @id @default(1)
+  id              String     @id @default(auto()) @map("_id") @db.ObjectId
   passwordHash    String
-  twoFactorSecret String     @db.Text
-  backupCodes     String     @db.Text
+  twoFactorSecret String
+  backupCodes     String
   isSetupComplete Boolean    @default(false)
   createdAt       DateTime   @default(now())
   updatedAt       DateTime   @updatedAt
@@ -22,30 +22,27 @@ model Admin {
 }
 
 model AuditLog {
-  id        String   @id @default(uuid())
-  adminId   Int
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  adminId   String   @db.ObjectId
   action    String
   txHash    String?
   createdAt DateTime @default(now())
   admin     Admin    @relation(fields: [adminId], references: [id])
 
-  @@index([adminId])
-  @@index([createdAt])
   @@map("audit_logs")
 }
 
 model ContractCache {
-  id        String   @id @default(uuid())
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
   key       String   @unique
   value     Json
   expiresAt DateTime
 
-  @@index([key])
   @@map("contract_cache")
 }
 
 model User {
-  id                String          @id @default(uuid())
+  id                String          @id @default(auto()) @map("_id") @db.ObjectId
   walletAddress     String          @unique
   referralCode      String?         @unique
   referredBy        String?
@@ -56,19 +53,17 @@ model User {
   pendingRewards    PendingReward[]
   stakes            Stake[]
 
-  @@index([walletAddress])
-  @@index([referralCode])
   @@map("users")
 }
 
 model Stake {
-  id          String   @id @default(uuid())
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
   stakeId     String   @unique
-  userId      String
+  userId      String   @db.ObjectId
   planName    String
   planVersion Int
-  amount      Decimal  @db.Decimal(20, 8)
-  apy         Decimal  @db.Decimal(5, 2)
+  amount      String
+  apy         String
   startDate   DateTime
   endDate     DateTime
   status      String   @default("active")
@@ -77,27 +72,23 @@ model Stake {
   updatedAt   DateTime @updatedAt
   user        User     @relation(fields: [userId], references: [id])
 
-  @@index([userId])
-  @@index([status])
   @@map("stakes")
 }
 
 model Referral {
-  id             String   @id @default(uuid())
+  id             String   @id @default(auto()) @map("_id") @db.ObjectId
   referrerWallet String
   referredWallet String
-  earnings       Decimal  @db.Decimal(20, 8)
+  earnings       String
   createdAt      DateTime @default(now())
 
-  @@index([referrerWallet])
-  @@index([referredWallet])
   @@map("referrals")
 }
 
 model ReferralConfig {
-  id                 Int      @id @default(1)
-  referralPercentage Decimal  @db.Decimal(5, 2)
-  referrerPercentage Decimal  @db.Decimal(5, 2)
+  id                 String   @id @default(auto()) @map("_id") @db.ObjectId
+  referralPercentage String
+  referrerPercentage String
   isPaused           Boolean  @default(false)
   updatedAt          DateTime @updatedAt
 
@@ -105,11 +96,11 @@ model ReferralConfig {
 }
 
 model PendingReward {
-  id            String    @id @default(uuid())
-  userId        String
+  id            String    @id @default(auto()) @map("_id") @db.ObjectId
+  userId        String    @db.ObjectId
   walletAddress String
   type          String
-  amount        Decimal   @db.Decimal(20, 8)
+  amount        String
   status        String    @default("pending")
   sourceId      String?
   metadata      Json?
@@ -118,54 +109,40 @@ model PendingReward {
   txHash        String?
   user          User      @relation(fields: [userId], references: [id])
 
-  @@index([userId])
-  @@index([walletAddress])
-  @@index([status])
-  @@index([type])
   @@map("pending_rewards")
 }
 
 model Transaction {
-  id            String    @id @default(uuid())
+  id            String    @id @default(auto()) @map("_id") @db.ObjectId
   txHash        String    @unique
   walletAddress String?
   type          String
-  amount        Decimal?  @db.Decimal(20, 8)
+  amount        String?
   status        String    @default("pending")
   createdAt     DateTime  @default(now())
   confirmedAt   DateTime?
 
-  @@index([txHash])
-  @@index([walletAddress])
-  @@index([type])
-  @@index([status])
-  @@index([createdAt])
   @@map("transactions")
 }
 
 model PaymentIntent {
-  id             String   @id @default(uuid())
+  id             String   @id @default(auto()) @map("_id") @db.ObjectId
   invoiceId      String   @unique
   intentId       String?  @unique
   walletAddress  String
   email          String
   name           String
-  amount         Decimal  @db.Decimal(10, 2) // USD amount
-  nilaAmount     Decimal  @db.Decimal(20, 8) // Calculated NILA tokens
+  amount         String   // USD amount
+  nilaAmount     String   // Calculated NILA tokens
   amountConfigId Int
   lockConfigId   Int
   status         String   @default("PENDING") // PENDING, SUCCESS, FAILED, CANCELLED
   paymentMethod  String   @default("CARD")
-  txHash         String? // Blockchain transaction hash after stake creation
-  stakeId        String? // Reference to created stake
-  metadata       Json? // Additional data (billing info, email tracking, etc.)
+  txHash         String?  // Blockchain transaction hash after stake creation
+  stakeId        String?  // Reference to created stake
+  metadata       Json?    // Additional data (billing info, email tracking, etc.)
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
-  @@index([invoiceId])
-  @@index([intentId])
-  @@index([walletAddress])
-  @@index([status])
-  @@index([createdAt])
   @@map("payment_intents")
 }

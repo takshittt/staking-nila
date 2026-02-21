@@ -1,4 +1,5 @@
 import { PrismaClient } from '@prisma/client';
+import { ADMIN_ID } from '../src/utils/mongodb-constants';
 
 const prisma = new PrismaClient();
 
@@ -8,13 +9,13 @@ async function deleteAdmin() {
     
     // Delete all audit logs first (foreign key constraint)
     const deletedLogs = await prisma.auditLog.deleteMany({
-      where: { adminId: 1 }
+      where: { adminId: ADMIN_ID }
     });
     console.log(`✅ Deleted ${deletedLogs.count} audit log(s)`);
     
     // Delete the admin
     const deletedAdmin = await prisma.admin.delete({
-      where: { id: 1 }
+      where: { id: ADMIN_ID }
     });
     
     console.log('✅ Admin deleted successfully!');

@@ -2,6 +2,8 @@ import { PrismaClient } from '@prisma/client';
 import { RewardService } from './reward.service';
 import { BlockchainService } from './blockchain.service';
 import { ethers } from 'ethers';
+import { REFERRAL_CONFIG_ID } from '../utils/mongodb-constants';
+import { DecimalHelper } from '../utils/decimal-helpers';
 
 const prisma = new PrismaClient();
 
@@ -56,8 +58,8 @@ export class StakeService {
         userId: user.id,
         planName: data.planName,
         planVersion: data.planVersion,
-        amount: data.amount,
-        apy: data.apy,
+        amount: DecimalHelper.toString(data.amount),
+        apy: DecimalHelper.toString(data.apy),
         startDate,
         endDate,
         txHash: data.txHash,
@@ -85,7 +87,7 @@ export class StakeService {
     // Handle referral rewards
     if (user.referredBy) {
       const config = await prisma.referralConfig.findUnique({
-        where: { id: 1 }
+        where: { id: REFERRAL_CONFIG_ID }
       });
 
       if (config && !config.isPaused) {
@@ -95,19 +97,36 @@ export class StakeService {
 
         if (referrer) {
           // Calculate referral rewards
-          const referrerReward = data.amount * (Number(config.referrerPercentage) / 100);
-          const referredReward = data.amount * (Number(config.referralPercentage) / 100);
+          const referrerReward = data.amount * (parseFloat(config.referrerPercentage) / 100);
+          const referredReward = data.amount * (parseFloat(config.referralPercentage) / 100);
 
-          // Update referral earnings tracking
-          await prisma.referral.updateMany({
+          // Get existing referral or create new one
+          const existingReferral = await prisma.referral.findFirst({
             where: {
               referrerWallet: referrer.walletAddress,
               referredWallet: normalizedAddress
-            },
-            data: {
-              earnings: { increment: referrerReward }
             }
           });
+
+          if (existingReferral) {
+            // Update existing referral earnings
+            const currentEarnings = parseFloat(existingReferral.earnings);
+            await prisma.referral.update({
+              where: { id: existingReferral.id },
+              data: {
+                earnings: DecimalHelper.toString(currentEarnings + referrerReward)
+              }
+            });
+          } else {
+            // Create new referral record
+            await prisma.referral.create({
+              data: {
+                referrerWallet: referrer.walletAddress,
+                referredWallet: normalizedAddress,
+                earnings: DecimalHelper.toString(referrerReward)
+              }
+            });
+          }
 
           // Create pending reward for referrer
           await RewardService.createPendingReward({
@@ -119,7 +138,7 @@ export class StakeService {
             metadata: {
               referredUser: normalizedAddress,
               stakeAmount: data.amount,
-              rewardPercent: Number(config.referrerPercentage)
+              rewardPercent: parseFloat(config.referrerPercentage)
             }
           });
 
@@ -133,7 +152,7 @@ export class StakeService {
             metadata: {
               referrerUser: referrer.walletAddress,
               stakeAmount: data.amount,
-              rewardPercent: Number(config.referralPercentage),
+              rewardPercent: parseFloat(config.referralPercentage),
               isBonus: true
             }
           });
@@ -299,18 +318,24 @@ export class StakeService {
     });
 
     // 2. Large Unlock Events (> 50,000 NILA in next 30 days)
-    const largeUnlockCount = await prisma.stake.count({
+    // MongoDB with Prisma: string comparisons don't work with gte/lte
+    // We need to fetch and filter in memory
+    const allActiveStakes = await prisma.stake.findMany({
       where: {
         status: 'active',
-        amount: {
-          gte: 50000
-        },
         endDate: {
           gte: now,
           lte: thirtyDaysLater
         }
+      },
+      select: {
+        amount: true
       }
     });
+
+    const largeUnlockCount = allActiveStakes.filter(
+      stake => parseFloat(stake.amount) >= 50000
+    ).length;
 
     // 3. Estimated Rewards Paid (Completed stakes * APY * duration)
     // Fetch all completed stakes
@@ -334,33 +359,25 @@ export class StakeService {
       const yearInDays = 365;
 
       // Formula: Principal * (APY/100) * (Duration/365)
-      const reward = Number(stake.amount) * (Number(stake.apy) / 100) * (durationDays / yearInDays);
+      const reward = parseFloat(stake.amount) * (parseFloat(stake.apy) / 100) * (durationDays / yearInDays);
       estimatedRewardsPaid += reward;
     }
 
     // NEW: Add claimed rewards (INSTANT and REFERRAL) from DB
-    const claimedRewards = await prisma.pendingReward.aggregate({
+    // MongoDB aggregate doesn't support _sum on string fields, so we fetch and sum manually
+    const claimedRewards = await prisma.pendingReward.findMany({
       where: {
         status: 'claimed',
-        // We include all types because 'claimed' means it was paid out.
-        // Even APY_REWARD that are marked 'claimed' in DB should be included if they weren't covered by the loop above.
-        // However, the loop above calculates *theoretical* APY paid for completed stakes.
-        // The DB tracks *actual* claimed rewards.
-        // To avoid double counting APY rewards:
-        // The loop above is for "Completed stakes * APY * duration". 
-        // If a stake is completed, its APY rewards might have been claimed already or claimed upon completion.
-        // But the user specifically asked for "Instant and Referral" to be included.
-        // So let's add INSTANT and REFERRAL specifically.
         type: {
           in: ['INSTANT_CASHBACK', 'REFERRAL_REWARD']
         }
       },
-      _sum: {
+      select: {
         amount: true
       }
     });
 
-    const claimedAmount = Number(claimedRewards._sum.amount || 0);
+    const claimedAmount = claimedRewards.reduce((sum, r) => sum + parseFloat(r.amount), 0);
     estimatedRewardsPaid += claimedAmount;
 
     return {

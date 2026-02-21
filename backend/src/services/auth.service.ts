@@ -3,6 +3,7 @@ import jwt from 'jsonwebtoken';
 import { PrismaClient } from '@prisma/client';
 import { CryptoService } from './crypto.service';
 import { TotpService } from './totp.service';
+import { ADMIN_ID } from '../utils/mongodb-constants';
 
 const prisma = new PrismaClient();
 const JWT_SECRET = process.env.JWT_SECRET || 'default-secret-change-this';
@@ -10,7 +11,7 @@ const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '4h';
 
 export class AuthService {
   static async checkSetupStatus(): Promise<boolean> {
-    const admin = await prisma.admin.findUnique({ where: { id: 1 } });
+    const admin = await prisma.admin.findUnique({ where: { id: ADMIN_ID } });
     return !admin || !admin.isSetupComplete;
   }
 
@@ -29,7 +30,7 @@ export class AuthService {
     // Use transaction to prevent race conditions
     return await prisma.$transaction(async (tx) => {
       // Check if admin already exists with setup complete
-      const existing = await tx.admin.findUnique({ where: { id: 1 } });
+      const existing = await tx.admin.findUnique({ where: { id: ADMIN_ID } });
       
       if (existing && existing.isSetupComplete) {
         throw new Error('Setup already completed');
@@ -56,7 +57,7 @@ export class AuthService {
       // Create or update admin (only if setup not complete)
       const admin = existing 
         ? await tx.admin.update({
-            where: { id: 1 },
+            where: { id: ADMIN_ID },
             data: {
               passwordHash,
               twoFactorSecret: encryptedSecret,
@@ -66,7 +67,7 @@ export class AuthService {
           })
         : await tx.admin.create({
             data: {
-              id: 1,
+              id: ADMIN_ID,
               passwordHash,
               twoFactorSecret: encryptedSecret,
               backupCodes: encryptedBackupCodes,
@@ -87,7 +88,7 @@ export class AuthService {
 
   static async login(password: string, totpCode: string) {
     // Get admin
-    const admin = await prisma.admin.findUnique({ where: { id: 1 } });
+    const admin = await prisma.admin.findUnique({ where: { id: ADMIN_ID } });
     
     // Strict check: admin must exist AND setup must be complete
     if (!admin) {
@@ -115,7 +116,7 @@ export class AuthService {
 
     // Update last login
     await prisma.admin.update({
-      where: { id: 1 },
+      where: { id: ADMIN_ID },
       data: { lastLoginAt: new Date() }
     });
 
@@ -129,9 +130,9 @@ export class AuthService {
     return { token };
   }
 
-  static verifyToken(token: string): { adminId: number } {
+  static verifyToken(token: string): { adminId: string } {
     try {
-      const decoded = jwt.verify(token, JWT_SECRET) as { adminId: number };
+      const decoded = jwt.verify(token, JWT_SECRET) as { adminId: string };
       return decoded;
     } catch (error) {
       throw new Error('Invalid or expired token');

@@ -6,7 +6,7 @@ export interface CreateTransactionDto {
   txHash: string;
   walletAddress?: string;
   type: 'STAKE' | 'UNSTAKE' | 'CLAIM_REWARD' | 'DEPOSIT' | 'WITHDRAW' | 'REFERRAL_REWARD' | 'CONFIG_UPDATE';
-  amount?: number;
+  amount?: string | number; // Accept both for convenience, will be converted to string
   status?: 'pending' | 'confirmed' | 'failed';
 }
 
@@ -31,7 +31,7 @@ export class TransactionService {
         txHash: data.txHash,
         walletAddress: data.walletAddress,
         type: data.type,
-        amount: data.amount,
+        amount: data.amount ? (typeof data.amount === 'number' ? data.amount.toString() : data.amount) : null,
         status: data.status || 'pending',
         confirmedAt: data.status === 'confirmed' ? new Date() : undefined
       }
@@ -127,8 +127,7 @@ export class TransactionService {
       confirmedTransactions,
       pendingTransactions,
       failedTransactions,
-      transactionsByType,
-      totalVolume
+      transactionsByType
     ] = await Promise.all([
       prisma.transaction.count({ where }),
       prisma.transaction.count({ where: { ...where, status: 'confirmed' } }),
@@ -138,12 +137,16 @@ export class TransactionService {
         by: ['type'],
         where,
         _count: { type: true }
-      }),
-      prisma.transaction.aggregate({
-        where: { ...where, status: 'confirmed', amount: { not: null } },
-        _sum: { amount: true }
       })
     ]);
+
+    // MongoDB doesn't support aggregate _sum on string fields, fetch and sum manually
+    const confirmedWithAmount = await prisma.transaction.findMany({
+      where: { ...where, status: 'confirmed', amount: { not: null } },
+      select: { amount: true }
+    });
+
+    const totalVolume = confirmedWithAmount.reduce((sum, tx) => sum + (tx.amount ? parseFloat(tx.amount) : 0), 0);
 
     return {
       total: totalTransactions,
@@ -154,7 +157,7 @@ export class TransactionService {
         acc[item.type] = item._count.type;
         return acc;
       }, {} as Record<string, number>),
-      totalVolume: Number(totalVolume._sum.amount || 0)
+      totalVolume
     };
   }
 

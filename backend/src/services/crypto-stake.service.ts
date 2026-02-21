@@ -1,5 +1,6 @@
 import { PrismaClient } from '@prisma/client';
 import { RewardService } from './reward.service';
+import { REFERRAL_CONFIG_ID } from '../utils/mongodb-constants';
 
 const prisma = new PrismaClient();
 
@@ -149,7 +150,7 @@ export class CryptoStakeService {
     // Handle referral rewards
     if (user.referredBy) {
       const config = await prisma.referralConfig.findUnique({
-        where: { id: 1 }
+        where: { id: REFERRAL_CONFIG_ID }
       });
 
       if (config && !config.isPaused) {

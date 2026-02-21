@@ -18,7 +18,7 @@ export class RewardService {
         userId: data.userId,
         walletAddress: data.walletAddress.toLowerCase(),
         type: data.type,
-        amount: data.amount,
+        amount: data.amount.toString(),
         sourceId: data.sourceId,
         metadata: data.metadata || {}
       }
@@ -205,30 +205,34 @@ export class RewardService {
   static async getUserLifetimeEarnings(walletAddress: string) {
     const normalizedAddress = walletAddress.toLowerCase();
 
-    const claimed = await prisma.pendingReward.aggregate({
+    // MongoDB doesn't support aggregate _sum on string fields, fetch and sum manually
+    const claimedRewards = await prisma.pendingReward.findMany({
       where: {
         walletAddress: normalizedAddress,
         status: 'claimed'
       },
-      _sum: {
+      select: {
         amount: true
       }
     });
 
-    const pending = await prisma.pendingReward.aggregate({
+    const pendingRewards = await prisma.pendingReward.findMany({
       where: {
         walletAddress: normalizedAddress,
         status: 'pending'
       },
-      _sum: {
+      select: {
         amount: true
       }
     });
 
+    const totalClaimed = claimedRewards.reduce((sum, r) => sum + parseFloat(r.amount), 0);
+    const totalPending = pendingRewards.reduce((sum, r) => sum + parseFloat(r.amount), 0);
+
     return {
-      totalClaimed: Number(claimed._sum.amount || 0),
-      totalPending: Number(pending._sum.amount || 0),
-      totalLifetime: Number(claimed._sum.amount || 0) + Number(pending._sum.amount || 0)
+      totalClaimed,
+      totalPending,
+      totalLifetime: totalClaimed
     };
   }
 
@@ -483,7 +487,7 @@ export class RewardService {
             // Update existing reward amount
             await prisma.pendingReward.update({
               where: { id: existing.id },
-              data: { amount: rewardAmount }
+              data: { amount: rewardAmount.toString() }
             });
           }
         }
@@ -498,19 +502,32 @@ export class RewardService {
 
   // Get all pending rewards across all users (for admin)
   static async getAllPendingRewards() {
-    const rewards = await prisma.pendingReward.groupBy({
-      by: ['type', 'status'],
-      _sum: {
+    // MongoDB doesn't support groupBy with _sum on string fields
+    // Fetch all rewards and group manually
+    const rewards = await prisma.pendingReward.findMany({
+      select: {
+        type: true,
+        status: true,
         amount: true
-      },
-      _count: true
+      }
     });
 
-    return rewards.map(r => ({
-      type: r.type,
-      status: r.status,
-      totalAmount: Number(r._sum.amount || 0),
-      count: r._count
-    }));
+    // Group by type and status
+    const grouped = rewards.reduce((acc, reward) => {
+      const key = `${reward.type}-${reward.status}`;
+      if (!acc[key]) {
+        acc[key] = {
+          type: reward.type,
+          status: reward.status,
+          totalAmount: 0,
+          count: 0
+        };
+      }
+      acc[key].totalAmount += parseFloat(reward.amount);
+      acc[key].count += 1;
+      return acc;
+    }, {} as Record<string, { type: string; status: string; totalAmount: number; count: number }>);
+
+    return Object.values(grouped);
   }
 }

@@ -1,4 +1,5 @@
 import { PrismaClient } from '@prisma/client';
+import { REFERRAL_CONFIG_ID } from '../src/utils/mongodb-constants';
 
 const prisma = new PrismaClient();
 
@@ -25,8 +26,8 @@ async function testUserTracking() {
         userId: user.id,
         planName: 'Test Plan',
         planVersion: 1,
-        amount: 1000,
-        apy: 5,
+        amount: '1000',
+        apy: '5',
         startDate: new Date(),
         endDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
         status: 'active'
@@ -37,11 +38,11 @@ async function testUserTracking() {
     // 3. Create referral config
     console.log('\n3. Creating referral config...');
     const config = await prisma.referralConfig.upsert({
-      where: { id: 1 },
+      where: { id: REFERRAL_CONFIG_ID },
       create: {
-        id: 1,
-        referralPercentage: 5.0,
-        referrerPercentage: 2.0,
+        id: REFERRAL_CONFIG_ID,
+        referralPercentage: '5.0',
+        referrerPercentage: '2.0',
         isPaused: false
       },
       update: {}

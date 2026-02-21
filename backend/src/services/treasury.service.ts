@@ -78,21 +78,21 @@ export class TreasuryService {
       const result = totalPending.toString();
 
       // NEW: Add pending INSTANT and REFERRAL rewards from DB
-      // These may not be on-chain yet if they are pending admin approval or similar, 
-      // or if we just want to include all pending types.
-      const dbPendingRewards = await prisma.pendingReward.aggregate({
+      // MongoDB doesn't support aggregate _sum on string fields, fetch and sum manually
+      const dbPendingRewards = await prisma.pendingReward.findMany({
         where: {
           status: 'pending',
           type: {
             in: ['INSTANT_CASHBACK', 'REFERRAL_REWARD']
           }
         },
-        _sum: {
+        select: {
           amount: true
         }
       });
 
-      const dbPendingAmount = BigInt(Number(dbPendingRewards._sum.amount || 0) * 1e18);
+      const dbPendingSum = dbPendingRewards.reduce((sum, r) => sum + parseFloat(r.amount), 0);
+      const dbPendingAmount = BigInt(Math.floor(dbPendingSum * 1e18));
       const totalWithDb = BigInt(result) + dbPendingAmount;
       const finalResult = totalWithDb.toString();
 
@@ -330,12 +330,13 @@ export class TreasuryService {
       });
 
       const totalManualStakeAmount = manualStakes.reduce(
-        (sum, stake) => sum + Number(stake.amount),
+        (sum, stake) => sum + parseFloat(stake.amount),
         0
       );
 
       // Calculate instant rewards owed for manual stakes
-      const instantRewardsOwed = await prisma.pendingReward.aggregate({
+      // MongoDB doesn't support aggregate _sum on string fields, fetch and sum manually
+      const instantRewards = await prisma.pendingReward.findMany({
         where: {
           status: 'pending',
           type: 'INSTANT_CASHBACK',
@@ -343,10 +344,12 @@ export class TreasuryService {
             in: manualStakes.map(s => s.stakeId)
           }
         },
-        _sum: {
+        select: {
           amount: true
         }
       });
+
+      const instantRewardsSum = instantRewards.reduce((sum, r) => sum + parseFloat(r.amount), 0);
 
       const liabilitiesWei = BigInt(liabilities.totalLiabilities);
       const contractBalanceWei = BigInt(liabilities.contractBalance);
@@ -366,7 +369,7 @@ export class TreasuryService {
         totalLiabilities: liabilities.totalLiabilities,
         totalManualStakes: manualStakes.length,
         totalManualStakeAmount: totalManualStakeAmount.toString(),
-        instantRewardsOwed: (Number(instantRewardsOwed._sum.amount || 0)).toString(),
+        instantRewardsOwed: instantRewardsSum.toString(),
         contractBalance: liabilities.contractBalance,
         availableRewards: liabilities.availableRewards,
         coverageRatio: Math.min(coverageRatio, 999),

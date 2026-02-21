@@ -204,12 +204,13 @@ export class StakingService {
       const blockchainStats = await BlockchainService.getStakingStats();
 
       // Calculate total staked from DB (active stakes only)
-      const totalStakedResult = await prisma.stake.aggregate({
+      // MongoDB doesn't support aggregate _sum on string fields, fetch and sum manually
+      const activeStakes = await prisma.stake.findMany({
         where: { status: 'active' },
-        _sum: { amount: true }
+        select: { amount: true }
       });
 
-      const totalStakedAmount = totalStakedResult._sum.amount || 0;
+      const totalStakedAmount = activeStakes.reduce((sum, stake) => sum + parseFloat(stake.amount), 0);
 
       // Calculate unique stakers from DB (active stakes only)
       const uniqueStakersResult = await prisma.stake.groupBy({
