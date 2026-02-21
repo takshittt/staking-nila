@@ -140,7 +140,7 @@ export class ContractService {
       const tx = await tokenContract.approve(STAKING_CONTRACT_ADDRESS, amountWei);
       console.log('Approval transaction sent:', tx.hash);
 
-      const receipt = await tx.wait();
+      await tx.wait();
       console.log('Approval confirmed');
 
       return tx.hash;
@@ -186,7 +186,7 @@ export class ContractService {
       console.log('Stake transaction sent:', tx.hash);
 
       // Wait for confirmation
-      const receipt = await tx.wait();
+      await tx.wait();
       console.log('Stake confirmed');
 
       return tx.hash;

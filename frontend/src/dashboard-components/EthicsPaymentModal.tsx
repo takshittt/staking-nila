@@ -402,7 +402,7 @@ const EthicsPaymentModal = ({
                     const errorData = JSON.parse(errorText);
                     errorMsg = errorData.error || errorMsg;
                     errorType = errorData.errorType || 'UNKNOWN';
-                    
+
                     // Provide user-friendly messages based on error type
                     if (errorType === 'GATEWAY_TIMEOUT' || errorType === 'GATEWAY_ERROR') {
                         errorMsg = '⚠️ Payment Gateway Unavailable\n\nThe payment service (3thix) is currently experiencing technical difficulties. This is a temporary issue on their end.\n\nPlease try again in a few minutes or contact support if the issue persists.';
@@ -447,7 +447,7 @@ const EthicsPaymentModal = ({
 
     // Calculate NILA amount from USD (amount ÷ 0.08)
     const nilaAmount = amount / 0.08;
-    
+
     // Calculate total NILA (no bonus for card payments)
     const totalNila = paymentMethod === 'crypto' && referralBonus > 0
         ? nilaAmount + (nilaAmount * referralBonus / 100)
@@ -751,8 +751,8 @@ const EthicsPaymentModal = ({
                                     {!loadingTimeout ? (
                                         <div className="text-center space-y-6 py-12">
                                             <div className="flex justify-center relative">
-                                                <div className="absolute inset-0 bg-red-500/10 blur-3xl rounded-full" />
-                                                <div className="relative p-6 bg-red-50 text-red-600 rounded-full animate-pulse border-4 border-red-100">
+                                                <div className="absolute inset-0 bg-slate-500/10 blur-3xl rounded-full" />
+                                                <div className="relative p-6 bg-slate-50 text-slate-600 rounded-full animate-pulse border-4 border-slate-100">
                                                     <Loader2 size={48} className="animate-spin" />
                                                 </div>
                                             </div>

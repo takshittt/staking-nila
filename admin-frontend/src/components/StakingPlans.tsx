@@ -4,6 +4,7 @@ import { CreateAmountConfigModal, CreateLockConfigModal } from './CreatePlanModa
 import type { AmountConfigFormData, LockConfigFormData } from './CreatePlanModal';
 import { stakingApi } from '../api/stakingApi';
 import type { AmountConfig, LockConfig } from '../api/stakingApi';
+import toast from 'react-hot-toast';
 
 const getBadgeStyles = (active: boolean) => {
     return active ? 'bg-green-100 text-green-800' : 'bg-slate-100 text-slate-800';
@@ -62,7 +63,7 @@ const StakingPlans = () => {
             });
             await fetchConfigs();
         } catch (err: any) {
-            alert(err.response?.data?.error || 'Failed to update config');
+            toast.error(err.response?.data?.error || 'Failed to update config');
         } finally {
             setTxPending(false);
         }
@@ -80,7 +81,7 @@ const StakingPlans = () => {
             });
             await fetchConfigs();
         } catch (err: any) {
-            alert(err.response?.data?.error || 'Failed to update config');
+            toast.error(err.response?.data?.error || 'Failed to update config');
         } finally {
             setTxPending(false);
         }
@@ -92,10 +93,10 @@ const StakingPlans = () => {
             const result = await stakingApi.createAmountConfig(data);
             console.log('Transaction hash:', result.txHash);
             await fetchConfigs();
-            alert(`Amount config created! TX: ${result.txHash}`);
+            toast.success(`Amount config created! TX: ${result.txHash.slice(0, 10)}...`);
             handleCloseAmountModal();
         } catch (err: any) {
-            alert(err.response?.data?.error || 'Failed to create config');
+            toast.error(err.response?.data?.error || 'Failed to create config');
         } finally {
             setTxPending(false);
         }
@@ -116,10 +117,10 @@ const StakingPlans = () => {
             });
             console.log('Transaction hash:', result.txHash);
             await fetchConfigs();
-            alert(`Amount config updated! TX: ${result.txHash}`);
+            toast.success(`Amount config updated! TX: ${result.txHash.slice(0, 10)}...`);
             handleCloseAmountModal();
         } catch (err: any) {
-            alert(err.response?.data?.error || 'Failed to update config');
+            toast.error(err.response?.data?.error || 'Failed to update config');
         } finally {
             setTxPending(false);
         }
@@ -131,10 +132,10 @@ const StakingPlans = () => {
             const result = await stakingApi.createLockConfig(data);
             console.log('Transaction hash:', result.txHash);
             await fetchConfigs();
-            alert(`Lock config created! TX: ${result.txHash}`);
+            toast.success(`Lock config created! TX: ${result.txHash.slice(0, 10)}...`);
             handleCloseLockModal();
         } catch (err: any) {
-            alert(err.response?.data?.error || 'Failed to create config');
+            toast.error(err.response?.data?.error || 'Failed to create config');
         } finally {
             setTxPending(false);
         }
@@ -155,10 +156,10 @@ const StakingPlans = () => {
             });
             console.log('Transaction hash:', result.txHash);
             await fetchConfigs();
-            alert(`Lock config updated! TX: ${result.txHash}`);
+            toast.success(`Lock config updated! TX: ${result.txHash.slice(0, 10)}...`);
             handleCloseLockModal();
         } catch (err: any) {
-            alert(err.response?.data?.error || 'Failed to update config');
+            toast.error(err.response?.data?.error || 'Failed to update config');
         } finally {
             setTxPending(false);
         }

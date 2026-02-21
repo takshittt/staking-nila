@@ -7,6 +7,7 @@ import { ContractService } from '../services/contractService';
 import { useWallet } from '../hooks/useWallet';
 import { useAccount } from 'wagmi';
 import EthicsPaymentModal from './EthicsPaymentModal';
+import toast from 'react-hot-toast';
 
 const StakeNila = () => {
     const [selectedPackage, setSelectedPackage] = useState<string | null>(null);
@@ -21,7 +22,7 @@ const StakeNila = () => {
     const [referrerAddress, setReferrerAddress] = useState<string | undefined>(undefined);
     const [paymentMethod, setPaymentMethod] = useState<'crypto' | 'card'>('crypto');
     const [showEthicsModal, setShowEthicsModal] = useState(false);
-    const [cardPaymentError, setCardPaymentError] = useState<string | null>(null);
+    const [, setCardPaymentError] = useState<string | null>(null);
 
     const { address, isConnected, chain } = useAccount();
     const { connect } = useWallet();
@@ -83,7 +84,7 @@ const StakeNila = () => {
 
     const handleStake = async () => {
         if (!selectedPackage || !selectedDuration) {
-            alert('Please select a package and duration');
+            toast.error('Please select a package and duration');
             return;
         }
 
@@ -101,7 +102,7 @@ const StakeNila = () => {
         });
 
         if (!amountConfig || !lockConfig) {
-            alert('Invalid configuration selected');
+            toast.error('Invalid configuration selected');
             return;
         }
 
@@ -125,7 +126,7 @@ const StakeNila = () => {
         }
 
         if (!selectedPackage || !selectedDuration) {
-            alert('Please select a package and duration');
+            toast.error('Please select a package and duration');
             return;
         }
 
@@ -133,18 +134,18 @@ const StakeNila = () => {
         const lockConfig = lockConfigs.find(c => c.lockDuration === selectedDuration);
 
         if (!amountConfig || !lockConfig) {
-            alert('Invalid configuration selected');
+            toast.error('Invalid configuration selected');
             return;
         }
 
         // Convert wei to NILA for display (this is the USD display amount)
         const displayAmount = Number(BigInt(amountConfig.amount) / BigInt(10 ** 18));
-        
+
         // Calculate actual NILA amount user needs to pay (displayAmount ÷ 0.08)
         const nilaAmount = displayAmount / 0.08;
-        
+
         // Convert NILA amount to wei string for contract calls
-        const nilaAmountWei = (BigInt(Math.floor(nilaAmount)) * BigInt(10 ** 18)).toString();
+        // const nilaAmountWei = (BigInt(Math.floor(nilaAmount)) * BigInt(10 ** 18)).toString();
 
         try {
             setStaking(true);
@@ -167,16 +168,16 @@ const StakeNila = () => {
 
                 setApproving(false);
                 setStatusMessage('Approval confirmed! Waiting for blockchain confirmation...');
-                
+
                 // Wait for blockchain to update state
                 await new Promise(resolve => setTimeout(resolve, 3000));
-                
+
                 // Verify approval was successful
                 const verifyAllowance = await ContractService.checkAllowance(address, nilaAmount.toString());
                 if (!verifyAllowance) {
                     throw new Error('Approval verification failed. Please try again.');
                 }
-                
+
                 setStatusMessage('Approval verified! Proceeding to stake...');
             }
 
@@ -213,8 +214,7 @@ const StakeNila = () => {
             });
 
             setStatusMessage('');
-            alert(`Successfully staked ${nilaAmount.toLocaleString()
-                } NILA!\n\nTransaction: ${txHash}`);
+            toast.success(`Successfully staked ${nilaAmount.toLocaleString()} NILA!\nTransaction: ${txHash.slice(0, 10)}...`);
 
             // Reset selections
             setSelectedPackage(null);
@@ -223,7 +223,7 @@ const StakeNila = () => {
         } catch (error: any) {
             console.error('Staking error:', error);
             setStatusMessage('');
-            alert(error.message || 'Failed to stake tokens. Please try again.');
+            toast.error(error.message || 'Failed to stake tokens. Please try again.');
         } finally {
             setStaking(false);
             setApproving(false);
@@ -267,7 +267,7 @@ const StakeNila = () => {
 
             setStatusMessage('');
             setShowEthicsModal(false);
-            alert(`Successfully staked ${data.nilaAmount.toLocaleString()} NILA!\n\nTransaction: ${data.txHash}`);
+            toast.success(`Successfully staked ${data.nilaAmount.toLocaleString()} NILA!\nTransaction: ${data.txHash.slice(0, 10)}...`);
 
             // Reset selections
             setSelectedPackage(null);
@@ -277,7 +277,7 @@ const StakeNila = () => {
             console.error('Card payment staking error:', error);
             setStatusMessage('');
             setCardPaymentError(error.message || 'Failed to complete staking');
-            alert(error.message || 'Failed to stake tokens. Please try again.');
+            toast.error(error.message || 'Failed to stake tokens. Please try again.');
         } finally {
             setStaking(false);
         }
@@ -377,7 +377,7 @@ const StakeNila = () => {
                                     await ContractService.switchToBscTestnet();
                                     setIsCorrectNetwork(true);
                                 } catch (error: any) {
-                                    alert(error.message);
+                                    toast.error(error.message || 'Failed to switch network');
                                 }
                             }}
                             className="px-4 py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 transition-colors font-medium"
@@ -628,7 +628,7 @@ const StakeNila = () => {
             {showEthicsModal && (() => {
                 const amountConfig = amountConfigs.find(c => c.amount === selectedPackage);
                 const lockConfig = lockConfigs.find(c => c.lockDuration === selectedDuration);
-                
+
                 if (!amountConfig || !lockConfig) {
                     console.error('[MODAL] Cannot render: missing configs', { amountConfig, lockConfig });
                     return null;

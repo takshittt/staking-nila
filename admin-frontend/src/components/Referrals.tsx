@@ -2,6 +2,7 @@ import { Users2, AlertCircle, Save, RefreshCw, Link } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { referralApi } from '../api/referralApi';
 import { useAuthStore } from '../stores/authStore';
+import toast from 'react-hot-toast';
 
 interface ReferralStats {
     referralPercentage: number;
@@ -75,7 +76,7 @@ const Referrals = () => {
                 isPaused: response.config.isPaused
             }));
             setBlockchainConfig(response.config);
-            alert('Successfully synced with blockchain!');
+            toast.success('Successfully synced with blockchain!');
         } catch (err: any) {
             console.error('Failed to sync:', err);
             alert('Failed to sync with blockchain');
@@ -97,7 +98,7 @@ const Referrals = () => {
             }));
         } catch (err: any) {
             console.error('Failed to toggle pause:', err);
-            alert('Failed to update pause status');
+            toast.error('Failed to update pause status');
         } finally {
             setIsUpdating(false);
         }
@@ -131,7 +132,7 @@ const Referrals = () => {
             setEditMode(false);
             // Refresh blockchain config after update
             await fetchBlockchainConfig();
-            alert('Configuration updated on blockchain and database!');
+            toast.success('Configuration updated on blockchain and database!');
         } catch (err: any) {
             console.error('Failed to save config:', err);
             alert('Failed to save configuration: ' + err.message);

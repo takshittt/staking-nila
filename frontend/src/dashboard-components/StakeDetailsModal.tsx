@@ -43,27 +43,7 @@ const StakeDetailsModal: React.FC<StakeDetailsModalProps> = ({ stake, onClose, o
         return `${(apy / 100).toFixed(1)}%`;
     };
 
-    const calculateTimeRemaining = (): string => {
-        if (!stake.endDate) return 'N/A';
 
-        const now = new Date();
-        const end = new Date(stake.endDate);
-        const diffMs = end.getTime() - now.getTime();
-
-        if (diffMs <= 0) return 'Available now';
-
-        const days = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-        const hours = Math.floor((diffMs % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-
-        if (days > 0) {
-            return `${days}d ${hours}h`;
-        } else if (hours > 0) {
-            return `${hours}h`;
-        } else {
-            const minutes = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
-            return `${minutes}m`;
-        }
-    };
 
     const handleClaimCashback = async () => {
         if (!address || claiming) return;

@@ -142,7 +142,7 @@ export const dashboardApi = {
             cashbackPercentage = cashbackReward.metadata.rewardPercent;
           } else {
             // Calculate percentage from amount
-            cashbackPercentage = (cashbackAmount / amount) * 100;
+            cashbackPercentage = (cashbackAmount / parseFloat(stake.amount)) * 100;
           }
         }
 

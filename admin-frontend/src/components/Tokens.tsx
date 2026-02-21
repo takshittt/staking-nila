@@ -3,6 +3,7 @@ import { ShieldCheck, AlertTriangle, AlertOctagon, Wallet, ArrowDownCircle, Arro
 import { DepositModal, WithdrawModal } from './TreasuryModals';
 import { treasuryApi } from '../api/treasuryApi';
 import type { TreasuryStats } from '../api/treasuryApi';
+import toast from 'react-hot-toast';
 
 const Tokens = () => {
     const [stats, setStats] = useState<TreasuryStats | null>(null);
@@ -42,7 +43,7 @@ const Tokens = () => {
             // Refresh stats after deposit
             await fetchStats();
         } catch (err: any) {
-            alert(err.response?.data?.error || 'Failed to deposit tokens');
+            toast.error(err.response?.data?.error || 'Failed to deposit tokens');
             console.error('Deposit error:', err);
         } finally {
             setIsProcessing(false);
@@ -57,7 +58,7 @@ const Tokens = () => {
             // Refresh stats after withdrawal
             await fetchStats();
         } catch (err: any) {
-            alert(err.response?.data?.error || 'Failed to withdraw tokens');
+            toast.error(err.response?.data?.error || 'Failed to withdraw tokens');
             console.error('Withdraw error:', err);
         } finally {
             setIsProcessing(false);
