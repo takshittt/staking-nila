@@ -116,13 +116,28 @@ export class AuthService {
 
     // Decrypt 2FA secret
     const decryptedSecret = CryptoService.decrypt(admin.twoFactorSecret);
-    console.log('2FA secret decrypted:', !!decryptedSecret);
+    console.log('2FA secret decrypted:', !!decryptedSecret, 'length:', decryptedSecret.length);
 
     // Verify TOTP code
     const isValidTotp = TotpService.verifyToken(decryptedSecret, totpCode);
     console.log('TOTP validation:', isValidTotp, 'for code:', totpCode);
     
     if (!isValidTotp) {
+      // Try with a wider time window for debugging
+      const speakeasy = require('speakeasy');
+      console.log('Testing with wider windows:');
+      for (let window = 0; window <= 10; window++) {
+        const result = speakeasy.totp.verify({
+          secret: decryptedSecret,
+          encoding: 'base32',
+          token: totpCode,
+          window: window
+        });
+        if (result) {
+          console.log(`  ✓ Code valid with window ${window} (${window * 30}s drift)`);
+          break;
+        }
+      }
       throw new Error('Invalid 2FA code');
     }
 
