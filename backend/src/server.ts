@@ -54,6 +54,18 @@ app.get('/health', (req, res) => {
   res.json({ status: 'ok', message: 'Admin Auth API is running' });
 });
 
+// Debug endpoint - remove in production
+app.get('/debug/env', (req, res) => {
+  res.json({
+    encryptionKeySet: !!process.env.ENCRYPTION_KEY,
+    encryptionKeyLength: process.env.ENCRYPTION_KEY?.length || 0,
+    encryptionKeyFirst10: process.env.ENCRYPTION_KEY?.substring(0, 10) || 'not set',
+    jwtSecretSet: !!process.env.JWT_SECRET,
+    nodeEnv: process.env.NODE_ENV,
+    port: process.env.PORT || '3001'
+  });
+});
+
 // Error handling
 app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
   console.error('Error:', err);

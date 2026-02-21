@@ -114,9 +114,19 @@ export class AuthService {
       throw new Error('Invalid credentials');
     }
 
+    // Debug: Check what's in the database
+    console.log('Encrypted secret from DB (first 50 chars):', admin.twoFactorSecret.substring(0, 50));
+    console.log('Encryption key being used:', process.env.ENCRYPTION_KEY?.substring(0, 10) + '...');
+
     // Decrypt 2FA secret
     const decryptedSecret = CryptoService.decrypt(admin.twoFactorSecret);
     console.log('2FA secret decrypted:', !!decryptedSecret, 'length:', decryptedSecret.length);
+    
+    if (decryptedSecret.length === 0) {
+      console.error('❌ DECRYPTION FAILED - Encryption key mismatch!');
+      console.error('The ENCRYPTION_KEY in your .env does not match the key used during setup.');
+      throw new Error('Invalid 2FA code');
+    }
 
     // Verify TOTP code
     const isValidTotp = TotpService.verifyToken(decryptedSecret, totpCode);
