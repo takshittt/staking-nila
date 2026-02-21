@@ -87,8 +87,15 @@ export class AuthService {
   }
 
   static async login(password: string, totpCode: string) {
+    console.log('AuthService.login called');
+    
     // Get admin
     const admin = await prisma.admin.findUnique({ where: { id: ADMIN_ID } });
+    
+    console.log('Admin lookup:', {
+      found: !!admin,
+      isSetupComplete: admin?.isSetupComplete
+    });
     
     // Strict check: admin must exist AND setup must be complete
     if (!admin) {
@@ -101,15 +108,20 @@ export class AuthService {
 
     // Verify password
     const isValidPassword = await bcrypt.compare(password, admin.passwordHash);
+    console.log('Password validation:', isValidPassword);
+    
     if (!isValidPassword) {
       throw new Error('Invalid credentials');
     }
 
     // Decrypt 2FA secret
     const decryptedSecret = CryptoService.decrypt(admin.twoFactorSecret);
+    console.log('2FA secret decrypted:', !!decryptedSecret);
 
     // Verify TOTP code
     const isValidTotp = TotpService.verifyToken(decryptedSecret, totpCode);
+    console.log('TOTP validation:', isValidTotp, 'for code:', totpCode);
+    
     if (!isValidTotp) {
       throw new Error('Invalid 2FA code');
     }

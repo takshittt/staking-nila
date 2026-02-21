@@ -75,6 +75,13 @@ router.post('/login', async (req, res) => {
   try {
     const { password, totpCode } = req.body;
 
+    console.log('Login attempt:', {
+      hasPassword: !!password,
+      hasTotpCode: !!totpCode,
+      totpCodeLength: totpCode?.length,
+      origin: req.headers.origin
+    });
+
     if (!password || !totpCode) {
       return res.status(400).json({ error: 'Missing required fields' });
     }
@@ -83,6 +90,7 @@ router.post('/login', async (req, res) => {
     
     res.json({ token });
   } catch (error: any) {
+    console.error('Login error:', error.message);
     res.status(401).json({ error: error.message || 'Login failed' });
   }
 });
