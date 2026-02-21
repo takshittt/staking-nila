@@ -1,0 +1,9 @@
+{
+  "network": "bscTestnet",
+  "chainId": "97",
+  "proxy": "0xcC372d7ae02b89852B129d951b1609Bccf7Fd0a2",
+  "oldImplementation": "0xB55978B0a358c466a1CB52fD18B383c49218CF3B",
+  "newImplementation": "0xB55978B0a358c466a1CB52fD18B383c49218CF3B",
+  "upgradedAt": "2026-02-19T13:15:19.874Z",
+  "upgrader": "0x0b23Ad9a0F1Da9b04D43de60a0371501991e33ef"
+}

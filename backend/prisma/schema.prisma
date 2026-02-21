@@ -45,16 +45,16 @@ model ContractCache {
 }
 
 model User {
-  id               String          @id @default(uuid())
-  walletAddress    String          @unique
-  referralCode     String?         @unique
-  referredBy       String?
+  id                String          @id @default(uuid())
+  walletAddress     String          @unique
+  referralCode      String?         @unique
+  referredBy        String?
   isReferralSkipped Boolean         @default(false)
-  status           String          @default("active")
-  firstConnectedAt DateTime        @default(now())
-  lastSeenAt       DateTime        @updatedAt
-  pendingRewards   PendingReward[]
-  stakes           Stake[]
+  status            String          @default("active")
+  firstConnectedAt  DateTime        @default(now())
+  lastSeenAt        DateTime        @updatedAt
+  pendingRewards    PendingReward[]
+  stakes            Stake[]
 
   @@index([walletAddress])
   @@index([referralCode])
@@ -62,20 +62,20 @@ model User {
 }
 
 model Stake {
-  id            String   @id @default(uuid())
-  stakeId       String   @unique
-  userId        String
-  planName      String
-  planVersion   Int
-  amount        Decimal  @db.Decimal(20, 8)
-  apy           Decimal  @db.Decimal(5, 2)
-  startDate     DateTime
-  endDate       DateTime
-  status        String   @default("active")
-  txHash        String?
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-  user          User     @relation(fields: [userId], references: [id])
+  id          String   @id @default(uuid())
+  stakeId     String   @unique
+  userId      String
+  planName    String
+  planVersion Int
+  amount      Decimal  @db.Decimal(20, 8)
+  apy         Decimal  @db.Decimal(5, 2)
+  startDate   DateTime
+  endDate     DateTime
+  status      String   @default("active")
+  txHash      String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  user        User     @relation(fields: [userId], references: [id])
 
   @@index([userId])
   @@index([status])
@@ -141,4 +141,31 @@ model Transaction {
   @@index([status])
   @@index([createdAt])
   @@map("transactions")
+}
+
+model PaymentIntent {
+  id             String   @id @default(uuid())
+  invoiceId      String   @unique
+  intentId       String?  @unique
+  walletAddress  String
+  email          String
+  name           String
+  amount         Decimal  @db.Decimal(10, 2) // USD amount
+  nilaAmount     Decimal  @db.Decimal(20, 8) // Calculated NILA tokens
+  amountConfigId Int
+  lockConfigId   Int
+  status         String   @default("PENDING") // PENDING, SUCCESS, FAILED, CANCELLED
+  paymentMethod  String   @default("CARD")
+  txHash         String? // Blockchain transaction hash after stake creation
+  stakeId        String? // Reference to created stake
+  metadata       Json? // Additional data (billing info, email tracking, etc.)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([invoiceId])
+  @@index([intentId])
+  @@index([walletAddress])
+  @@index([status])
+  @@index([createdAt])
+  @@map("payment_intents")
 }

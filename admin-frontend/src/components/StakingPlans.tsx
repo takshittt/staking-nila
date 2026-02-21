@@ -312,7 +312,7 @@ const StakingPlans = () => {
                                                 #{config.id}
                                             </td>
                                             <td className="px-6 py-4 text-sm font-semibold text-slate-900">
-                                                {formatAmount(config.amount)} NILA
+                                                {formatAmount(config.amount)} USD/USDT
                                             </td>
                                             <td className="px-6 py-4 text-sm text-slate-600">
                                                 {(config.instantRewardBps / 100).toFixed(1)}%

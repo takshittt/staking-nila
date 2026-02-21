@@ -124,4 +124,28 @@ router.post('/unpause', async (req: AuthRequest, res) => {
   }
 });
 
+// ============================================
+// LIABILITY TRACKING
+// ============================================
+
+// Get liability statistics
+router.get('/liabilities', async (req: AuthRequest, res) => {
+  try {
+    const stats = await TreasuryService.getLiabilityStats();
+    res.json(stats);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Get detailed liability breakdown
+router.get('/liabilities/breakdown', async (req: AuthRequest, res) => {
+  try {
+    const breakdown = await TreasuryService.getLiabilityBreakdown();
+    res.json(breakdown);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 export default router;

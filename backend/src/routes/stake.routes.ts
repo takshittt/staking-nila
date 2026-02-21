@@ -40,6 +40,42 @@ router.post('/', async (req, res) => {
   }
 });
 
+// Admin endpoint - create manual stake on-chain
+router.post('/manual', authMiddleware, async (req, res) => {
+  try {
+    const { walletAddress, amount, lockDays, apy, instantRewardPercent } = req.body;
+
+    if (!walletAddress || !amount || !lockDays || !apy) {
+      return res.status(400).json({ error: 'Missing required fields' });
+    }
+
+    const result = await StakeService.createManualStakeOnChain({
+      walletAddress,
+      amount,
+      lockDays,
+      apy,
+      instantRewardPercent
+    });
+
+    res.json({
+      success: true,
+      stake: {
+        stakeId: result.stake.stakeId,
+        amount: Number(result.stake.amount),
+        apy: Number(result.stake.apy),
+        startDate: result.stake.startDate,
+        endDate: result.stake.endDate
+      },
+      txHash: result.txHash,
+      blockNumber: result.blockNumber,
+      onChainStakeId: result.onChainStakeId
+    });
+  } catch (error: any) {
+    console.error('Create manual stake error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Public endpoint - get user stakes
 router.get('/user/:walletAddress', async (req, res) => {
   try {

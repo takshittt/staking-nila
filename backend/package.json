@@ -8,6 +8,7 @@
     "deploy:proxy": "hardhat run scripts/deployProxy.ts",
     "upgrade:proxy": "hardhat run scripts/upgradeProxy.ts",
     "verify:proxy": "hardhat run scripts/verifyProxy.ts",
+    "verify:contracts": "hardhat run scripts/verifyContracts.ts --network bscTestnet",
     "validate:upgrade": "hardhat run scripts/validateUpgrade.ts",
     "test:upgradeable": "hardhat test test/NilaStakingUpgradeable.test.ts",
     "test:upgrade": "hardhat test test/NilaStakingUpgrade.test.ts",

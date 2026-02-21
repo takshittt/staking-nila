@@ -3,8 +3,8 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 
-// Import contract ABI
-const NilaStakingABI = require('../../artifacts/contracts/NilaStaking.sol/NilaStaking.json').abi;
+// Import contract ABI (using upgradeable version)
+const NilaStakingABI = require('../../artifacts/contracts/NilaStakingUpgradeable.sol/NilaStakingUpgradeable.json').abi;
 
 export class BlockchainService {
   private static provider: ethers.JsonRpcProvider;
@@ -533,6 +533,79 @@ export class BlockchainService {
       return receipt.hash;
     } catch (error: any) {
       throw new Error(`Failed to claim all rewards: ${error.message}`);
+    }
+  }
+
+  // Admin Create Stake (without token transfer)
+  static async adminCreateStake(
+    userAddress: string,
+    amount: string,
+    lockDays: number,
+    apr: number,
+    instantRewardBps: number
+  ) {
+    const contract = this.getContract();
+    
+    try {
+      const tx = await contract.adminCreateStake(
+        userAddress,
+        amount,
+        lockDays,
+        apr,
+        instantRewardBps
+      );
+      const receipt = await tx.wait();
+      
+      // Get stake ID from event
+      const event = receipt.logs.find((log: any) => {
+        try {
+          const parsed = contract.interface.parseLog(log);
+          return parsed?.name === 'Staked';
+        } catch {
+          return false;
+        }
+      });
+      
+      let stakeId = null;
+      if (event) {
+        const parsed = contract.interface.parseLog(event);
+        stakeId = Number(parsed?.args[1]); // stakeId is second argument
+      }
+      
+      return {
+        txHash: receipt.hash,
+        blockNumber: receipt.blockNumber,
+        stakeId
+      };
+    } catch (error: any) {
+      throw new Error(`Failed to create admin stake: ${error.message}`);
+    }
+  }
+
+  // Calculate total liabilities (manual stakes not backed by tokens)
+  static async calculateLiabilities() {
+    const contract = this.getContract();
+    
+    try {
+      // Get contract balance and total staked
+      const [contractBalance, totalStaked, availableRewards] = await Promise.all([
+        this.getTreasuryStats().then(stats => BigInt(stats.contractBalance)),
+        contract.totalStaked(),
+        contract.availableRewards()
+      ]);
+      
+      // Liabilities = tokens we owe but don't have
+      // This is an approximation - in reality we'd track manual stakes separately
+      const liabilities = totalStaked > contractBalance ? totalStaked - contractBalance : BigInt(0);
+      
+      return {
+        totalLiabilities: liabilities.toString(),
+        contractBalance: contractBalance.toString(),
+        totalStaked: totalStaked.toString(),
+        availableRewards: availableRewards.toString()
+      };
+    } catch (error: any) {
+      throw new Error(`Failed to calculate liabilities: ${error.message}`);
     }
   }
 }

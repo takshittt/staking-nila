@@ -35,7 +35,7 @@ export const CreateAmountConfigModal = ({
     isEditing = false
 }: CreateAmountConfigModalProps) => {
     const [formData, setFormData] = useState<AmountConfigFormData>({
-        amount: 10000,
+        amount: 100,
         instantRewardPercent: 5,
     });
 
@@ -57,7 +57,7 @@ export const CreateAmountConfigModal = ({
             setFormData(initialData);
         } else if (isOpen && !isEditing) {
             setFormData({
-                amount: 10000,
+                amount: 100,
                 instantRewardPercent: 5,
             });
         }
@@ -88,7 +88,7 @@ export const CreateAmountConfigModal = ({
             // But we need to reset if closing.
             if (!isEditing) {
                 setFormData({
-                    amount: 10000,
+                    amount: 100,
                     instantRewardPercent: 5,
                 });
             }
@@ -140,7 +140,7 @@ export const CreateAmountConfigModal = ({
                     <form onSubmit={handleSubmit} className="p-6 space-y-4">
                         <div>
                             <label className="block text-sm font-medium text-slate-900 mb-2">
-                                Stake Amount (NILA)
+                                Stake Amount (USD/USDT)
                             </label>
                             <input
                                 type="number"
@@ -148,7 +148,7 @@ export const CreateAmountConfigModal = ({
                                 value={formData.amount}
                                 onChange={handleChange}
                                 min="1"
-                                placeholder="e.g., 10000"
+                                placeholder="e.g., 100"
                                 disabled={isEditing}
                                 className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 transition-colors ${errors.amount ? 'border-red-500' : 'border-slate-200'
                                     } ${isEditing ? 'bg-slate-100 cursor-not-allowed' : ''}`}
@@ -156,6 +156,9 @@ export const CreateAmountConfigModal = ({
                             {errors.amount && (
                                 <p className="text-xs text-red-600 mt-1">{errors.amount}</p>
                             )}
+                            <p className="text-xs text-slate-500 mt-1">
+                                Amount users will pay in USD (card) or USDT (crypto). Backend calculates NILA at $0.08 per token.
+                            </p>
                         </div>
 
                         <div>

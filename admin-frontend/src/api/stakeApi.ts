@@ -72,5 +72,30 @@ export const stakeApi = {
     }
 
     return response.json();
+  },
+
+  // Create manual stake on-chain (admin)
+  createManualStake: async (data: {
+    walletAddress: string;
+    amount: number;
+    lockDays: number;
+    apy: number;
+    instantRewardPercent?: number;
+  }, token: string) => {
+    const response = await fetch(`${API_URL}/stakes/manual`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      },
+      body: JSON.stringify(data)
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Failed to create manual stake');
+    }
+
+    return response.json();
   }
 };

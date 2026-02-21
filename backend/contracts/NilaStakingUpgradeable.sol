@@ -237,6 +237,74 @@ contract NilaStakingUpgradeable is
         emit ExcessRewardsWithdrawn(owner(), amount);
     }
 
+    /* ================= ADMIN STAKE CREATION ================= */
+
+    /**
+     * Admin function to manually create a stake without token transfer
+     * Used for manual stake assignments, off-chain payments, or special cases
+     * Note: This creates a liability - tokens must be deposited to cover rewards
+     * 
+     * @param user The address to create the stake for
+     * @param amount The stake amount (in wei)
+     * @param lockDays The lock duration in days
+     * @param apr The APR in basis points (e.g., 1000 = 10%)
+     * @param instantRewardBps Instant reward percentage in basis points (e.g., 500 = 5%)
+     */
+    function adminCreateStake(
+        address user,
+        uint256 amount,
+        uint256 lockDays,
+        uint256 apr,
+        uint256 instantRewardBps
+    ) external onlyOwner nonReentrant {
+        require(user != address(0), "Invalid user");
+        require(amount > 0, "Invalid amount");
+        require(lockDays > 0, "Invalid lock days");
+        require(apr <= 50000, "APR too high");
+        require(instantRewardBps <= BPS, "Invalid reward bps");
+        require(activeStakeCount[user] < MAX_STAKES_PER_USER, "Too many active stakes");
+
+        // Calculate instant reward
+        uint256 instantReward = (amount * instantRewardBps) / BPS;
+
+        // Verify reward pool has enough for instant rewards
+        require(availableRewards() >= instantReward, "Insufficient reward pool");
+
+        // Add instant reward to claimable balance
+        if (instantReward > 0) {
+            claimableInstantRewards[user] += instantReward;
+        }
+
+        // Track unique stakers
+        if (!hasStaked[user]) {
+            hasStaked[user] = true;
+            uniqueStakers++;
+        }
+
+        // Create stake record (without token transfer)
+        uint256 stakeId = userStakes[user].length;
+        uint256 lockDuration = lockDays * 1 days;
+        
+        userStakes[user].push(
+            StakeInfo(
+                amount,
+                block.timestamp,
+                block.timestamp,
+                block.timestamp + lockDuration,
+                apr,
+                instantReward,
+                false
+            )
+        );
+
+        activeStakeCount[user]++;
+        
+        // Note: totalStaked is NOT incremented because no tokens were actually transferred
+        // This keeps the contract's token accounting accurate
+        
+        emit Staked(user, stakeId, amount, 0); // lockId = 0 for manual stakes
+    }
+
     /* ================= USER ================= */
 
     function stake(uint256 amountId, uint256 lockId) external nonReentrant whenNotPaused {

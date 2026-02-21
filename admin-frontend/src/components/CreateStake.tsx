@@ -37,17 +37,23 @@ const CreateStake = () => {
                 throw new Error('All fields are required');
             }
 
-            // Call API
-            await stakeApi.createStake({
-                walletAddress: formData.walletAddress,
-                planName: "Manual Assignment",
-                planVersion: 1,
-                amount: Number(formData.amount),
-                apy: Number(formData.apy),
-                lockDays: Number(formData.lockDays)
-            });
+            // Get auth token
+            const token = localStorage.getItem('admin_token');
+            if (!token) {
+                throw new Error('Not authenticated');
+            }
 
-            setSuccess('Stake created successfully!');
+            // Call API to create manual stake on-chain
+            const result = await stakeApi.createManualStake({
+                walletAddress: formData.walletAddress,
+                amount: Number(formData.amount),
+                lockDays: Number(formData.lockDays),
+                apy: Number(formData.apy),
+                instantRewardPercent: 0 // No instant reward for manual stakes
+            }, token);
+
+            setSuccess(`Stake created successfully! TX: ${result.txHash?.substring(0, 10)}...`);
+            
             // Reset form
             setFormData({
                 walletAddress: '',

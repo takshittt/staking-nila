@@ -22,7 +22,6 @@ const StakeNila = () => {
     const [paymentMethod, setPaymentMethod] = useState<'crypto' | 'card'>('crypto');
     const [showEthicsModal, setShowEthicsModal] = useState(false);
     const [cardPaymentError, setCardPaymentError] = useState<string | null>(null);
-    const [tokenPrice, setTokenPrice] = useState<number>(5); // Default price
 
     const { address, isConnected, chain } = useAccount();
     const { connect } = useWallet();
@@ -88,11 +87,33 @@ const StakeNila = () => {
             return;
         }
 
+        // Validate configs exist
+        const amountConfig = amountConfigs.find(c => c.amount === selectedPackage);
+        const lockConfig = lockConfigs.find(c => c.lockDuration === selectedDuration);
+
+        console.log('[STAKE] Selected values:', {
+            selectedPackage,
+            selectedDuration,
+            amountConfig,
+            lockConfig,
+            amountConfigs,
+            lockConfigs
+        });
+
+        if (!amountConfig || !lockConfig) {
+            alert('Invalid configuration selected');
+            return;
+        }
+
         // Route based on payment method
         if (paymentMethod === 'crypto') {
             await handleCryptoStake();
         } else {
             // Open Ethics payment modal for card payment
+            console.log('[STAKE] Opening modal with IDs:', {
+                amountConfigId: amountConfig.id,
+                lockConfigId: lockConfig.id
+            });
             setShowEthicsModal(true);
         }
     };
@@ -116,7 +137,14 @@ const StakeNila = () => {
             return;
         }
 
-        const amountInNila = Number(BigInt(amountConfig.amount) / BigInt(10 ** 18));
+        // Convert wei to NILA for display (this is the USD display amount)
+        const displayAmount = Number(BigInt(amountConfig.amount) / BigInt(10 ** 18));
+        
+        // Calculate actual NILA amount user needs to pay (displayAmount ÷ 0.08)
+        const nilaAmount = displayAmount / 0.08;
+        
+        // Convert NILA amount to wei string for contract calls
+        const nilaAmountWei = (BigInt(Math.floor(nilaAmount)) * BigInt(10 ** 18)).toString();
 
         try {
             setStaking(true);
@@ -127,17 +155,29 @@ const StakeNila = () => {
 
             setStatusMessage('Checking token allowance...');
 
-            // Check if approval is needed
-            const hasAllowance = await ContractService.checkAllowance(address, amountInNila.toString());
+            // Check if approval is needed (use wei amount)
+            const hasAllowance = await ContractService.checkAllowance(address, nilaAmount.toString());
 
             if (!hasAllowance) {
                 setApproving(true);
                 setStatusMessage('Please approve NILA tokens in your wallet...');
 
-                await ContractService.approveToken(amountInNila.toString());
+                // Approve with wei amount
+                await ContractService.approveToken(nilaAmount.toString());
 
                 setApproving(false);
-                setStatusMessage('Approval confirmed! Proceeding to stake...');
+                setStatusMessage('Approval confirmed! Waiting for blockchain confirmation...');
+                
+                // Wait for blockchain to update state
+                await new Promise(resolve => setTimeout(resolve, 3000));
+                
+                // Verify approval was successful
+                const verifyAllowance = await ContractService.checkAllowance(address, nilaAmount.toString());
+                if (!verifyAllowance) {
+                    throw new Error('Approval verification failed. Please try again.');
+                }
+                
+                setStatusMessage('Approval verified! Proceeding to stake...');
             }
 
             setStatusMessage('Please confirm the staking transaction in your wallet...');
@@ -156,7 +196,7 @@ const StakeNila = () => {
                 walletAddress: address,
                 planName: 'NILA Staking',
                 planVersion: 1,
-                amount: amountInNila,
+                amount: nilaAmount,
                 apy: lockConfig.apr / 100,
                 lockDays: lockConfig.lockDuration,
                 instantRewardPercent: amountConfig.instantRewardBps / 100,
@@ -168,12 +208,12 @@ const StakeNila = () => {
                 txHash,
                 walletAddress: address,
                 type: 'STAKE',
-                amount: amountInNila,
+                amount: nilaAmount,
                 status: 'confirmed'
             });
 
             setStatusMessage('');
-            alert(`Successfully staked ${amountInNila.toLocaleString()
+            alert(`Successfully staked ${nilaAmount.toLocaleString()
                 } NILA!\n\nTransaction: ${txHash}`);
 
             // Reset selections
@@ -206,43 +246,28 @@ const StakeNila = () => {
                 throw new Error('Invalid configuration');
             }
 
-            const amountInNila = Number(BigInt(amountConfig.amount) / BigInt(10 ** 18));
-
             setStatusMessage('Processing your stake...');
 
-            // Stake tokens (no approval needed for card payment)
-            const txHash = await ContractService.stake({
-                amountConfigId: amountConfig.id,
-                lockConfigId: lockConfig.id,
-                referrerAddress
+            // Call verify-intent endpoint - backend will create the stake
+            const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:3001';
+            const response = await fetch(`${API_BASE}/api/verify-intent`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    intent_id: intentId,
+                    invoice_id: invoiceId
+                })
             });
 
-            setStatusMessage('Recording stake in database...');
+            const data = await response.json();
 
-            // Record stake in backend with invoice link
-            await stakingApi.recordStake({
-                walletAddress: address,
-                planName: 'NILA Staking',
-                planVersion: 1,
-                amount: amountInNila,
-                apy: lockConfig.apr / 100,
-                lockDays: lockConfig.lockDuration,
-                instantRewardPercent: 0, // No instant reward for card payments
-                txHash
-            });
-
-            // Record transaction
-            await transactionApi.createTransaction({
-                txHash,
-                walletAddress: address,
-                type: 'STAKE',
-                amount: amountInNila,
-                status: 'confirmed'
-            });
+            if (!response.ok || !data.success) {
+                throw new Error(data.error || 'Failed to verify payment');
+            }
 
             setStatusMessage('');
             setShowEthicsModal(false);
-            alert(`Successfully staked ${amountInNila.toLocaleString()} NILA!\n\nTransaction: ${txHash}`);
+            alert(`Successfully staked ${data.nilaAmount.toLocaleString()} NILA!\n\nTransaction: ${data.txHash}`);
 
             // Reset selections
             setSelectedPackage(null);
@@ -262,7 +287,7 @@ const StakeNila = () => {
     const calculations = useMemo(() => {
         if (!selectedPackage || !selectedDuration) {
             return {
-                amountInNila: 0,
+                amount: 0,
                 instantCashbackAmount: 0,
                 apyRewards: 0,
                 totalRewards: 0,
@@ -277,7 +302,7 @@ const StakeNila = () => {
 
         if (!amountConfig || !lockConfig) {
             return {
-                amountInNila: 0,
+                amount: 0,
                 instantCashbackAmount: 0,
                 apyRewards: 0,
                 totalRewards: 0,
@@ -287,25 +312,25 @@ const StakeNila = () => {
             };
         }
 
-        // Convert wei to NILA (divide by 10^18)
-        const amountInNila = Number(BigInt(amountConfig.amount) / BigInt(10 ** 18));
+        // Use amount directly (admin assigns USD/USDT amount)
+        const amount = Number(BigInt(amountConfig.amount) / BigInt(10 ** 18));
 
         // Convert basis points to percentage (divide by 100)
         // If payment method is card, instant reward is 0
         const instantRewardPercent = paymentMethod === 'card' ? 0 : amountConfig.instantRewardBps / 100;
         const aprPercent = lockConfig.apr / 100;
 
-        // Calculate instant cashback
-        const instantCashbackAmount = Math.floor((amountInNila * instantRewardPercent) / 100);
+        // Calculate instant cashback in USD/USDT
+        const instantCashbackAmount = Math.floor((amount * instantRewardPercent) / 100);
 
-        // Calculate APY rewards using simple interest
+        // Calculate APY rewards in USD/USDT using simple interest
         // Formula: Principal * Rate * Time (in years)
-        const apyRewards = Math.floor(amountInNila * (aprPercent / 100) * (lockConfig.lockDuration / 365));
+        const apyRewards = Math.floor(amount * (aprPercent / 100) * (lockConfig.lockDuration / 365));
 
         const totalRewards = instantCashbackAmount + apyRewards;
 
         return {
-            amountInNila,
+            amount,
             instantCashbackAmount,
             apyRewards,
             totalRewards,
@@ -409,7 +434,7 @@ const StakeNila = () => {
                         <div className="mt-4 bg-yellow-50 border border-yellow-200 rounded-lg p-3 flex items-start gap-3">
                             <Info className="w-5 h-5 text-yellow-600 shrink-0 mt-0.5" />
                             <p className="text-sm text-yellow-800">
-                                No instant cashback will be given when staking with credit card.
+                                No instant cashback or referral rewards will be given when staking with credit card.
                             </p>
                         </div>
                     )}
@@ -424,7 +449,7 @@ const StakeNila = () => {
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         {amountConfigs.map((config) => {
-                            const amountInNila = Number(BigInt(config.amount) / BigInt(10 ** 18));
+                            const amount = Number(BigInt(config.amount) / BigInt(10 ** 18));
                             // Show configured percentage in UI, but calculation will be 0 if card
                             const displayInstantRewardPercent = config.instantRewardBps / 100;
                             const isSelected = selectedPackage === config.amount;
@@ -439,8 +464,10 @@ const StakeNila = () => {
                                         }`}
                                 >
                                     <div className="mb-2">
-                                        <span className="text-2xl font-bold text-slate-900">{amountInNila.toLocaleString()}</span>
-                                        <span className="text-sm font-medium text-slate-500 ml-1">NILA</span>
+                                        <span className="text-2xl font-bold text-slate-900">{amount.toLocaleString()}</span>
+                                        <span className="text-sm font-medium text-slate-500 ml-1">
+                                            {paymentMethod === 'crypto' ? 'USDT' : 'USD'}
+                                        </span>
                                     </div>
 
                                     {paymentMethod === 'crypto' && (
@@ -457,7 +484,7 @@ const StakeNila = () => {
                     <p className="mt-4 text-sm text-slate-500 flex items-center gap-2">
                         <Info size={16} className="text-slate-400" />
                         {paymentMethod === 'card'
-                            ? 'Instant cashback is not available for credit card payments.'
+                            ? 'Instant cashback and referral rewards are not available for credit card payments.'
                             : 'Higher packages unlock additional instant cashback credited immediately after staking.'}
                     </p>
                 </div>
@@ -513,7 +540,10 @@ const StakeNila = () => {
                         <div className="pb-6 border-b border-slate-700/50">
                             <div className="text-slate-400 text-sm mb-1">Selected Package</div>
                             <div className="text-2xl font-bold text-white">
-                                {calculations.amountInNila?.toLocaleString() || 0} NILA
+                                {calculations.amount?.toLocaleString() || 0} {paymentMethod === 'crypto' ? 'USDT' : 'USD'}
+                            </div>
+                            <div className="text-xs text-slate-400 mt-1">
+                                You will receive: {calculations.amount ? (calculations.amount / 0.08).toLocaleString() : 0} NILA
                             </div>
                         </div>
 
@@ -540,12 +570,12 @@ const StakeNila = () => {
                                     </span>
                                 </span>
                                 <span className={`font-bold ${calculations.instantCashbackAmount > 0 ? 'text-green-400' : 'text-slate-500'}`}>
-                                    {calculations.instantCashbackAmount.toLocaleString()} NILA
+                                    {calculations.instantCashbackAmount.toLocaleString()} {paymentMethod === 'crypto' ? 'USDT' : 'USD'}
                                 </span>
                             </div>
                             <div className="flex justify-between items-center">
                                 <span className="text-slate-400 text-sm">APR ({calculations.aprPercent}%)</span>
-                                <span className="text-green-400 font-bold">{calculations.apyRewards.toLocaleString()} NILA</span>
+                                <span className="text-green-400 font-bold">{calculations.apyRewards.toLocaleString()} {paymentMethod === 'crypto' ? 'USDT' : 'USD'}</span>
                             </div>
                         </div>
 
@@ -553,7 +583,7 @@ const StakeNila = () => {
                         <div className="bg-slate-800/50 rounded-xl p-4 border border-slate-700">
                             <div className="text-slate-400 text-sm mb-1">Estimated Total Rewards</div>
                             <div className="text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-yellow-200 to-yellow-500">
-                                {calculations.totalRewards.toLocaleString()} NILA
+                                {calculations.totalRewards.toLocaleString()} {paymentMethod === 'crypto' ? 'USDT' : 'USD'}
                             </div>
                         </div>
 
@@ -565,6 +595,7 @@ const StakeNila = () => {
                                 <p>• Instant cashback is credited immediately.</p>
                             )}
                             <p>• APR rewards accumulate and are claimable at maturity.</p>
+                            <p>• Backend will calculate NILA amount based on $0.08 per NILA.</p>
                         </div>
 
                         {/* Action Button */}
@@ -594,19 +625,34 @@ const StakeNila = () => {
             </div>
 
             {/* Ethics Payment Modal */}
-            <EthicsPaymentModal
-                show={showEthicsModal}
-                amount={calculations.amountInNila}
-                usdPrice={calculations.amountInNila * tokenPrice}
-                referralBonus={referrerAddress ? 3 : 0}
-                paymentMethod={paymentMethod}
-                onSuccess={handleCardPaymentSuccess}
-                onCancel={() => {
-                    setShowEthicsModal(false);
-                    setCardPaymentError(null);
-                }}
-                onError={(error) => setCardPaymentError(error)}
-            />
+            {showEthicsModal && (() => {
+                const amountConfig = amountConfigs.find(c => c.amount === selectedPackage);
+                const lockConfig = lockConfigs.find(c => c.lockDuration === selectedDuration);
+                
+                if (!amountConfig || !lockConfig) {
+                    console.error('[MODAL] Cannot render: missing configs', { amountConfig, lockConfig });
+                    return null;
+                }
+
+                return (
+                    <EthicsPaymentModal
+                        show={showEthicsModal}
+                        amount={calculations.amount}
+                        usdPrice={calculations.amount}
+                        referralBonus={referrerAddress ? 3 : 0}
+                        paymentMethod={paymentMethod}
+                        amountConfigId={amountConfig.id}
+                        lockConfigId={lockConfig.id}
+                        walletAddress={address}
+                        onSuccess={handleCardPaymentSuccess}
+                        onCancel={() => {
+                            setShowEthicsModal(false);
+                            setCardPaymentError(null);
+                        }}
+                        onError={(error) => setCardPaymentError(error)}
+                    />
+                );
+            })()}
         </div>
     );
 };

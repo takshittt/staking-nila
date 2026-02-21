@@ -105,4 +105,16 @@ export const treasuryApi = {
     const response = await api.post('/treasury/unpause');
     return response.data;
   },
+
+  // Get liability statistics
+  getLiabilities: async () => {
+    const response = await api.get('/treasury/liabilities');
+    return response.data;
+  },
+
+  // Get detailed liability breakdown
+  getLiabilitiesBreakdown: async () => {
+    const response = await api.get('/treasury/liabilities/breakdown');
+    return response.data;
+  },
 };

@@ -140,7 +140,7 @@ export class ContractService {
       const tx = await tokenContract.approve(STAKING_CONTRACT_ADDRESS, amountWei);
       console.log('Approval transaction sent:', tx.hash);
 
-      await tx.wait();
+      const receipt = await tx.wait();
       console.log('Approval confirmed');
 
       return tx.hash;
@@ -187,7 +187,7 @@ export class ContractService {
 
       // Wait for confirmation
       const receipt = await tx.wait();
-      console.log('Stake confirmed:', receipt);
+      console.log('Stake confirmed');
 
       return tx.hash;
     } catch (error: any) {
@@ -198,6 +198,8 @@ export class ContractService {
         throw new Error('Transaction rejected by user');
       } else if (error.message?.includes('insufficient funds')) {
         throw new Error('Insufficient funds for transaction');
+      } else if (error.message?.includes('insufficient allowance')) {
+        throw new Error('Insufficient token allowance. Please try approving again.');
       } else if (error.message?.includes('Invalid amount config')) {
         throw new Error('Invalid staking package selected');
       } else if (error.message?.includes('Invalid lock config')) {

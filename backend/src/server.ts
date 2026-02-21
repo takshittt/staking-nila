@@ -9,6 +9,9 @@ import referralRoutes from './routes/referral.routes';
 import treasuryRoutes from './routes/treasury.routes';
 import rewardRoutes from './routes/reward.routes';
 import transactionRoutes from './routes/transaction.routes';
+import paymentRoutes from './routes/payment.routes';
+import cryptoStakeRoutes from './routes/crypto-stake.routes';
+import webhookRoutes from './routes/webhook.routes';
 import { BlockchainService } from './services/blockchain.service';
 
 // Load environment variables
@@ -42,6 +45,9 @@ app.use('/api/referrals', referralRoutes);
 app.use('/api/treasury', treasuryRoutes);
 app.use('/api/rewards', rewardRoutes);
 app.use('/api/transactions', transactionRoutes);
+app.use('/api/crypto-stakes', cryptoStakeRoutes);
+app.use('/api/webhooks', webhookRoutes);
+app.use('/api', paymentRoutes);
 
 // Health check
 app.get('/health', (req, res) => {

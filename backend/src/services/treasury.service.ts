@@ -312,4 +312,127 @@ export class TreasuryService {
       }
     });
   }
+
+  // Get liability statistics
+  static async getLiabilityStats() {
+    try {
+      const liabilities = await BlockchainService.calculateLiabilities();
+      
+      // Get manual stakes from database (stakes without actual token backing)
+      const manualStakes = await prisma.stake.findMany({
+        where: {
+          planName: 'Manual Assignment',
+          status: 'active'
+        },
+        include: {
+          user: true
+        }
+      });
+
+      const totalManualStakeAmount = manualStakes.reduce(
+        (sum, stake) => sum + Number(stake.amount),
+        0
+      );
+
+      // Calculate instant rewards owed for manual stakes
+      const instantRewardsOwed = await prisma.pendingReward.aggregate({
+        where: {
+          status: 'pending',
+          type: 'INSTANT_CASHBACK',
+          sourceId: {
+            in: manualStakes.map(s => s.stakeId)
+          }
+        },
+        _sum: {
+          amount: true
+        }
+      });
+
+      const liabilitiesWei = BigInt(liabilities.totalLiabilities);
+      const contractBalanceWei = BigInt(liabilities.contractBalance);
+      const availableRewardsWei = BigInt(liabilities.availableRewards);
+
+      // Calculate coverage ratio
+      const coverageRatio = liabilitiesWei > 0
+        ? Number(availableRewardsWei) / Number(liabilitiesWei)
+        : 999;
+
+      let healthStatus: 'healthy' | 'warning' | 'critical';
+      if (coverageRatio < 0.5) healthStatus = 'critical';
+      else if (coverageRatio < 1) healthStatus = 'warning';
+      else healthStatus = 'healthy';
+
+      return {
+        totalLiabilities: liabilities.totalLiabilities,
+        totalManualStakes: manualStakes.length,
+        totalManualStakeAmount: totalManualStakeAmount.toString(),
+        instantRewardsOwed: (Number(instantRewardsOwed._sum.amount || 0)).toString(),
+        contractBalance: liabilities.contractBalance,
+        availableRewards: liabilities.availableRewards,
+        coverageRatio: Math.min(coverageRatio, 999),
+        healthStatus
+      };
+    } catch (error: any) {
+      throw new Error(`Failed to get liability stats: ${error.message}`);
+    }
+  }
+
+  // Get detailed liability breakdown
+  static async getLiabilityBreakdown() {
+    try {
+      const manualStakes = await prisma.stake.findMany({
+        where: {
+          planName: 'Manual Assignment',
+          status: 'active'
+        },
+        include: {
+          user: true
+        },
+        orderBy: {
+          createdAt: 'desc'
+        }
+      });
+
+      const breakdown = await Promise.all(
+        manualStakes.map(async (stake) => {
+          // Get pending rewards for this stake
+          const pendingRewards = await prisma.pendingReward.findMany({
+            where: {
+              sourceId: stake.stakeId,
+              status: 'pending'
+            }
+          });
+
+          const totalRewardsOwed = pendingRewards.reduce(
+            (sum, reward) => sum + Number(reward.amount),
+            0
+          );
+
+          return {
+            stakeId: stake.stakeId,
+            walletAddress: stake.user.walletAddress,
+            amount: Number(stake.amount),
+            apy: Number(stake.apy),
+            lockDays: Math.round(
+              (stake.endDate.getTime() - stake.startDate.getTime()) / (1000 * 60 * 60 * 24)
+            ),
+            startDate: stake.startDate.toISOString(),
+            endDate: stake.endDate.toISOString(),
+            rewardsOwed: totalRewardsOwed,
+            txHash: stake.txHash,
+            createdAt: stake.createdAt.toISOString()
+          };
+        })
+      );
+
+      return {
+        manualStakes: breakdown,
+        totalCount: breakdown.length,
+        totalAmount: breakdown.reduce((sum, s) => sum + s.amount, 0),
+        totalRewardsOwed: breakdown.reduce((sum, s) => sum + s.rewardsOwed, 0)
+      };
+    } catch (error: any) {
+      throw new Error(`Failed to get liability breakdown: ${error.message}`);
+    }
+  }
 }

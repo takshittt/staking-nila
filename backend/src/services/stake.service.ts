@@ -1,5 +1,7 @@
 import { PrismaClient } from '@prisma/client';
 import { RewardService } from './reward.service';
+import { BlockchainService } from './blockchain.service';
+import { ethers } from 'ethers';
 
 const prisma = new PrismaClient();
 
@@ -140,6 +142,56 @@ export class StakeService {
     }
 
     return stake;
+  }
+
+  // Create manual stake on-chain (admin only)
+  static async createManualStakeOnChain(data: {
+    walletAddress: string;
+    amount: number;
+    lockDays: number;
+    apy: number;
+    instantRewardPercent?: number;
+  }) {
+    const normalizedAddress = data.walletAddress.toLowerCase();
+
+    // Convert amount to wei
+    const amountWei = ethers.parseUnits(data.amount.toString(), 18).toString();
+    
+    // Convert APY percentage to basis points (e.g., 10% = 1000 bps)
+    const aprBps = Math.floor(data.apy * 100);
+    
+    // Convert instant reward percentage to basis points
+    const instantRewardBps = data.instantRewardPercent 
+      ? Math.floor(data.instantRewardPercent * 100) 
+      : 0;
+
+    // Call smart contract to create stake
+    const result = await BlockchainService.adminCreateStake(
+      normalizedAddress,
+      amountWei,
+      data.lockDays,
+      aprBps,
+      instantRewardBps
+    );
+
+    // Create database record
+    const stake = await this.createStake({
+      walletAddress: normalizedAddress,
+      planName: 'Manual Assignment',
+      planVersion: 1,
+      amount: data.amount,
+      apy: data.apy,
+      lockDays: data.lockDays,
+      instantRewardPercent: data.instantRewardPercent,
+      txHash: result.txHash
+    });
+
+    return {
+      stake,
+      txHash: result.txHash,
+      blockNumber: result.blockNumber,
+      onChainStakeId: result.stakeId
+    };
   }
 
   // Get all stakes

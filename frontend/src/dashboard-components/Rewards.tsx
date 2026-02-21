@@ -246,7 +246,7 @@ const Rewards = () => {
                     <div className="text-3xl font-bold text-slate-900 relative z-10">
                         {rewards?.stakingRewards.toFixed(2) || '0'} <span className="text-sm font-medium text-slate-400">NILA</span>
                     </div>
-                    <p className="text-xs text-slate-400 mt-2 relative z-10">Accumulating daily</p>
+                    <p className="text-xs text-slate-400 mt-2 relative z-10">Claim from Stakes page</p>
                 </div>
 
                 {/* Referral Rewards Card */}
@@ -287,8 +287,9 @@ const Rewards = () => {
                         <div>
                             <h2 className="text-slate-400 text-sm font-medium uppercase tracking-wider mb-2">Total Claimable Balance</h2>
                             <div className="text-5xl md:text-6xl font-black text-white mb-2 tracking-tight">
-                                {rewards?.totalClaimable.toFixed(2) || '0'} <span className="text-2xl font-bold text-slate-500">NILA</span>
+                                {((rewards?.instantCashback || 0) + (rewards?.referralRewards || 0)).toFixed(2)} <span className="text-2xl font-bold text-slate-500">NILA</span>
                             </div>
+                            <p className="text-xs text-slate-400 mt-2">Staking rewards ({rewards?.stakingRewards.toFixed(2) || '0'} NILA) are claimed per stake</p>
                         </div>
 
                         <div className="flex flex-wrap items-center justify-center md:justify-start gap-3">
@@ -297,12 +298,12 @@ const Rewards = () => {
                                 {rewards?.instantCashback.toFixed(2) || '0'} Instant
                             </div>
                             <div className="inline-flex items-center gap-2 bg-slate-800/80 text-slate-300 px-3 py-1.5 rounded-lg border border-slate-700 text-sm">
-                                <span className="w-2 h-2 rounded-full bg-blue-500"></span>
-                                {rewards?.stakingRewards.toFixed(2) || '0'} Staking
-                            </div>
-                            <div className="inline-flex items-center gap-2 bg-slate-800/80 text-slate-300 px-3 py-1.5 rounded-lg border border-slate-700 text-sm">
                                 <span className="w-2 h-2 rounded-full bg-purple-500"></span>
                                 {rewards?.referralRewards.toFixed(2) || '0'} Referral
+                            </div>
+                            <div className="inline-flex items-center gap-2 bg-slate-800/80 text-slate-400 px-3 py-1.5 rounded-lg border border-slate-700 text-sm">
+                                <span className="w-2 h-2 rounded-full bg-blue-500"></span>
+                                {rewards?.stakingRewards.toFixed(2) || '0'} Staking (claim per stake)
                             </div>
                         </div>
                     </div>
@@ -310,9 +311,9 @@ const Rewards = () => {
                     <div className="w-full md:w-auto flex flex-col items-center gap-4">
                         <button
                             onClick={() => handleClaim('ALL')}
-                            disabled={!rewards || rewards.totalClaimable === 0 || isClaiming}
+                            disabled={!rewards || (rewards.instantCashback + rewards.referralRewards) === 0 || isClaiming}
                             className={`w-full md:w-72 py-4 px-6 rounded-xl font-bold text-lg transition-all shadow-lg flex items-center justify-center gap-2
-                                ${rewards && rewards.totalClaimable > 0
+                                ${rewards && (rewards.instantCashback + rewards.referralRewards) > 0
                                     ? 'bg-gradient-to-r from-red-600 to-red-500 hover:from-red-500 hover:to-red-400 text-white hover:shadow-red-600/30 active:scale-[0.98]'
                                     : 'bg-slate-800 text-slate-500 cursor-not-allowed border border-slate-700'
                                 }`}
@@ -322,7 +323,7 @@ const Rewards = () => {
                             ) : (
                                 <>
                                     <CheckCircle size={24} />
-                                    Claim All Rewards
+                                    Claim Instant + Referral
                                 </>
                             )}
                         </button>
