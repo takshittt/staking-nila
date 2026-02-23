@@ -1,4 +1,4 @@
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
+import api from './axiosConfig';
 
 export const stakeApi = {
   // Create stake (public endpoint)
@@ -11,67 +11,26 @@ export const stakeApi = {
     lockDays: number;
     txHash?: string;
   }) => {
-    const response = await fetch(`${API_URL}/stakes`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data)
-    });
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error || 'Failed to create stake');
-    }
-
-    return response.json();
+    const response = await api.post('/stakes', data);
+    return response.data;
   },
 
   // Get all stakes (admin)
-  getAllStakes: async (token: string) => {
-    const response = await fetch(`${API_URL}/stakes`, {
-      headers: {
-        'Authorization': `Bearer ${token}`
-      }
-    });
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error || 'Failed to fetch stakes');
-    }
-
-    return response.json();
+  getAllStakes: async () => {
+    const response = await api.get('/stakes');
+    return response.data;
   },
 
   // Get user stakes (admin)
-  getUserStakes: async (walletAddress: string, token: string) => {
-    const response = await fetch(`${API_URL}/stakes/user/${walletAddress}`, {
-      headers: {
-        'Authorization': `Bearer ${token}`
-      }
-    });
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error || 'Failed to fetch user stakes');
-    }
-
-    return response.json();
+  getUserStakes: async (walletAddress: string) => {
+    const response = await api.get(`/stakes/user/${walletAddress}`);
+    return response.data;
   },
 
   // Complete stake (admin)
-  completeStake: async (stakeId: string, token: string) => {
-    const response = await fetch(`${API_URL}/stakes/${stakeId}/complete`, {
-      method: 'PATCH',
-      headers: {
-        'Authorization': `Bearer ${token}`
-      }
-    });
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error || 'Failed to complete stake');
-    }
-
-    return response.json();
+  completeStake: async (stakeId: string) => {
+    const response = await api.patch(`/stakes/${stakeId}/complete`);
+    return response.data;
   },
 
   // Create manual stake on-chain (admin)
@@ -81,21 +40,8 @@ export const stakeApi = {
     lockDays: number;
     apy: number;
     instantRewardPercent?: number;
-  }, token: string) => {
-    const response = await fetch(`${API_URL}/stakes/manual`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`
-      },
-      body: JSON.stringify(data)
-    });
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error || 'Failed to create manual stake');
-    }
-
-    return response.json();
+  }) => {
+    const response = await api.post('/stakes/manual', data);
+    return response.data;
   }
 };

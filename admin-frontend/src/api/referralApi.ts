@@ -1,65 +1,28 @@
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
+import api from './axiosConfig';
 
 export const referralApi = {
   // Get config (public)
   getConfig: async () => {
-    const response = await fetch(`${API_URL}/referrals/config`);
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error || 'Failed to fetch referral config');
-    }
-
-    return response.json();
+    const response = await api.get('/referrals/config');
+    return response.data;
   },
 
   // Get blockchain config (admin)
-  getBlockchainConfig: async (token: string) => {
-    const response = await fetch(`${API_URL}/referrals/config/blockchain`, {
-      headers: {
-        'Authorization': `Bearer ${token}`
-      }
-    });
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error || 'Failed to fetch blockchain config');
-    }
-
-    return response.json();
+  getBlockchainConfig: async () => {
+    const response = await api.get('/referrals/config/blockchain');
+    return response.data;
   },
 
   // Sync with blockchain (admin)
-  syncWithBlockchain: async (token: string) => {
-    const response = await fetch(`${API_URL}/referrals/sync`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${token}`
-      }
-    });
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error || 'Failed to sync with blockchain');
-    }
-
-    return response.json();
+  syncWithBlockchain: async () => {
+    const response = await api.post('/referrals/sync');
+    return response.data;
   },
 
   // Get stats (admin)
-  getStats: async (token: string) => {
-    const response = await fetch(`${API_URL}/referrals/stats`, {
-      headers: {
-        'Authorization': `Bearer ${token}`
-      }
-    });
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error || 'Failed to fetch referral stats');
-    }
-
-    return response.json();
+  getStats: async () => {
+    const response = await api.get('/referrals/stats');
+    return response.data;
   },
 
   // Update config (admin) - updates both blockchain and database
@@ -68,39 +31,15 @@ export const referralApi = {
       referralPercentage?: number;
       referrerPercentage?: number;
       isPaused?: boolean;
-    },
-    token: string
-  ) => {
-    const response = await fetch(`${API_URL}/referrals/config`, {
-      method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`
-      },
-      body: JSON.stringify(data)
-    });
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error || 'Failed to update referral config');
     }
-
-    return response.json();
+  ) => {
+    const response = await api.put('/referrals/config', data);
+    return response.data;
   },
 
   // Get wallet referrals (admin)
-  getWalletReferrals: async (walletAddress: string, token: string) => {
-    const response = await fetch(`${API_URL}/referrals/wallet/${walletAddress}`, {
-      headers: {
-        'Authorization': `Bearer ${token}`
-      }
-    });
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error || 'Failed to fetch wallet referrals');
-    }
-
-    return response.json();
+  getWalletReferrals: async (walletAddress: string) => {
+    const response = await api.get(`/referrals/wallet/${walletAddress}`);
+    return response.data;
   }
 };

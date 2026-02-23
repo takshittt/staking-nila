@@ -38,7 +38,6 @@ export async function sendPaymentSuccessEmail(params: PaymentSuccessParams): Pro
     const { BREVO_API_KEY, EMAIL_FROM } = getEnv();
 
     if (!to || !BREVO_API_KEY) {
-        console.warn('[EMAIL] Missing email recipient or BREVO_API_KEY');
         return false;
     }
 
@@ -46,8 +45,6 @@ export async function sendPaymentSuccessEmail(params: PaymentSuccessParams): Pro
     const senderName = "NILA Payments";
 
     try {
-        console.log(`📧 [EMAIL] Sending customer email to: ${to}`);
-
         const payload = {
             sender: { email: senderEmail, name: senderName },
             to: [{ email: to, name: name || "" }],
@@ -92,7 +89,6 @@ export async function sendPaymentSuccessEmail(params: PaymentSuccessParams): Pro
         });
 
         const result = await response.json() as { messageId?: string };
-        console.log('[EMAIL] Brevo user response:', { status: response.status, messageId: result.messageId });
 
         if (!response.ok || !result.messageId) {
             throw new Error('BREVO_EMAIL_FAILED');
@@ -100,7 +96,6 @@ export async function sendPaymentSuccessEmail(params: PaymentSuccessParams): Pro
 
         return true;
     } catch (error: any) {
-        console.error("[EMAIL] Customer email error:", error.message);
         throw error;
     }
 }
@@ -140,13 +135,10 @@ export async function sendAdminPaymentNotification(params: AdminNotificationPara
     const adminEmail = ADMIN_EMAIL || "admin@nila.com";
 
     if (!BREVO_API_KEY) {
-        console.warn('[EMAIL] Missing BREVO_API_KEY for admin notification');
         return false;
     }
 
     try {
-        console.log(`📧 [EMAIL] Sending admin notification to: ${adminEmail}`);
-
         const htmlContent = `
             <!DOCTYPE html>
             <html>
@@ -200,14 +192,11 @@ export async function sendAdminPaymentNotification(params: AdminNotificationPara
         const result = await response.json() as { messageId?: string };
 
         if (!response.ok) {
-            console.error("[EMAIL] Brevo admin error:", response.status, result);
             return false;
         }
 
-        console.log(`[EMAIL] Admin notification sent, messageId=${result.messageId}`);
         return true;
     } catch (error: any) {
-        console.error("[EMAIL] Admin email error:", error.message);
         // Don't throw - admin email failure shouldn't block the flow
         return false;
     }
@@ -217,8 +206,6 @@ export async function sendAdminPaymentNotification(params: AdminNotificationPara
  * Process successful payment - sends emails with idempotency check
  */
 export async function processSuccessfulPayment(invoiceId: string): Promise<{ success: boolean; emailSent: boolean }> {
-    console.log(`🎯 [EMAIL] Processing successful payment for invoice: ${invoiceId}`);
-
     try {
         // Get payment intent from database
         const paymentIntent = await prisma.paymentIntent.findUnique({
@@ -226,21 +213,18 @@ export async function processSuccessfulPayment(invoiceId: string): Promise<{ suc
         });
 
         if (!paymentIntent) {
-            console.error(`[EMAIL] PaymentIntent not found: ${invoiceId}`);
             return { success: false, emailSent: false };
         }
 
         // Check if already sent (idempotency)
         const metadata = paymentIntent.metadata as any;
         if (metadata?.emailSentToUser === true) {
-            console.log(`[EMAIL] Email already sent for invoice ${invoiceId}`);
             return { success: true, emailSent: true };
         }
 
         const { email, name, amount, nilaAmount, walletAddress, txHash, stakeId } = paymentIntent;
 
         if (!email) {
-            console.error(`[EMAIL] No email found for invoice ${invoiceId}`);
             return { success: false, emailSent: false };
         }
 
@@ -269,8 +253,6 @@ export async function processSuccessfulPayment(invoiceId: string): Promise<{ suc
             }
         });
 
-        console.log(`[EMAIL] User email sent and marked for invoice ${invoiceId}`);
-
         // Send admin notification (non-blocking)
         sendAdminPaymentNotification({
             invoiceId,
@@ -283,13 +265,12 @@ export async function processSuccessfulPayment(invoiceId: string): Promise<{ suc
             txHash: txHash || '',
             stakeId: stakeId || ''
         }).catch(err => {
-            console.error('[EMAIL] Admin notification failed (non-blocking):', err.message);
+            // Admin notification failed (non-blocking)
         });
 
         return { success: true, emailSent: true };
 
     } catch (error: any) {
-        console.error(`[EMAIL] Error processing payment for ${invoiceId}:`, error.message);
         return { success: false, emailSent: false };
     }
 }

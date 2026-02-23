@@ -6,6 +6,8 @@ import { dashboardApi, type DashboardStats, type StakeWithRewards } from '../ser
 import { ContractService } from '../services/contractService';
 import { rewardApi } from '../services/rewardApi';
 import { transactionApi } from '../services/transactionApi';
+import { handleError } from '../utils/errorHandler';
+import toast from 'react-hot-toast';
 
 interface HomeDashboardProps {
     onNavigate: (tab: string) => void;
@@ -19,7 +21,6 @@ const HomeDashboard: React.FC<HomeDashboardProps> = ({ onNavigate }) => {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [claimingStakeId, setClaimingStakeId] = useState<string | null>(null);
-    const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
     useEffect(() => {
         if (address) {
@@ -40,8 +41,8 @@ const HomeDashboard: React.FC<HomeDashboardProps> = ({ onNavigate }) => {
             setStats(statsData);
             setActiveStakes(stakesData);
         } catch (err: any) {
-            console.error('Failed to load dashboard data:', err);
-            setError('Failed to load dashboard data');
+            const errorMsg = handleError(err, 'Failed to load dashboard data');
+            setError(errorMsg);
         } finally {
             setLoading(false);
         }
@@ -101,14 +102,13 @@ const HomeDashboard: React.FC<HomeDashboardProps> = ({ onNavigate }) => {
                 // The claim already succeeded on-chain
             }
 
-            setSuccessMessage(`Successfully claimed ${cashbackAmount.toFixed(2)} NILA cashback!`);
-            setTimeout(() => setSuccessMessage(null), 5000);
+            toast.success(`Successfully claimed ${cashbackAmount.toFixed(2)} NILA cashback!`);
 
             // 4. Reload dashboard data to update UI
             await loadDashboardData();
         } catch (err: any) {
-            console.error('Error claiming cashback:', err);
-            setError(err.message || 'Failed to claim instant cashback');
+            const errorMsg = handleError(err, 'Failed to claim instant cashback');
+            setError(errorMsg);
             setTimeout(() => setError(null), 5000);
         } finally {
             setClaimingStakeId(null);
@@ -140,14 +140,6 @@ const HomeDashboard: React.FC<HomeDashboardProps> = ({ onNavigate }) => {
                         <RefreshCw className="w-5 h-5 text-slate-400" />
                     </button>
                 </div>
-
-                {/* Success Message */}
-                {successMessage && (
-                    <div className="bg-green-50 border border-green-200 rounded-lg p-4 flex items-center gap-2">
-                        <CheckCircle className="w-5 h-5 text-green-600" />
-                        <p className="text-green-800 text-sm font-medium">{successMessage}</p>
-                    </div>
-                )}
 
                 {/* Error Message */}
                 {error && (

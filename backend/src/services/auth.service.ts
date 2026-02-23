@@ -87,15 +87,8 @@ export class AuthService {
   }
 
   static async login(password: string, totpCode: string) {
-    console.log('AuthService.login called');
-    
     // Get admin
     const admin = await prisma.admin.findUnique({ where: { id: ADMIN_ID } });
-    
-    console.log('Admin lookup:', {
-      found: !!admin,
-      isSetupComplete: admin?.isSetupComplete
-    });
     
     // Strict check: admin must exist AND setup must be complete
     if (!admin) {
@@ -108,46 +101,22 @@ export class AuthService {
 
     // Verify password
     const isValidPassword = await bcrypt.compare(password, admin.passwordHash);
-    console.log('Password validation:', isValidPassword);
     
     if (!isValidPassword) {
       throw new Error('Invalid credentials');
     }
 
-    // Debug: Check what's in the database
-    console.log('Encrypted secret from DB (first 50 chars):', admin.twoFactorSecret.substring(0, 50));
-    console.log('Encryption key being used:', process.env.ENCRYPTION_KEY?.substring(0, 10) + '...');
-
     // Decrypt 2FA secret
     const decryptedSecret = CryptoService.decrypt(admin.twoFactorSecret);
-    console.log('2FA secret decrypted:', !!decryptedSecret, 'length:', decryptedSecret.length);
     
     if (decryptedSecret.length === 0) {
-      console.error('❌ DECRYPTION FAILED - Encryption key mismatch!');
-      console.error('The ENCRYPTION_KEY in your .env does not match the key used during setup.');
       throw new Error('Invalid 2FA code');
     }
 
     // Verify TOTP code
     const isValidTotp = TotpService.verifyToken(decryptedSecret, totpCode);
-    console.log('TOTP validation:', isValidTotp, 'for code:', totpCode);
     
     if (!isValidTotp) {
-      // Try with a wider time window for debugging
-      const speakeasy = require('speakeasy');
-      console.log('Testing with wider windows:');
-      for (let window = 0; window <= 10; window++) {
-        const result = speakeasy.totp.verify({
-          secret: decryptedSecret,
-          encoding: 'base32',
-          token: totpCode,
-          window: window
-        });
-        if (result) {
-          console.log(`  ✓ Code valid with window ${window} (${window * 30}s drift)`);
-          break;
-        }
-      }
       throw new Error('Invalid 2FA code');
     }
 

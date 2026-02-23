@@ -67,10 +67,6 @@ export class TreasuryService {
           );
           totalPending += BigInt(userRewards.totalPendingRewards);
         } catch (error) {
-          console.error(
-            `Error calculating pending for ${stake.user.walletAddress}:`,
-            error
-          );
           // Continue with other users even if one fails
         }
       }
@@ -101,7 +97,6 @@ export class TreasuryService {
 
       return finalResult;
     } catch (error: any) {
-      console.error('Error calculating all pending rewards:', error);
       // Return 0 if calculation fails to prevent blocking
       return '0';
     }

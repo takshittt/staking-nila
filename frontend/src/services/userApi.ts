@@ -4,28 +4,20 @@ export const userApi = {
   // Connect wallet - register user in database
   connectWallet: async (walletAddress: string, referralCode?: string) => {
     try {
-      console.log('📡 Calling API:', `${API_URL}/users/connect`);
-      console.log('📤 Payload:', { walletAddress, referralCode });
-
       const response = await fetch(`${API_URL}/users/connect`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ walletAddress, referralCode })
       });
 
-      console.log('📥 Response status:', response.status);
-
       if (!response.ok) {
-        const error = await response.json();
-        console.error('❌ API Error:', error);
+        const error = await response.json().catch(() => ({}));
         throw new Error(error.error || 'Failed to connect wallet');
       }
 
       const result = await response.json();
-      console.log('✅ API Success:', result);
       return result;
     } catch (error) {
-      console.error('❌ Failed to register wallet:', error);
       // Don't throw - we don't want to block the user if API fails
       return null;
     }
@@ -40,8 +32,8 @@ export const userApi = {
     });
 
     if (!response.ok) {
-      const error = await response.json();
-      throw { response: { data: error } };
+      const error = await response.json().catch(() => ({}));
+      throw new Error(error.error || 'Failed to set referrer');
     }
 
     return await response.json();
@@ -56,8 +48,8 @@ export const userApi = {
     });
 
     if (!response.ok) {
-      const error = await response.json();
-      throw { response: { data: error } };
+      const error = await response.json().catch(() => ({}));
+      throw new Error(error.error || 'Failed to skip referral');
     }
 
     return await response.json();
@@ -73,7 +65,8 @@ export const userApi = {
     });
 
     if (!response.ok) {
-      throw new Error('Failed to fetch user');
+      const error = await response.json().catch(() => ({}));
+      throw new Error(error.error || 'Failed to fetch user');
     }
 
     const data = await response.json();

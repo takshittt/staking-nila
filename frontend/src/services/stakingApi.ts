@@ -32,14 +32,15 @@ export const stakingApi = {
       const response = await fetch(`${API_URL}/staking/amount-configs`);
 
       if (!response.ok) {
-        throw new Error('Failed to fetch amount configs');
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || 'Failed to fetch amount configs');
       }
 
       const configs: AmountConfig[] = await response.json();
       // Filter only active configs for users
       return configs.filter(config => config.active);
-    } catch (error) {
-      console.error('Failed to fetch amount configs:', error);
+    } catch (error: any) {
+      console.error('Failed fetching amount configs:', error);
       return [];
     }
   },
@@ -50,14 +51,15 @@ export const stakingApi = {
       const response = await fetch(`${API_URL}/staking/lock-configs`);
 
       if (!response.ok) {
-        throw new Error('Failed to fetch lock configs');
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || 'Failed to fetch lock configs');
       }
 
       const configs: LockConfig[] = await response.json();
       // Filter only active configs for users
       return configs.filter(config => config.active);
-    } catch (error) {
-      console.error('Failed to fetch lock configs:', error);
+    } catch (error: any) {
+      console.error('Failed fetching lock configs:', error);
       return [];
     }
   },
@@ -72,13 +74,12 @@ export const stakingApi = {
       });
 
       if (!response.ok) {
-        const error = await response.json();
+        const error = await response.json().catch(() => ({}));
         throw new Error(error.error || 'Failed to record stake');
       }
 
       return await response.json();
     } catch (error: any) {
-      console.error('Failed to record stake:', error);
       throw error;
     }
   }

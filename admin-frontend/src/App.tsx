@@ -19,7 +19,7 @@ function App() {
                 const { setupRequired: required } = await authApi.checkStatus();
                 setSetupRequired(required);
             } catch (error) {
-                console.error('Failed to check auth status:', error);
+                // Failed to check auth status
             } finally {
                 setLoading(false);
             }

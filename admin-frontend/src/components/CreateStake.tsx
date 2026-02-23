@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { PlusCircle, Loader2, AlertCircle, CheckCircle2 } from 'lucide-react';
 import { stakeApi } from '../api/stakeApi';
+import { handleError } from '../utils/errorHandler';
 
 const CreateStake = () => {
     const [loading, setLoading] = useState(false);
@@ -50,10 +51,10 @@ const CreateStake = () => {
                 lockDays: Number(formData.lockDays),
                 apy: Number(formData.apy),
                 instantRewardPercent: 0 // No instant reward for manual stakes
-            }, token);
+            });
 
             setSuccess(`Stake created successfully! TX: ${result.txHash?.substring(0, 10)}...`);
-            
+
             // Reset form
             setFormData({
                 walletAddress: '',
@@ -62,8 +63,8 @@ const CreateStake = () => {
                 apy: ''
             });
         } catch (err: any) {
-            console.error('Failed to create stake:', err);
-            setError(err.message || 'Failed to create stake');
+            const errorMsg = handleError(err, 'Failed to create stake');
+            setError(errorMsg);
         } finally {
             setLoading(false);
         }

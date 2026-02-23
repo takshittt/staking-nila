@@ -2,7 +2,7 @@ import { Eye, AlertCircle } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import UserProfileModal from './UserProfileModal';
 import { userApi } from '../api/userApi';
-import { useAuthStore } from '../stores/authStore';
+
 
 export interface User {
     id: string;
@@ -36,7 +36,7 @@ const Users = () => {
     const [isProfileOpen, setIsProfileOpen] = useState(false);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
-    const { token } = useAuthStore();
+
 
     useEffect(() => {
         fetchUsers();
@@ -46,10 +46,9 @@ const Users = () => {
         try {
             setLoading(true);
             setError(null);
-            const response = await userApi.getAllUsers(token!);
+            const response = await userApi.getAllUsers();
             setUsers(response.users);
         } catch (err: any) {
-            console.error('Failed to fetch users:', err);
             setError(err.message);
         } finally {
             setLoading(false);

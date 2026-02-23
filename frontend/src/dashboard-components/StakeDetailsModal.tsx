@@ -75,7 +75,6 @@ const StakeDetailsModal: React.FC<StakeDetailsModalProps> = ({ stake, onClose, o
                     status: 'confirmed'
                 });
             } catch (backendError: any) {
-                console.error('Backend record failed:', backendError);
                 // Don't fail the whole operation if backend recording fails
                 // The claim already succeeded on-chain
             }
@@ -90,7 +89,6 @@ const StakeDetailsModal: React.FC<StakeDetailsModalProps> = ({ stake, onClose, o
                 onClose();
             }, 1000);
         } catch (err: any) {
-            console.error('Error claiming cashback:', err);
             setError(err.message || 'Failed to claim instant cashback');
         } finally {
             setClaiming(false);
@@ -127,14 +125,13 @@ const StakeDetailsModal: React.FC<StakeDetailsModalProps> = ({ stake, onClose, o
                     status: 'confirmed'
                 });
             } catch (backendError) {
-                console.error('Backend record failed:', backendError);
+                // Backend record failed
             }
 
             if (onClaimSuccess) onClaimSuccess();
             setTimeout(() => onClose(), 1000);
 
         } catch (err: any) {
-            console.error('Error claiming rewards:', err);
             setError(err.message || 'Failed to claim rewards');
         } finally {
             setClaiming(false);

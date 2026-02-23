@@ -10,6 +10,7 @@ import {
     Coins
 } from 'lucide-react';
 import { overviewApi, type OverviewStats } from '../api/overviewApi';
+import { handleError } from '../utils/errorHandler';
 
 const Overview = () => {
     const [stats, setStats] = useState<OverviewStats | null>(null);
@@ -27,8 +28,8 @@ const Overview = () => {
             const data = await overviewApi.getStats();
             setStats(data);
         } catch (err: any) {
-            console.error('Failed to load stats:', err);
-            setError(err.response?.data?.error || 'Failed to load statistics');
+            const errorMsg = handleError(err, 'Failed to load statistics');
+            setError(errorMsg);
         } finally {
             setLoading(false);
         }

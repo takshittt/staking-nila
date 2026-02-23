@@ -23,10 +23,8 @@ const PORT = parseInt(process.env.PORT || '3001', 10);
 // Initialize blockchain service
 try {
   BlockchainService.initialize();
-  console.log('✅ Blockchain service initialized');
 } catch (error: any) {
-  console.error('❌ Failed to initialize blockchain service:', error.message);
-  console.error('⚠️  Staking endpoints will not work until blockchain is configured');
+  // Staking endpoints will not work until blockchain is configured
 }
 
 // Middleware
@@ -68,14 +66,12 @@ app.get('/debug/env', (req, res) => {
 
 // Error handling
 app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
-  console.error('Error:', err);
   res.status(500).json({ error: 'Internal server error' });
 });
 
 // Start server
 app.listen(PORT, '0.0.0.0', () => {
-  console.log(`🚀 Admin Auth API running on http://localhost:${PORT}`);
-  console.log(`📝 Environment: ${process.env.NODE_ENV || 'development'}`);
+  // Server started
 });
 
 export default app;

@@ -1,7 +1,7 @@
 import { CheckCircle, Clock } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { stakeApi } from '../api/stakeApi';
-import { useAuthStore } from '../stores/authStore';
+
 
 interface Stake {
     id: string;
@@ -49,7 +49,7 @@ const Stakes = () => {
     const [stakes, setStakes] = useState<Stake[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
-    const { token } = useAuthStore();
+
 
     useEffect(() => {
         fetchStakes();
@@ -59,10 +59,9 @@ const Stakes = () => {
         try {
             setLoading(true);
             setError(null);
-            const response = await stakeApi.getAllStakes(token!);
+            const response = await stakeApi.getAllStakes();
             setStakes(response.stakes);
         } catch (err: any) {
-            console.error('Failed to fetch stakes:', err);
             setError(err.message);
         } finally {
             setLoading(false);

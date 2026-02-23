@@ -23,7 +23,9 @@ const ReferenceModal: React.FC<ReferenceModalProps> = ({ isOpen, onClose, onSucc
         if (isOpen) {
             ContractService.getReferralConfig().then(config => {
                 setBonusPercent(config.referrerPercent);
-            }).catch(err => console.error(err));
+            }).catch(() => {
+                // Failed to fetch referral config
+            });
         }
     }, [isOpen]);
 
@@ -40,7 +42,6 @@ const ReferenceModal: React.FC<ReferenceModalProps> = ({ isOpen, onClose, onSucc
             await userApi.setReferrer(address, referralCode.trim());
             onSuccess();
         } catch (err: any) {
-            console.error('Referral error:', err);
             setError(err.response?.data?.error || 'Invalid referral code or request failed');
         } finally {
             setLoading(false);
@@ -57,7 +58,6 @@ const ReferenceModal: React.FC<ReferenceModalProps> = ({ isOpen, onClose, onSucc
             await userApi.skipReferral(address);
             onClose();
         } catch (err: any) {
-            console.error('Skip error:', err);
             setError(err.response?.data?.error || 'Failed to skip referral');
         } finally {
             setLoading(false);

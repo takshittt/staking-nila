@@ -42,8 +42,6 @@ function normalizeWebhookStatus(event?: string, status?: string): string {
  * }
  */
 export const handle3thixWebhook = async (req: Request, res: Response) => {
-    console.log('[WEBHOOK] 3thix webhook received');
-
     // Only accept POST
     if (req.method !== 'POST') {
         return res.status(405).json({ error: 'Method not allowed' });
@@ -51,7 +49,6 @@ export const handle3thixWebhook = async (req: Request, res: Response) => {
 
     try {
         const payload = req.body;
-        console.log('[WEBHOOK] Payload received:', JSON.stringify(payload));
 
         // Extract key fields
         const {
@@ -68,7 +65,6 @@ export const handle3thixWebhook = async (req: Request, res: Response) => {
         const invoiceId = reference_id;
 
         if (!invoiceId) {
-            console.error('[WEBHOOK] Missing reference_id (invoiceId) in payload');
             // Return 200 to prevent 3thix from retrying - we can't process without invoiceId
             return res.status(200).json({
                 success: false,
@@ -85,7 +81,6 @@ export const handle3thixWebhook = async (req: Request, res: Response) => {
         });
 
         if (!paymentIntent) {
-            console.error(`[WEBHOOK] PaymentIntent not found: ${invoiceId}`);
             return res.status(200).json({
                 success: false,
                 error: 'Payment intent not found',
@@ -95,11 +90,9 @@ export const handle3thixWebhook = async (req: Request, res: Response) => {
 
         // Normalize status
         const normalizedStatus = normalizeWebhookStatus(event, status);
-        console.log(`[WEBHOOK] Normalized status: ${normalizedStatus}`);
 
         // Idempotency check - if already SUCCESS, don't reprocess
         if (paymentIntent.status === 'SUCCESS') {
-            console.log(`[WEBHOOK] PaymentIntent ${invoiceId} already SUCCESS. Skipping.`);
             return res.status(200).json({
                 success: true,
                 message: 'Already processed',
@@ -144,8 +137,6 @@ export const handle3thixWebhook = async (req: Request, res: Response) => {
                     0 // No instant reward for card payments
                 );
 
-                console.log(`[WEBHOOK] Stake created on blockchain: ${blockchainResult.txHash}`);
-
                 // Create stake record in database
                 const stake = await StakeService.createStake({
                     walletAddress: paymentIntent.walletAddress,
@@ -157,8 +148,6 @@ export const handle3thixWebhook = async (req: Request, res: Response) => {
                     instantRewardPercent: 0,
                     txHash: blockchainResult.txHash
                 });
-
-                console.log(`[WEBHOOK] Stake record created: ${stake.stakeId}`);
 
                 // Update PaymentIntent to SUCCESS
                 await prisma.paymentIntent.update({
@@ -180,12 +169,10 @@ export const handle3thixWebhook = async (req: Request, res: Response) => {
                     status: 'confirmed'
                 });
 
-                console.log(`[WEBHOOK] Payment processed successfully for ${invoiceId}`);
-
                 // Send email notifications (non-blocking)
                 const { processSuccessfulPayment } = await import('./email.service');
                 processSuccessfulPayment(invoiceId).catch(err => {
-                    console.error('[WEBHOOK] Email notification failed (non-blocking):', err.message);
+                    // Email notification failed (non-blocking)
                 });
 
                 return res.status(200).json({
@@ -198,8 +185,6 @@ export const handle3thixWebhook = async (req: Request, res: Response) => {
                 });
 
             } catch (stakeError: any) {
-                console.error(`[WEBHOOK] Stake creation error:`, stakeError);
-
                 // Update PaymentIntent to FAILED
                 await prisma.paymentIntent.update({
                     where: { invoiceId },
@@ -223,8 +208,6 @@ export const handle3thixWebhook = async (req: Request, res: Response) => {
             }
 
         } else if (normalizedStatus === 'FAILED' || normalizedStatus === 'CANCELLED') {
-            console.log(`[WEBHOOK] Payment ${normalizedStatus} for ${invoiceId}`);
-
             // Update PaymentIntent to FAILED/CANCELLED
             await prisma.paymentIntent.update({
                 where: { invoiceId },
@@ -243,8 +226,6 @@ export const handle3thixWebhook = async (req: Request, res: Response) => {
 
         } else {
             // Status is still PENDING - log but don't update
-            console.log(`[WEBHOOK] Payment still PENDING for ${invoiceId}`);
-
             return res.status(200).json({
                 success: true,
                 invoiceId,
@@ -254,8 +235,6 @@ export const handle3thixWebhook = async (req: Request, res: Response) => {
         }
 
     } catch (error: any) {
-        console.error('[WEBHOOK] Error processing webhook:', error);
-
         // Return 200 to prevent unnecessary retries, but log the error
         return res.status(200).json({
             success: false,

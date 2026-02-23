@@ -8,6 +8,7 @@ import { useWallet } from '../hooks/useWallet';
 import { useAccount } from 'wagmi';
 import EthicsPaymentModal from './EthicsPaymentModal';
 import toast from 'react-hot-toast';
+import { handleError } from '../utils/errorHandler';
 
 const StakeNila = () => {
     const [selectedPackage, setSelectedPackage] = useState<string | null>(null);
@@ -221,9 +222,8 @@ const StakeNila = () => {
             setSelectedDuration(null);
 
         } catch (error: any) {
-            console.error('Staking error:', error);
             setStatusMessage('');
-            toast.error(error.message || 'Failed to stake tokens. Please try again.');
+            handleError(error, 'Failed to stake tokens. Please try again.');
         } finally {
             setStaking(false);
             setApproving(false);
@@ -249,8 +249,8 @@ const StakeNila = () => {
             setStatusMessage('Processing your stake...');
 
             // Call verify-intent endpoint - backend will create the stake
-            const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:3001';
-            const response = await fetch(`${API_BASE}/api/verify-intent`, {
+            const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
+            const response = await fetch(`${API_URL}/verify-intent`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -274,10 +274,9 @@ const StakeNila = () => {
             setSelectedDuration(null);
 
         } catch (error: any) {
-            console.error('Card payment staking error:', error);
             setStatusMessage('');
-            setCardPaymentError(error.message || 'Failed to complete staking');
-            toast.error(error.message || 'Failed to stake tokens. Please try again.');
+            const msg = handleError(error, 'Failed to stake tokens. Please try again.');
+            setCardPaymentError(msg);
         } finally {
             setStaking(false);
         }

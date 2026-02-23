@@ -36,7 +36,6 @@ export class ReferralService {
       const config = await BlockchainService.getReferralConfig();
       return config;
     } catch (error: any) {
-      console.error('Failed to get blockchain config:', error);
       throw new Error('Failed to fetch blockchain configuration');
     }
   }
@@ -69,7 +68,6 @@ export class ReferralService {
         synced: true
       };
     } catch (error: any) {
-      console.error('Sync failed:', error);
       throw new Error('Failed to sync with blockchain');
     }
   }
@@ -104,7 +102,6 @@ export class ReferralService {
         newIsPaused
       );
     } catch (error: any) {
-      console.error('Blockchain update failed:', error);
       throw new Error('Failed to update blockchain configuration');
     }
 

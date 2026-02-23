@@ -1,7 +1,7 @@
 import { Users2, AlertCircle, Save, RefreshCw, Link } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { referralApi } from '../api/referralApi';
-import { useAuthStore } from '../stores/authStore';
+
 import toast from 'react-hot-toast';
 
 interface ReferralStats {
@@ -34,7 +34,7 @@ const Referrals = () => {
     const [isSyncing, setIsSyncing] = useState(false);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
-    const { token } = useAuthStore();
+
 
     useEffect(() => {
         fetchStats();
@@ -45,11 +45,10 @@ const Referrals = () => {
         try {
             setLoading(true);
             setError(null);
-            const response = await referralApi.getStats(token!);
+            const response = await referralApi.getStats();
             setStats(response.stats);
             setTempStats(response.stats);
         } catch (err: any) {
-            console.error('Failed to fetch referral stats:', err);
             setError(err.message);
         } finally {
             setLoading(false);
@@ -58,17 +57,17 @@ const Referrals = () => {
 
     const fetchBlockchainConfig = async () => {
         try {
-            const response = await referralApi.getBlockchainConfig(token!);
+            const response = await referralApi.getBlockchainConfig();
             setBlockchainConfig(response.config);
         } catch (err: any) {
-            console.error('Failed to fetch blockchain config:', err);
+            // Failed to fetch blockchain config
         }
     };
 
     const handleSync = async () => {
         setIsSyncing(true);
         try {
-            const response = await referralApi.syncWithBlockchain(token!);
+            const response = await referralApi.syncWithBlockchain();
             setStats((prev) => ({
                 ...prev,
                 referralPercentage: response.config.referralPercentage,
@@ -78,7 +77,6 @@ const Referrals = () => {
             setBlockchainConfig(response.config);
             toast.success('Successfully synced with blockchain!');
         } catch (err: any) {
-            console.error('Failed to sync:', err);
             alert('Failed to sync with blockchain');
         } finally {
             setIsSyncing(false);
@@ -89,15 +87,13 @@ const Referrals = () => {
         setIsUpdating(true);
         try {
             const response = await referralApi.updateConfig(
-                { isPaused: !stats.isPaused },
-                token!
+                { isPaused: !stats.isPaused }
             );
             setStats((prev) => ({
                 ...prev,
                 isPaused: response.config.isPaused
             }));
         } catch (err: any) {
-            console.error('Failed to toggle pause:', err);
             toast.error('Failed to update pause status');
         } finally {
             setIsUpdating(false);
@@ -121,8 +117,7 @@ const Referrals = () => {
                 {
                     referralPercentage: tempStats.referralPercentage,
                     referrerPercentage: tempStats.referrerPercentage
-                },
-                token!
+                }
             );
             setStats((prev) => ({
                 ...prev,
@@ -134,7 +129,6 @@ const Referrals = () => {
             await fetchBlockchainConfig();
             toast.success('Configuration updated on blockchain and database!');
         } catch (err: any) {
-            console.error('Failed to save config:', err);
             alert('Failed to save configuration: ' + err.message);
         } finally {
             setIsUpdating(false);

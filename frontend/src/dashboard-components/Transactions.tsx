@@ -24,13 +24,11 @@ const Transactions = () => {
         
         setLoading(true);
         try {
-            console.log('Fetching transactions for wallet:', address);
             const data = await transactionApi.getWalletTransactions(address, page, 20);
-            console.log('Received data:', data);
             setTransactions(data.transactions);
             setTotalPages(data.pagination.totalPages);
         } catch (error) {
-            console.error('Failed to fetch transactions:', error);
+            // Failed to fetch transactions
         } finally {
             setLoading(false);
         }

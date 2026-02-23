@@ -1,70 +1,27 @@
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
+import api from './axiosConfig';
 
 export const userApi = {
   // Connect wallet (public endpoint)
   connectWallet: async (walletAddress: string, referralCode?: string) => {
-    const response = await fetch(`${API_URL}/users/connect`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ walletAddress, referralCode })
-    });
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error || 'Failed to connect wallet');
-    }
-
-    return response.json();
+    const response = await api.post('/users/connect', { walletAddress, referralCode });
+    return response.data;
   },
 
   // Get all users (admin)
-  getAllUsers: async (token: string) => {
-    const response = await fetch(`${API_URL}/users`, {
-      headers: {
-        'Authorization': `Bearer ${token}`
-      }
-    });
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error || 'Failed to fetch users');
-    }
-
-    return response.json();
+  getAllUsers: async () => {
+    const response = await api.get('/users');
+    return response.data;
   },
 
   // Get single user (admin)
-  getUserByWallet: async (walletAddress: string, token: string) => {
-    const response = await fetch(`${API_URL}/users/${walletAddress}`, {
-      headers: {
-        'Authorization': `Bearer ${token}`
-      }
-    });
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error || 'Failed to fetch user');
-    }
-
-    return response.json();
+  getUserByWallet: async (walletAddress: string) => {
+    const response = await api.get(`/users/${walletAddress}`);
+    return response.data;
   },
 
   // Update user status (admin)
-  updateUserStatus: async (walletAddress: string, status: string, token: string) => {
-    const response = await fetch(`${API_URL}/users/${walletAddress}/status`, {
-      method: 'PATCH',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`
-      },
-      body: JSON.stringify({ status })
-    });
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error || 'Failed to update user status');
-    }
-
-    return response.json();
+  updateUserStatus: async (walletAddress: string, status: string) => {
+    const response = await api.patch(`/users/${walletAddress}/status`, { status });
+    return response.data;
   }
 };

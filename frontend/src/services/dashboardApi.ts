@@ -71,8 +71,7 @@ export const dashboardApi = {
         activeStakesCount: activeStakes.length,
         nextRewardDate
       };
-    } catch (error) {
-      console.error('Failed to fetch dashboard stats:', error);
+    } catch (error: any) {
       throw error;
     }
   },
@@ -86,7 +85,8 @@ export const dashboardApi = {
       ]);
 
       if (!stakesRes.ok) {
-        throw new Error('Failed to fetch stakes');
+        const errorData = await stakesRes.json().catch(() => ({}));
+        throw new Error(errorData.error || 'Failed to fetch stakes');
       }
 
       const stakesData = await stakesRes.json();
@@ -155,8 +155,7 @@ export const dashboardApi = {
           cashbackClaimed: cashbackReward?.claimedAt != null
         };
       });
-    } catch (error) {
-      console.error('Failed to fetch active stakes:', error);
+    } catch (error: any) {
       throw error;
     }
   },
@@ -167,7 +166,6 @@ export const dashboardApi = {
       const stakes = await dashboardApi.getActiveStakes(walletAddress);
       return stakes.find(s => s.id === stakeId) || null;
     } catch (error) {
-      console.error('Failed to fetch stake details:', error);
       return null;
     }
   }

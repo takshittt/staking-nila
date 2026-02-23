@@ -52,7 +52,6 @@ export class ContractService {
       const chainId = await window.ethereum.request({ method: 'eth_chainId' });
       return chainId === BSC_TESTNET_CHAIN_ID;
     } catch (error) {
-      console.error('Error checking network:', error);
       return false;
     }
   }
@@ -126,7 +125,6 @@ export class ContractService {
       const requiredAmount = parseUnits(amount, 18);
       return allowance >= requiredAmount;
     } catch (error) {
-      console.error('Error checking allowance:', error);
       return false;
     }
   }
@@ -138,14 +136,11 @@ export class ContractService {
       const amountWei = parseUnits(amount, 18);
 
       const tx = await tokenContract.approve(STAKING_CONTRACT_ADDRESS, amountWei);
-      console.log('Approval transaction sent:', tx.hash);
 
       await tx.wait();
-      console.log('Approval confirmed');
 
       return tx.hash;
     } catch (error: any) {
-      console.error('Error approving token:', error);
       throw new Error(error.message || 'Failed to approve token');
     }
   }
@@ -157,7 +152,6 @@ export class ContractService {
       const balance = await tokenContract.balanceOf(userAddress);
       return balance.toString();
     } catch (error) {
-      console.error('Error getting token balance:', error);
       return '0';
     }
   }
@@ -183,15 +177,11 @@ export class ContractService {
         );
       }
 
-      console.log('Stake transaction sent:', tx.hash);
-
       // Wait for confirmation
       await tx.wait();
-      console.log('Stake confirmed');
 
       return tx.hash;
     } catch (error: any) {
-      console.error('Error staking:', error);
 
       // Parse common errors
       if (error.message?.includes('user rejected')) {
@@ -226,7 +216,6 @@ export class ContractService {
         totalClaimable: rewards.totalClaimable.toString()
       };
     } catch (error: any) {
-      console.error('Error getting claimable rewards:', error);
       throw new Error(error.message || 'Failed to get claimable rewards');
     }
   }
@@ -237,13 +226,10 @@ export class ContractService {
       const stakingContract = await this.getStakingContract();
       const tx = await stakingContract.claimInstantRewards();
 
-      console.log('Claim instant rewards transaction sent:', tx.hash);
       await tx.wait();
-      console.log('Claim confirmed');
 
       return tx.hash;
     } catch (error: any) {
-      console.error('Error claiming instant rewards:', error);
 
       if (error.message?.includes('user rejected')) {
         throw new Error('Transaction rejected by user');
@@ -263,13 +249,10 @@ export class ContractService {
       const stakingContract = await this.getStakingContract();
       const tx = await stakingContract.claimReferralRewards();
 
-      console.log('Claim referral rewards transaction sent:', tx.hash);
       await tx.wait();
-      console.log('Claim confirmed');
 
       return tx.hash;
     } catch (error: any) {
-      console.error('Error claiming referral rewards:', error);
 
       if (error.message?.includes('user rejected')) {
         throw new Error('Transaction rejected by user');
@@ -289,13 +272,10 @@ export class ContractService {
       const stakingContract = await this.getStakingContract();
       const tx = await stakingContract.claimAllRewards();
 
-      console.log('Claim all rewards transaction sent:', tx.hash);
       await tx.wait();
-      console.log('Claim confirmed');
 
       return tx.hash;
     } catch (error: any) {
-      console.error('Error claiming all rewards:', error);
 
       if (error.message?.includes('user rejected')) {
         throw new Error('Transaction rejected by user');
@@ -329,7 +309,6 @@ export class ContractService {
         isPaused: config.isPaused
       };
     } catch (error: any) {
-      console.error('Error getting referral config:', error);
       // Return defaults if fetch fails
       return {
         referralPercent: 5,

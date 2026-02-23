@@ -45,7 +45,6 @@ const StakingPlans = () => {
             setLockConfigs(locks);
         } catch (err: any) {
             setError(err.response?.data?.error || 'Failed to fetch configurations');
-            console.error('Error fetching configs:', err);
         } finally {
             setLoading(false);
         }
@@ -91,7 +90,6 @@ const StakingPlans = () => {
         setTxPending(true);
         try {
             const result = await stakingApi.createAmountConfig(data);
-            console.log('Transaction hash:', result.txHash);
             await fetchConfigs();
             toast.success(`Amount config created! TX: ${result.txHash.slice(0, 10)}...`);
             handleCloseAmountModal();
@@ -115,7 +113,6 @@ const StakingPlans = () => {
                 instantRewardPercent: data.instantRewardPercent,
                 active: config.active // Preserve existing active state
             });
-            console.log('Transaction hash:', result.txHash);
             await fetchConfigs();
             toast.success(`Amount config updated! TX: ${result.txHash.slice(0, 10)}...`);
             handleCloseAmountModal();
@@ -130,7 +127,6 @@ const StakingPlans = () => {
         setTxPending(true);
         try {
             const result = await stakingApi.createLockConfig(data);
-            console.log('Transaction hash:', result.txHash);
             await fetchConfigs();
             toast.success(`Lock config created! TX: ${result.txHash.slice(0, 10)}...`);
             handleCloseLockModal();
@@ -154,7 +150,6 @@ const StakingPlans = () => {
                 aprPercent: data.aprPercent,
                 active: config.active // Preserve existing active state
             });
-            console.log('Transaction hash:', result.txHash);
             await fetchConfigs();
             toast.success(`Lock config updated! TX: ${result.txHash.slice(0, 10)}...`);
             handleCloseLockModal();

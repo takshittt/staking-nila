@@ -170,7 +170,6 @@ export class RewardService {
         breakdown
       };
     } catch (error: any) {
-      console.error('Error getting pending rewards:', error);
       throw new Error(`Failed to get pending rewards: ${error.message}`);
     }
   }
@@ -296,7 +295,6 @@ export class RewardService {
 
       return { success: true };
     } catch (error: any) {
-      console.error('Error recording claim:', error);
       throw new Error(`Failed to record claim: ${error.message}`);
     }
   }
@@ -423,7 +421,6 @@ export class RewardService {
         rewardsClaimed
       };
     } catch (error: any) {
-      console.error('Error claiming rewards:', error);
       throw new Error(`Failed to claim rewards: ${error.message}`);
     }
   }
@@ -495,7 +492,6 @@ export class RewardService {
 
       return { success: true, synced: true };
     } catch (error: any) {
-      console.error('Error syncing APY rewards:', error);
       throw new Error(`Failed to sync APY rewards: ${error.message}`);
     }
   }

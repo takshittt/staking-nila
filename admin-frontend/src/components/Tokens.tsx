@@ -22,7 +22,6 @@ const Tokens = () => {
             setStats(data);
         } catch (err: any) {
             setError(err.response?.data?.error || 'Failed to fetch treasury stats');
-            console.error('Error fetching treasury stats:', err);
         } finally {
             setLoading(false);
         }
@@ -44,7 +43,6 @@ const Tokens = () => {
             await fetchStats();
         } catch (err: any) {
             toast.error(err.response?.data?.error || 'Failed to deposit tokens');
-            console.error('Deposit error:', err);
         } finally {
             setIsProcessing(false);
         }
@@ -59,7 +57,6 @@ const Tokens = () => {
             await fetchStats();
         } catch (err: any) {
             toast.error(err.response?.data?.error || 'Failed to withdraw tokens');
-            console.error('Withdraw error:', err);
         } finally {
             setIsProcessing(false);
         }

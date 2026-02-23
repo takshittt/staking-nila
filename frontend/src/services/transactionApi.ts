@@ -34,7 +34,8 @@ export const transactionApi = {
       );
 
       if (!response.ok) {
-        throw new Error('Failed to fetch transactions');
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || 'Failed to fetch transactions');
       }
 
       const data = await response.json();
@@ -42,8 +43,8 @@ export const transactionApi = {
         transactions: data.transactions || [],
         pagination: data.pagination || { page: 1, limit, total: 0, totalPages: 0 }
       };
-    } catch (error) {
-      console.error('Failed to fetch wallet transactions:', error);
+    } catch (error: any) {
+      console.error('Failed fetching transactions:', error);
       return {
         transactions: [],
         pagination: { page: 1, limit, total: 0, totalPages: 0 }
@@ -63,7 +64,6 @@ export const transactionApi = {
       const data = await response.json();
       return data.transaction;
     } catch (error) {
-      console.error('Failed to fetch transaction:', error);
       return null;
     }
   },
@@ -84,12 +84,13 @@ export const transactionApi = {
       });
 
       if (!response.ok) {
-        throw new Error('Failed to create transaction record');
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || 'Failed to create transaction record');
       }
 
       const result = await response.json();
       return result.transaction;
-    } catch (error) {
+    } catch (error: any) {
       console.error('Failed to create transaction:', error);
       return null;
     }
