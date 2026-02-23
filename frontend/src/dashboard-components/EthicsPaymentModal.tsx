@@ -349,29 +349,10 @@ const EthicsPaymentModal = ({
             const name = paymentMethod === 'card' ? formData.name : 'NILA Staker';
             const email = paymentMethod === 'card' ? formData.email : 'staker@mindwavedao.com';
 
-            // Debug logging
-            console.log('[PAYMENT] Modal props:', {
-                amountConfigId,
-                lockConfigId,
-                walletAddress,
-                amount,
-                usdPrice
-            });
-
             // Validate required fields (0 is a valid ID, so check for null/undefined)
             if (amountConfigId === undefined || amountConfigId === null || lockConfigId === undefined || lockConfigId === null) {
-                console.error('[PAYMENT] Missing IDs:', { amountConfigId, lockConfigId });
                 throw new Error('Missing configuration IDs. Please try again.');
             }
-
-            console.log('[PAYMENT] Initiating payment with:', {
-                amount: usdPrice,
-                amountConfigId,
-                lockConfigId,
-                walletAddress,
-                name,
-                email
-            });
 
             const response = await fetch(`${API_URL}/create-invoice`, {
                 method: 'POST',

@@ -93,15 +93,6 @@ const StakeNila = () => {
         const amountConfig = amountConfigs.find(c => c.amount === selectedPackage);
         const lockConfig = lockConfigs.find(c => c.lockDuration === selectedDuration);
 
-        console.log('[STAKE] Selected values:', {
-            selectedPackage,
-            selectedDuration,
-            amountConfig,
-            lockConfig,
-            amountConfigs,
-            lockConfigs
-        });
-
         if (!amountConfig || !lockConfig) {
             toast.error('Invalid configuration selected');
             return;
@@ -112,10 +103,6 @@ const StakeNila = () => {
             await handleCryptoStake();
         } else {
             // Open Ethics payment modal for card payment
-            console.log('[STAKE] Opening modal with IDs:', {
-                amountConfigId: amountConfig.id,
-                lockConfigId: lockConfig.id
-            });
             setShowEthicsModal(true);
         }
     };
