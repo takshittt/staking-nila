@@ -47,6 +47,20 @@ export const handle3thixWebhook = async (req: Request, res: Response) => {
         return res.status(405).json({ error: 'Method not allowed' });
     }
 
+    // Validate webhook authentication
+    const authToken = req.headers['authorization'] || req.headers['x-webhook-auth'];
+    const expectedToken = process.env.THIX_WEBHOOK_AUTH_TOKEN;
+
+    if (!expectedToken) {
+        console.error('[WEBHOOK] THIX_WEBHOOK_AUTH_TOKEN not configured');
+        return res.status(500).json({ error: 'Webhook authentication not configured' });
+    }
+
+    if (!authToken || authToken !== expectedToken) {
+        console.warn('[WEBHOOK] Unauthorized webhook attempt - invalid auth token');
+        return res.status(401).json({ error: 'Unauthorized' });
+    }
+
     try {
         const payload = req.body;
 
