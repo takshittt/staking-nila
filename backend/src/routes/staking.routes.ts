@@ -181,6 +181,144 @@ router.put('/lock-configs/:id',
 );
 
 // ============================================
+// REWARD TIERS (Public GET, Protected POST/PUT)
+// ============================================
+
+// Get all reward tiers (PUBLIC)
+router.get('/reward-tiers', async (req, res) => {
+  try {
+    const tiers = await StakingService.getAllRewardTiers();
+    res.json(tiers);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Get active reward tiers only (PUBLIC)
+router.get('/reward-tiers/active', async (req, res) => {
+  try {
+    const tiers = await StakingService.getActiveRewardTiers();
+    res.json(tiers);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Get single reward tier (PUBLIC)
+router.get('/reward-tiers/:id',
+  param('id').isInt({ min: 0 }),
+  validate,
+  async (req, res) => {
+    try {
+      const id = parseInt(req.params.id as string);
+      const tier = await StakingService.getRewardTier(id);
+      res.json(tier);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  }
+);
+
+// Create reward tier (PROTECTED)
+router.post('/reward-tiers',
+  authMiddleware,
+  body('minNilaAmount').isFloat({ min: 0 }),
+  body('maxNilaAmount').isFloat({ min: 0 }),
+  body('instantRewardPercent').isFloat({ min: 0, max: 100 }),
+  validate,
+  async (req: AuthRequest, res) => {
+    try {
+      const { minNilaAmount, maxNilaAmount, instantRewardPercent } = req.body;
+      
+      // Validate range
+      if (maxNilaAmount > 0 && maxNilaAmount <= minNilaAmount) {
+        return res.status(400).json({ 
+          error: 'Maximum amount must be greater than minimum (or 0 for unlimited)' 
+        });
+      }
+      
+      const result = await StakingService.createRewardTier(
+        req.adminId!,
+        minNilaAmount,
+        maxNilaAmount,
+        instantRewardPercent
+      );
+      
+      // Invalidate cache
+      await StakingService.invalidateCache('reward_tiers');
+      
+      res.json(result);
+    } catch (error: any) {
+      res.status(400).json({ error: error.message });
+    }
+  }
+);
+
+// Update reward tier (PROTECTED)
+router.put('/reward-tiers/:id',
+  authMiddleware,
+  param('id').isInt({ min: 0 }),
+  body('minNilaAmount').isFloat({ min: 0 }),
+  body('maxNilaAmount').isFloat({ min: 0 }),
+  body('instantRewardPercent').isFloat({ min: 0, max: 100 }),
+  body('active').isBoolean(),
+  validate,
+  async (req: AuthRequest, res) => {
+    try {
+      const id = parseInt(req.params.id as string);
+      const { minNilaAmount, maxNilaAmount, instantRewardPercent, active } = req.body;
+      
+      // Validate range
+      if (maxNilaAmount > 0 && maxNilaAmount <= minNilaAmount) {
+        return res.status(400).json({ 
+          error: 'Maximum amount must be greater than minimum (or 0 for unlimited)' 
+        });
+      }
+      
+      const result = await StakingService.updateRewardTier(
+        req.adminId!,
+        id,
+        minNilaAmount,
+        maxNilaAmount,
+        instantRewardPercent,
+        active
+      );
+      
+      // Invalidate cache
+      await StakingService.invalidateCache('reward_tiers');
+      
+      res.json(result);
+    } catch (error: any) {
+      res.status(400).json({ error: error.message });
+    }
+  }
+);
+
+// ============================================
+// ACTIVE CONFIGS (Public - for frontend display)
+// ============================================
+
+// Get active amount configs only (PUBLIC)
+router.get('/amount-configs/active', async (req, res) => {
+  try {
+    const configs = await StakingService.getActiveAmountConfigs();
+    res.json(configs);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Get active lock configs only (PUBLIC)
+router.get('/lock-configs/active', async (req, res) => {
+  try {
+    const configs = await StakingService.getActiveLockConfigs();
+    res.json(configs);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ============================================
 // STATS (Protected - Admin only)
 // ============================================
 

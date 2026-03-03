@@ -118,6 +118,24 @@ export class StakingService {
     }
   }
 
+  static async getActiveLockConfigs() {
+    try {
+      const allConfigs = await BlockchainService.getAllLockConfigs();
+      return allConfigs.filter(config => config.active);
+    } catch (error: any) {
+      throw new Error(`Failed to fetch active lock configs: ${error.message}`);
+    }
+  }
+
+  static async getActiveAmountConfigs() {
+    try {
+      const allConfigs = await BlockchainService.getAllAmountConfigs();
+      return allConfigs.filter(config => config.active);
+    } catch (error: any) {
+      throw new Error(`Failed to fetch active amount configs: ${error.message}`);
+    }
+  }
+
   static async getLockConfig(id: number) {
     try {
       const config = await BlockchainService.getLockConfig(id);
@@ -200,6 +218,157 @@ export class StakingService {
       return result;
     } catch (error: any) {
       throw new Error(`Failed to update lock config: ${error.message}`);
+    }
+  }
+
+  // Reward Tier Methods
+  static async getAllRewardTiers() {
+    try {
+      const tiers = await BlockchainService.getAllRewardTiers();
+      return tiers;
+    } catch (error: any) {
+      throw new Error(`Failed to fetch reward tiers: ${error.message}`);
+    }
+  }
+
+  static async getActiveRewardTiers() {
+    try {
+      const allTiers = await BlockchainService.getAllRewardTiers();
+      return allTiers.filter(tier => tier.active);
+    } catch (error: any) {
+      throw new Error(`Failed to fetch active reward tiers: ${error.message}`);
+    }
+  }
+
+  static async getRewardTier(id: number) {
+    try {
+      const tier = await BlockchainService.getRewardTier(id);
+      if (!tier) {
+        throw new Error(`Reward tier with id ${id} not found`);
+      }
+      return tier;
+    } catch (error: any) {
+      throw new Error(`Failed to fetch reward tier: ${error.message}`);
+    }
+  }
+
+  static async createRewardTier(
+    adminId: number,
+    minNilaAmount: number,
+    maxNilaAmount: number,
+    instantRewardPercent: number
+  ) {
+    // Convert percentage to basis points
+    const instantRewardBps = Math.floor(instantRewardPercent * 100);
+
+    // Validate
+    if (minNilaAmount < 0) {
+      throw new Error('Minimum amount cannot be negative');
+    }
+    if (maxNilaAmount < 0) {
+      throw new Error('Maximum amount cannot be negative');
+    }
+    if (maxNilaAmount > 0 && maxNilaAmount <= minNilaAmount) {
+      throw new Error('Maximum must be greater than minimum (or 0 for unlimited)');
+    }
+    if (instantRewardBps < 0 || instantRewardBps > 10000) {
+      throw new Error('Instant reward must be between 0 and 100%');
+    }
+
+    // Convert amounts to wei (assuming 18 decimals)
+    const minNilaAmountWei = (BigInt(Math.floor(minNilaAmount)) * BigInt(10 ** 18)).toString();
+    const maxNilaAmountWei = maxNilaAmount === 0 ? '0' : (BigInt(Math.floor(maxNilaAmount)) * BigInt(10 ** 18)).toString();
+
+    try {
+      // Create audit log
+      const auditLog = await prisma.auditLog.create({
+        data: {
+          adminId,
+          action: 'CREATE_REWARD_TIER',
+          txHash: null
+        }
+      });
+
+      // Call blockchain
+      const result = await BlockchainService.addRewardTier(
+        minNilaAmountWei,
+        maxNilaAmountWei,
+        instantRewardBps
+      );
+
+      // Update audit log with tx hash
+      await prisma.auditLog.update({
+        where: { id: auditLog.id },
+        data: { txHash: result.txHash }
+      });
+
+      return {
+        ...result,
+        minNilaAmount,
+        maxNilaAmount,
+        instantRewardBps
+      };
+    } catch (error: any) {
+      throw new Error(`Failed to create reward tier: ${error.message}`);
+    }
+  }
+
+  static async updateRewardTier(
+    adminId: number,
+    id: number,
+    minNilaAmount: number,
+    maxNilaAmount: number,
+    instantRewardPercent: number,
+    active: boolean
+  ) {
+    const instantRewardBps = Math.floor(instantRewardPercent * 100);
+
+    // Validate
+    if (minNilaAmount < 0) {
+      throw new Error('Minimum amount cannot be negative');
+    }
+    if (maxNilaAmount < 0) {
+      throw new Error('Maximum amount cannot be negative');
+    }
+    if (maxNilaAmount > 0 && maxNilaAmount <= minNilaAmount) {
+      throw new Error('Maximum must be greater than minimum (or 0 for unlimited)');
+    }
+    if (instantRewardBps < 0 || instantRewardBps > 10000) {
+      throw new Error('Instant reward must be between 0 and 100%');
+    }
+
+    // Convert amounts to wei
+    const minNilaAmountWei = (BigInt(Math.floor(minNilaAmount)) * BigInt(10 ** 18)).toString();
+    const maxNilaAmountWei = maxNilaAmount === 0 ? '0' : (BigInt(Math.floor(maxNilaAmount)) * BigInt(10 ** 18)).toString();
+
+    try {
+      // Create audit log
+      const auditLog = await prisma.auditLog.create({
+        data: {
+          adminId,
+          action: 'UPDATE_REWARD_TIER',
+          txHash: null
+        }
+      });
+
+      // Call blockchain
+      const result = await BlockchainService.updateRewardTier(
+        id,
+        minNilaAmountWei,
+        maxNilaAmountWei,
+        instantRewardBps,
+        active
+      );
+
+      // Update audit log
+      await prisma.auditLog.update({
+        where: { id: auditLog.id },
+        data: { txHash: result.txHash }
+      });
+
+      return result;
+    } catch (error: any) {
+      throw new Error(`Failed to update reward tier: ${error.message}`);
     }
   }
 

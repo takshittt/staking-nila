@@ -281,8 +281,8 @@ const StakeNila = () => {
                                     step="any"
                                 />
                                 <div className="pr-5 flex items-center gap-2 select-none">
-                                    <div className="w-7 h-7 bg-red-600 rounded-full flex items-center justify-center shrink-0 shadow-sm border border-red-700">
-                                        <span className="text-white text-[10px] font-bold leading-none tracking-tighter">N</span>
+                                    <div className="w-7 h-7 bg-white rounded-full flex items-center justify-center shrink-0 shadow-sm border border-slate-200 overflow-hidden">
+                                        <img src="/nila-logo-alt-2.png" alt="NILA" className="w-5 h-5 object-contain" />
                                     </div>
                                     <span className="text-base font-bold text-slate-400">NILA</span>
                                 </div>

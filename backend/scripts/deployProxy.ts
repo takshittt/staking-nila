@@ -4,13 +4,11 @@ import * as path from "path";
 
 async function main() {
   const NILA_TOKEN = process.env.NILA_TOKEN_ADDRESS || "0xA31fb7667F80306690F5DF0d9A6ea272aBF97926";
-  const USDT_TOKEN = "0xef4f8bdeDad6829817F802a957b8a5232644e1bC"; // BSC Testnet USDT
 
   console.log("========================================");
-  console.log("Deploying NilaStakingUpgradeable with UUPS Proxy");
+  console.log("Deploying NilaStakingUpgradeable v3.0.0 with UUPS Proxy");
   console.log("========================================");
   console.log("NILA Token Address:", NILA_TOKEN);
-  console.log("USDT Token Address:", USDT_TOKEN);
   console.log("Deployer:", (await ethers.provider.getSigner()).address);
 
   // Deploy proxy
@@ -19,7 +17,7 @@ async function main() {
   console.log("\nDeploying proxy...");
   const proxy = await upgrades.deployProxy(
     NilaStakingUpgradeable,
-    [NILA_TOKEN, USDT_TOKEN],
+    [NILA_TOKEN],
     {
       initializer: "initialize",
       kind: "uups",
@@ -39,6 +37,14 @@ async function main() {
   const adminAddress = await upgrades.erc1967.getAdminAddress(proxyAddress);
   console.log("✅ Admin address:", adminAddress);
 
+  // Verify version
+  try {
+    const version = await proxy.version();
+    console.log("✅ Contract Version:", version);
+  } catch (e) {
+    console.log("Version check skipped");
+  }
+
   // Save deployment info
   const deploymentInfo = {
     network: (await ethers.provider.getNetwork()).name,
@@ -47,9 +53,9 @@ async function main() {
     implementation: implementationAddress,
     admin: adminAddress,
     nilaToken: NILA_TOKEN,
-    usdtToken: USDT_TOKEN,
     deployedAt: new Date().toISOString(),
     deployer: (await ethers.provider.getSigner()).address,
+    version: "3.0.0",
   };
 
   const deploymentsDir = path.join(__dirname, "..", "deployments");
@@ -84,13 +90,16 @@ async function main() {
   console.log("\n📋 Next Steps:");
   console.log("1. Verify proxy on block explorer");
   console.log("2. Fund contract with NILA tokens for rewards");
-  console.log("3. Add amount and lock configurations");
-  console.log("4. Test all functions through the proxy");
+  console.log("3. Add lock configurations via admin panel");
+  console.log("4. Add reward tiers via admin panel");
+  console.log("5. Test all functions through the proxy");
   console.log("\n💡 Important:");
   console.log("- Always interact with the PROXY address:", proxyAddress);
   console.log("- Never send tokens to the implementation address");
   console.log("- Keep this deployment info safe for future upgrades");
   console.log("- CONTRACT_ADDRESS in .env has been automatically updated");
+  console.log("- Amount configs are reference-only (not enforced by contract)");
+  console.log("- Reward tiers are contract-enforced for instant rewards");
 
   return {
     proxy: proxyAddress,

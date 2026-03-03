@@ -189,6 +189,95 @@ export class BlockchainService {
     };
   }
 
+  // Reward Tier Methods
+  static async getRewardTierCount(): Promise<number> {
+    try {
+      const contract = this.getContract();
+      const count = await contract.getRewardTierCount();
+      return Number(count);
+    } catch (error: any) {
+      // Contract might not have reward tier support yet
+      if (error.message?.includes('not a function')) {
+        return 0;
+      }
+      throw error;
+    }
+  }
+
+  static async getRewardTier(id: number) {
+    const contract = this.getContract();
+    const tier = await contract.rewardTiers(id);
+    
+    // Convert wei to NILA (divide by 10^18)
+    const minNilaAmount = Number(ethers.formatUnits(tier.minNilaAmount, 18));
+    const maxNilaAmount = Number(ethers.formatUnits(tier.maxNilaAmount, 18));
+    
+    return {
+      id,
+      minNilaAmount,
+      maxNilaAmount,
+      instantRewardBps: Number(tier.instantRewardBps),
+      active: tier.active
+    };
+  }
+
+  static async getAllRewardTiers() {
+    const count = await this.getRewardTierCount();
+    const tiers = [];
+    
+    for (let i = 0; i < count; i++) {
+      const tier = await this.getRewardTier(i);
+      tiers.push(tier);
+    }
+    
+    return tiers;
+  }
+
+  static async addRewardTier(minNilaAmount: string, maxNilaAmount: string, instantRewardBps: number) {
+    const contract = this.getContract();
+    const tx = await contract.addRewardTier(minNilaAmount, maxNilaAmount, instantRewardBps);
+    const receipt = await tx.wait();
+    
+    // Get the new tier ID from event
+    const event = receipt.logs.find((log: any) => {
+      try {
+        const parsed = contract.interface.parseLog(log);
+        return parsed?.name === 'RewardTierAdded';
+      } catch {
+        return false;
+      }
+    });
+    
+    let tierId = null;
+    if (event) {
+      const parsed = contract.interface.parseLog(event);
+      tierId = Number(parsed?.args[0]);
+    }
+    
+    return {
+      txHash: receipt.hash,
+      blockNumber: receipt.blockNumber,
+      tierId
+    };
+  }
+
+  static async updateRewardTier(
+    id: number,
+    minNilaAmount: string,
+    maxNilaAmount: string,
+    instantRewardBps: number,
+    active: boolean
+  ) {
+    const contract = this.getContract();
+    const tx = await contract.updateRewardTier(id, minNilaAmount, maxNilaAmount, instantRewardBps, active);
+    const receipt = await tx.wait();
+    
+    return {
+      txHash: receipt.hash,
+      blockNumber: receipt.blockNumber
+    };
+  }
+
   // Stats Methods
   static async getStakingStats() {
     const contract = this.getContract();

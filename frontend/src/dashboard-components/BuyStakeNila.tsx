@@ -1,21 +1,15 @@
 import { useState, useMemo, useEffect } from 'react';
-import { Info, ShieldCheck, Zap, Loader2, CheckCircle2, Circle, TrendingUp, CreditCard, Coins } from 'lucide-react';
+import { Info, ShieldCheck, Zap, Loader2, CheckCircle2, Circle, TrendingUp } from 'lucide-react';
 import { ContractService } from '../services/contractService';
 import { useWallet } from '../hooks/useWallet';
 import { useAccount } from 'wagmi';
 import toast from 'react-hot-toast';
 import { handleError } from '../utils/errorHandler';
 import { stakingApi, type LockConfig, type AmountConfig } from '../services/stakingApi';
+import { PriceService, type PriceData } from '../services/priceService';
 import { formatUnits } from 'ethers';
 
-const NILA_PRICE_USDT = 0.08; // 1 NILA = 0.08 USDT
 const MIN_USDT_PURCHASE = 10; // Minimum 10 USDT
-
-const CRYPTO_OPTIONS = [
-    { id: 'USDT', name: 'USDT', symbol: '₮' },
-    { id: 'TRON', name: 'TRON', symbol: 'TRX' },
-    { id: 'BNB', name: 'BNB', symbol: 'BNB' },
-];
 
 const BuyStakeNila = () => {
     const [plans, setPlans] = useState<LockConfig[]>([]);
@@ -26,10 +20,21 @@ const BuyStakeNila = () => {
     const [selectedPackageId, setSelectedPackageId] = useState<number | null>(null);
     const [customUsdtAmount, setCustomUsdtAmount] = useState<string>('');
     const [isCustom, setIsCustom] = useState<boolean>(false);
-    const [paymentMethod, setPaymentMethod] = useState<'crypto' | 'credit'>('crypto');
-    const [selectedCrypto, setSelectedCrypto] = useState<string>('USDT');
+    const [selectedChain, setSelectedChain] = useState<'BSC' | 'ETH' | 'TRON'>('BSC');
+    const [selectedToken, setSelectedToken] = useState<'USDT' | 'USDC' | 'NATIVE'>('USDT');
+    const [basePriceUnit, setBasePriceUnit] = useState<'USDT' | 'NILA'>('USDT');
     const [usdtBalance, setUsdtBalance] = useState<string>('0');
     const [loadingUsdtBalance, setLoadingUsdtBalance] = useState(false);
+    
+    // Real-time prices state
+    const [prices, setPrices] = useState<PriceData>({
+        BNB: 600,
+        ETH: 3000,
+        TRX: 0.12,
+        NILA: 0.08,
+        timestamp: Date.now()
+    });
+    const [loadingPrices, setLoadingPrices] = useState(true);
 
     // Status states
     const [staking, setStaking] = useState(false);
@@ -41,6 +46,29 @@ const BuyStakeNila = () => {
 
     const selectedPlan = plans.find(p => p.id === selectedPlanId);
     const selectedPackage = packages.find(p => p.id === selectedPackageId);
+
+    // Fetch real-time prices
+    useEffect(() => {
+        const fetchPrices = async () => {
+            try {
+                setLoadingPrices(true);
+                const priceData = await PriceService.fetchPrices();
+                setPrices(priceData);
+            } catch (error) {
+                console.error('Failed to fetch prices:', error);
+                toast.error('Failed to load real-time prices, using fallback');
+            } finally {
+                setLoadingPrices(false);
+            }
+        };
+
+        fetchPrices();
+
+        // Refresh prices every 60 seconds
+        const interval = setInterval(fetchPrices, 60000);
+
+        return () => clearInterval(interval);
+    }, []);
 
     // Fetch staking plans and packages from backend
     useEffect(() => {
@@ -97,9 +125,8 @@ const BuyStakeNila = () => {
     // Fetch USDT Balance
     useEffect(() => {
         const fetchUsdtBalance = async () => {
-            if (isConnected && address && paymentMethod === 'crypto') {
+            if (isConnected && address) {
                 try {
-                    setLoadingUsdtBalance(true);
                     const balanceWei = await ContractService.getUSDTBalance(address);
                     const balanceFormatted = formatUnits(balanceWei, 18);
                     setUsdtBalance(balanceFormatted);
@@ -115,7 +142,7 @@ const BuyStakeNila = () => {
             }
         };
         fetchUsdtBalance();
-    }, [isConnected, address, paymentMethod]);
+    }, [isConnected, address]);
 
     const handleBuyAndStake = async () => {
         if (!isConnected || !address) {
@@ -183,25 +210,52 @@ const BuyStakeNila = () => {
 
     // Calculate Earnings Preview
     const calculations = useMemo(() => {
-        let usdtSpent = 0;
+        const NILA_PRICE_USDT = prices.NILA;
+        const NATIVE_PRICES = {
+            BSC: prices.BNB,
+            ETH: prices.ETH,
+            TRON: prices.TRX
+        };
+
+        // Calculate base USDT spent which is used for NILA calculations
+        let usdtEquivalentSpent = 0;
+        let cryptoSpent = 0;
         let cashbackPercent = 0;
 
         if (isCustom) {
-            usdtSpent = parseFloat(customUsdtAmount) || 0;
+            cryptoSpent = parseFloat(customUsdtAmount) || 0;
             cashbackPercent = 0; // No cashback for custom amounts
         } else if (selectedPackage) {
-            // Convert NILA package to USDT
             const nilaAmount = parseFloat(selectedPackage.amount) / 1e18;
-            usdtSpent = nilaAmount * NILA_PRICE_USDT;
+            usdtEquivalentSpent = nilaAmount * NILA_PRICE_USDT;
+
+            // Convert to respective crypto if needed based on package which is in USDT originally
+            if (selectedToken === 'NATIVE') {
+                const nativePrice = NATIVE_PRICES[selectedChain];
+                cryptoSpent = usdtEquivalentSpent / nativePrice;
+            } else {
+                cryptoSpent = usdtEquivalentSpent; // USDT or USDC
+            }
+
             cashbackPercent = selectedPackage.instantRewardBps / 100;
         }
 
-        const nilaStaked = usdtSpent / NILA_PRICE_USDT;
-        const cashbackUSDT = usdtSpent * (cashbackPercent / 100);
+        if (isCustom) {
+            if (selectedToken === 'NATIVE') {
+                const nativePrice = NATIVE_PRICES[selectedChain];
+                usdtEquivalentSpent = cryptoSpent * nativePrice;
+            } else {
+                usdtEquivalentSpent = cryptoSpent; // USDT or USDC
+            }
+        }
+
+        const nilaStaked = usdtEquivalentSpent / NILA_PRICE_USDT;
+        const cashbackUSDT = usdtEquivalentSpent * (cashbackPercent / 100);
 
         if (!selectedPlan) {
             return {
-                usdtSpent,
+                usdtSpent: usdtEquivalentSpent,
+                cryptoSpent,
                 nilaStaked,
                 cashbackUSDT,
                 cashbackPercent,
@@ -220,7 +274,8 @@ const BuyStakeNila = () => {
         const totalNILAAtMaturity = nilaStaked + apyRewardsNILA;
 
         return {
-            usdtSpent,
+            usdtSpent: usdtEquivalentSpent,
+            cryptoSpent,
             nilaStaked,
             cashbackUSDT,
             cashbackPercent,
@@ -229,7 +284,7 @@ const BuyStakeNila = () => {
             duration: selectedPlan.lockDuration,
             apr: aprPercent
         };
-    }, [selectedPackage, selectedPlan, isCustom, customUsdtAmount]);
+    }, [selectedPackage, selectedPlan, isCustom, customUsdtAmount, selectedChain, selectedToken, prices]);
 
     const isProcessing = staking;
 
@@ -238,7 +293,7 @@ const BuyStakeNila = () => {
             {/* Header Area Removed */}
 
             {/* Network Warning */}
-            {isConnected && !isCorrectNetwork && paymentMethod === 'crypto' && (
+            {isConnected && !isCorrectNetwork && (
                 <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 flex items-center justify-between shadow-sm">
                     <div className="flex items-center gap-3">
                         <div className="bg-amber-100 p-2 rounded-full">
@@ -289,34 +344,86 @@ const BuyStakeNila = () => {
 
                         <div className="sm:ml-11 pl-1 sm:pl-0 relative z-10 space-y-5">
                             {/* Payment Method Toggle */}
-                            <div>
-                                <h3 className="text-xs font-bold text-slate-500 mb-2 uppercase tracking-wider">Payment Method</h3>
-                                <div className="flex items-center gap-3 bg-slate-50/50 p-1.5 rounded-2xl border border-slate-100 w-fit">
-                                    <button
-                                        onClick={() => setPaymentMethod('crypto')}
-                                        className={`flex items-center gap-2 px-5 py-2 rounded-xl font-bold transition-all text-sm ${paymentMethod === 'crypto' ? 'bg-white shadow-sm text-slate-900 border border-slate-200' : 'text-slate-500 hover:text-slate-700'}`}
-                                    >
-                                        <Coins size={16} className={paymentMethod === 'crypto' ? 'text-red-500' : ''} />
-                                        Crypto
-                                    </button>
-                                    <button
-                                        onClick={() => setPaymentMethod('credit')}
-                                        className={`flex items-center gap-2 px-5 py-2 rounded-xl font-bold transition-all text-sm ${paymentMethod === 'credit' ? 'bg-white shadow-sm text-slate-900 border border-slate-200' : 'text-slate-500 hover:text-slate-700'}`}
-                                    >
-                                        <CreditCard size={16} className={paymentMethod === 'credit' ? 'text-red-500' : ''} />
-                                        Credit
-                                    </button>
+                            <div className="flex gap-4 mb-4">
+                                <div className="flex-1">
+                                    <h3 className="text-xs font-bold text-slate-500 mb-2 uppercase tracking-wider">Select Chain</h3>
+                                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                                        {[
+                                            { id: 'BSC', name: 'BSC', icon: 'https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/binance/info/logo.png', short: 'BNB Chain' },
+                                            { id: 'ETH', name: 'Ethereum', icon: 'https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/ethereum/info/logo.png', short: 'Ethereum' },
+                                            { id: 'TRON', name: 'Tron', icon: 'https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/tron/info/logo.png', short: 'Tron' }
+                                        ].map(chain => (
+                                            <button
+                                                key={chain.id}
+                                                onClick={() => {
+                                                    setSelectedChain(chain.id as any);
+                                                    if (chain.id === 'TRON' && selectedToken === 'USDC') {
+                                                        setSelectedToken('USDT'); // TRON only supports TRX and USDT in backend
+                                                    }
+                                                }}
+                                                className={`flex items-center gap-3 px-3 py-2 rounded-xl font-bold transition-all text-sm border-2 ${selectedChain === chain.id ? 'bg-amber-100 border-amber-500 text-amber-900 shadow-sm ring-2 ring-amber-50' : 'bg-amber-50/50 border-amber-100/50 text-slate-600 hover:border-amber-200'}`}
+                                            >
+                                                <div className="w-6 h-6 rounded-full bg-white p-1 flex items-center justify-center shrink-0 overflow-hidden shadow-sm border border-slate-100">
+                                                    <img src={chain.icon} alt={chain.name} className="w-full h-full object-contain" />
+                                                </div>
+                                                <span className="truncate">{chain.short}</span>
+                                            </button>
+                                        ))}
+                                    </div>
                                 </div>
                             </div>
 
-
-
-                            {paymentMethod === 'credit' && (
-                                <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 flex items-center gap-2.5 shadow-sm animate-in fade-in slide-in-from-top-2">
-                                    <Info className="w-4 h-4 text-amber-600 shrink-0" />
-                                    <span className="text-amber-900 font-medium text-xs">Credit card payments will be coming soon! Please use Crypto for now.</span>
+                            <div className="flex gap-4">
+                                <div className="flex-1">
+                                    <h3 className="text-xs font-bold text-slate-500 mb-2 uppercase tracking-wider">Select Token</h3>
+                                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                                        {[
+                                            { id: 'USDT', name: 'USDT', symbol: '₮' },
+                                            ...(selectedChain !== 'TRON' ? [{ id: 'USDC', name: 'USDC', symbol: '$' }] : []),
+                                            { id: 'NATIVE', name: selectedChain === 'BSC' ? 'BNB' : selectedChain === 'ETH' ? 'ETH' : 'TRX', symbol: selectedChain === 'BSC' ? 'BNB' : selectedChain === 'ETH' ? 'ETH' : 'TRX' }
+                                        ].map(token => (
+                                            <button
+                                                key={token.id}
+                                                onClick={() => setSelectedToken(token.id as any)}
+                                                className={`flex items-center justify-center gap-2 px-3 py-2 rounded-xl font-bold transition-all text-sm border-2 ${selectedToken === token.id ? 'bg-slate-800 border-slate-900 text-white shadow-sm ring-2 ring-slate-200' : 'bg-white border-slate-200 text-slate-600 hover:border-slate-400'}`}
+                                            >
+                                                {token.name}
+                                            </button>
+                                        ))}
+                                    </div>
                                 </div>
-                            )}
+                            </div>
+
+                            {/* Base Price Display */}
+                            <div className="mt-4 p-3 bg-slate-50/80 rounded-xl border border-slate-100 flex items-center justify-between">
+                                <span className="text-sm font-bold text-slate-500">Base Price {loadingPrices && <Loader2 className="w-3 h-3 inline animate-spin ml-1" />}</span>
+                                <div className="flex items-center gap-3">
+                                    <div className="text-sm font-bold text-slate-800">
+                                        {selectedToken === 'NATIVE'
+                                            ? (basePriceUnit === 'USDT'
+                                                ? `1 ${selectedChain === 'BSC' ? 'BNB' : selectedChain === 'ETH' ? 'ETH' : 'TRX'} = ${prices[selectedChain === 'BSC' ? 'BNB' : selectedChain === 'ETH' ? 'ETH' : 'TRX'].toLocaleString()} USDT`
+                                                : `1 ${selectedChain === 'BSC' ? 'BNB' : selectedChain === 'ETH' ? 'ETH' : 'TRX'} = ${(prices[selectedChain === 'BSC' ? 'BNB' : selectedChain === 'ETH' ? 'ETH' : 'TRX'] / prices.NILA).toLocaleString()} NILA`)
+                                            : (basePriceUnit === 'USDT'
+                                                ? `1 NILA = ${prices.NILA} ${selectedToken}`
+                                                : `1 ${selectedToken} = ${(1 / prices.NILA).toFixed(2)} NILA`)
+                                        }
+                                    </div>
+                                    <div className="flex bg-slate-200/70 p-0.5 rounded-lg">
+                                        <button
+                                            onClick={() => setBasePriceUnit('NILA')}
+                                            className={`px-2 py-1 text-[10px] font-bold rounded-md transition-colors ${basePriceUnit === 'NILA' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                                        >
+                                            NILA
+                                        </button>
+                                        <button
+                                            onClick={() => setBasePriceUnit('USDT')}
+                                            className={`px-2 py-1 text-[10px] font-bold rounded-md transition-colors ${basePriceUnit === 'USDT' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                                        >
+                                            USDT
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                     </div>
 
@@ -326,7 +433,7 @@ const BuyStakeNila = () => {
 
                         <div className="relative z-10 flex items-center gap-3 mb-4">
                             <div className="bg-red-50 text-red-600 font-bold w-8 h-8 rounded-full flex items-center justify-center ring-4 ring-red-50/50 shrink-0 text-sm">2</div>
-                            <h2 className="text-lg font-bold text-slate-900">Select USDT Package</h2>
+                            <h2 className="text-lg font-bold text-slate-900">Select {selectedToken === 'NATIVE' ? (selectedChain === 'BSC' ? 'BNB' : selectedChain === 'ETH' ? 'ETH' : 'TRX') : selectedToken} Package</h2>
                         </div>
 
                         {loadingPackages ? (
@@ -344,7 +451,7 @@ const BuyStakeNila = () => {
                                 {packages.map((pkg) => {
                                     const isSelected = !isCustom && selectedPackageId === pkg.id;
                                     const nilaAmount = parseFloat(pkg.amount) / 1e18;
-                                    const usdtAmount = nilaAmount * NILA_PRICE_USDT;
+                                    const usdtAmount = nilaAmount * prices.NILA;
                                     const cashbackPercent = pkg.instantRewardBps / 100;
                                     return (
                                         <button
@@ -370,8 +477,14 @@ const BuyStakeNila = () => {
                                             </div>
 
                                             <div className="mb-2">
-                                                <div className="text-xl font-bold text-slate-900 mb-0.5">{usdtAmount.toLocaleString()}</div>
-                                                <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">USDT</div>
+                                                <div className="text-xl font-bold text-slate-900 mb-0.5">
+                                                    {selectedToken === 'NATIVE'
+                                                        ? (usdtAmount / prices[selectedChain === 'BSC' ? 'BNB' : selectedChain === 'ETH' ? 'ETH' : 'TRX']).toLocaleString(undefined, { maximumFractionDigits: 4 })
+                                                        : usdtAmount.toLocaleString()}
+                                                </div>
+                                                <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                                                    {selectedToken === 'NATIVE' ? (selectedChain === 'BSC' ? 'BNB' : selectedChain === 'ETH' ? 'ETH' : 'TRX') : selectedToken}
+                                                </div>
                                             </div>
 
                                             <div className="text-xs text-slate-500 mb-3">
@@ -408,7 +521,7 @@ const BuyStakeNila = () => {
                                     </div>
                                     <div className="flex-1 flex flex-col justify-center w-full">
                                         <span className="text-sm font-bold text-slate-900 mb-1">Enter Amount</span>
-                                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">USDT</span>
+                                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{selectedToken === 'NATIVE' ? (selectedChain === 'BSC' ? 'BNB' : selectedChain === 'ETH' ? 'ETH' : 'TRX') : selectedToken}</span>
                                     </div>
                                 </button>
                             </div>
@@ -428,11 +541,15 @@ const BuyStakeNila = () => {
                                         step="any"
                                     />
                                     <div className="pr-4 flex items-center gap-2 select-none">
-                                        <span className="text-sm font-bold text-slate-400">USDT</span>
+                                        <span className="text-sm font-bold text-slate-400">{selectedToken === 'NATIVE' ? (selectedChain === 'BSC' ? 'BNB' : selectedChain === 'ETH' ? 'ETH' : 'TRX') : selectedToken}</span>
                                     </div>
                                 </div>
                                 <div className="text-xs text-slate-500 mt-2 ml-1">
-                                    ≈ {(parseFloat(customUsdtAmount || '0') / NILA_PRICE_USDT).toLocaleString()} NILA
+                                    ≈ {(
+                                        selectedToken === 'NATIVE'
+                                            ? (parseFloat(customUsdtAmount || '0') * prices[selectedChain === 'BSC' ? 'BNB' : selectedChain === 'ETH' ? 'ETH' : 'TRX'] / prices.NILA)
+                                            : (parseFloat(customUsdtAmount || '0') / prices.NILA)
+                                    ).toLocaleString()} NILA
                                 </div>
                             </div>
                         )}
@@ -516,8 +633,8 @@ const BuyStakeNila = () => {
                                 {/* Breakdown section */}
                                 <div className="space-y-4 pb-6 border-b border-slate-800">
                                     <div className="flex justify-between items-center text-sm">
-                                        <span className="text-slate-400 font-medium">USDT Payment</span>
-                                        <span className="font-bold">{calculations.usdtSpent.toLocaleString(undefined, { maximumFractionDigits: 2 })} USDT</span>
+                                        <span className="text-slate-400 font-medium">{selectedToken === 'NATIVE' ? (selectedChain === 'BSC' ? 'BNB' : selectedChain === 'ETH' ? 'ETH' : 'TRX') : selectedToken} Payment</span>
+                                        <span className="font-bold">{calculations.cryptoSpent.toLocaleString(undefined, { maximumFractionDigits: selectedToken === 'NATIVE' ? 4 : 2 })} {selectedToken === 'NATIVE' ? (selectedChain === 'BSC' ? 'BNB' : selectedChain === 'ETH' ? 'ETH' : 'TRX') : selectedToken}</span>
                                     </div>
                                     <div className="flex justify-between items-center text-sm">
                                         <span className="text-slate-400 font-medium">NILA Staked (recorded)</span>
@@ -553,9 +670,9 @@ const BuyStakeNila = () => {
                                 {/* Action Button */}
                                 <button
                                     onClick={handleBuyAndStake}
-                                    disabled={isProcessing || paymentMethod === 'credit' || calculations.usdtSpent < MIN_USDT_PURCHASE}
+                                    disabled={isProcessing || calculations.cryptoSpent === 0}
                                     className={`w-full py-4 rounded-xl font-bold flex items-center justify-center gap-2 transition-all duration-300
-                                            ${(isProcessing || paymentMethod === 'credit' || calculations.usdtSpent < MIN_USDT_PURCHASE)
+                                            ${(isProcessing || calculations.cryptoSpent === 0)
                                             ? 'bg-slate-800 text-slate-500 cursor-not-allowed'
                                             : 'bg-gradient-to-r from-red-600 to-red-500 hover:from-red-500 hover:to-red-400 text-white shadow-[0_0_20px_rgba(220,38,38,0.3)] hover:shadow-[0_0_30px_rgba(220,38,38,0.5)] active:scale-[0.98]'
                                         }
@@ -566,20 +683,18 @@ const BuyStakeNila = () => {
                                             <Loader2 className="w-5 h-5 animate-spin" />
                                             Processing...
                                         </>
-                                    ) : paymentMethod === 'credit' ? (
-                                        'Credit Pending'
-                                    ) : !isConnected ? (
+                                    ) : !isConnected && selectedChain !== 'TRON' ? (
                                         'Connect Wallet to Buy'
-                                    ) : calculations.usdtSpent < MIN_USDT_PURCHASE ? (
-                                        `Minimum ${MIN_USDT_PURCHASE} USDT Required`
+                                    ) : calculations.cryptoSpent === 0 ? (
+                                        `Select Amount`
                                     ) : (
-                                        `Buy & Stake with ${selectedCrypto}`
+                                        `Buy & Stake with ${selectedToken === 'NATIVE' ? (selectedChain === 'BSC' ? 'BNB' : selectedChain === 'ETH' ? 'ETH' : 'TRX') : selectedToken}`
                                     )}
                                 </button>
 
                                 <div className="flex items-start gap-2.5 text-xs text-slate-400 mt-6 leading-relaxed bg-slate-800/50 p-4 rounded-xl border border-slate-700/50">
                                     <ShieldCheck size={18} className="shrink-0 text-emerald-400" />
-                                    <span>You pay USDT and receive NILA recorded in the contract. Instant cashback is in USDT. At maturity, you receive your principal + APY rewards in NILA tokens.</span>
+                                    <span>You pay in {selectedToken === 'NATIVE' ? (selectedChain === 'BSC' ? 'BNB' : selectedChain === 'ETH' ? 'ETH' : 'TRX') : selectedToken} on {selectedChain === 'BSC' ? 'BNB Chain' : selectedChain === 'ETH' ? 'Ethereum' : 'Tron'} and receive NILA recorded in the contract. Instant cashback is in USDT. At maturity, you receive your principal + APY rewards in NILA tokens.</span>
                                 </div>
                             </div>
                         </div>

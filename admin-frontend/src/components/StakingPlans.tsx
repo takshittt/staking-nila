@@ -1,9 +1,9 @@
 import { Plus, Power, PowerOff, Loader2, Pencil } from 'lucide-react';
 import { useState, useEffect } from 'react';
-import { CreateAmountConfigModal, CreateLockConfigModal } from './CreatePlanModal';
-import type { AmountConfigFormData, LockConfigFormData } from './CreatePlanModal';
+import { CreateAmountConfigModal, CreateLockConfigModal, CreateRewardTierModal } from './CreatePlanModal';
+import type { AmountConfigFormData, LockConfigFormData, RewardTierFormData } from './CreatePlanModal';
 import { stakingApi } from '../api/stakingApi';
-import type { AmountConfig, LockConfig } from '../api/stakingApi';
+import type { AmountConfig, LockConfig, RewardTier } from '../api/stakingApi';
 import toast from 'react-hot-toast';
 
 const getBadgeStyles = (active: boolean) => {
@@ -11,19 +11,23 @@ const getBadgeStyles = (active: boolean) => {
 };
 
 const StakingPlans = () => {
-    const [activeTab, setActiveTab] = useState<'amounts' | 'locks'>('amounts');
+    const [activeTab, setActiveTab] = useState<'amounts' | 'locks' | 'tiers'>('amounts');
     const [amountConfigs, setAmountConfigs] = useState<AmountConfig[]>([]);
     const [lockConfigs, setLockConfigs] = useState<LockConfig[]>([]);
+    const [rewardTiers, setRewardTiers] = useState<RewardTier[]>([]);
 
     // Modal states
     const [isAmountModalOpen, setIsAmountModalOpen] = useState(false);
     const [isLockModalOpen, setIsLockModalOpen] = useState(false);
+    const [isTierModalOpen, setIsTierModalOpen] = useState(false);
 
     // Edit states
     const [editingAmountId, setEditingAmountId] = useState<number | null>(null);
     const [editingLockId, setEditingLockId] = useState<number | null>(null);
+    const [editingTierId, setEditingTierId] = useState<number | null>(null);
     const [amountInitialData, setAmountInitialData] = useState<AmountConfigFormData | undefined>(undefined);
     const [lockInitialData, setLockInitialData] = useState<LockConfigFormData | undefined>(undefined);
+    const [tierInitialData, setTierInitialData] = useState<any>(undefined);
 
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -37,12 +41,14 @@ const StakingPlans = () => {
         setLoading(true);
         setError(null);
         try {
-            const [amounts, locks] = await Promise.all([
+            const [amounts, locks, tiers] = await Promise.all([
                 stakingApi.getAmountConfigs(),
-                stakingApi.getLockConfigs()
+                stakingApi.getLockConfigs(),
+                stakingApi.getRewardTiers().catch(() => []) // Graceful fallback if not implemented yet
             ]);
             setAmountConfigs(amounts);
             setLockConfigs(locks);
+            setRewardTiers(tiers);
         } catch (err: any) {
             setError(err.response?.data?.error || 'Failed to fetch configurations');
         } finally {
@@ -202,6 +208,86 @@ const StakingPlans = () => {
         setLockInitialData(undefined);
     };
 
+    // Reward Tier handlers
+    const handleToggleTierActive = async (id: number) => {
+        const tier = rewardTiers.find(t => t.id === id);
+        if (!tier) return;
+
+        setTxPending(true);
+        try {
+            await stakingApi.updateRewardTier(id, {
+                minNilaAmount: tier.minNilaAmount,
+                maxNilaAmount: tier.maxNilaAmount,
+                instantRewardPercent: tier.instantRewardBps / 100,
+                active: !tier.active
+            });
+            await fetchConfigs();
+            toast.success('Tier updated successfully!');
+        } catch (err: any) {
+            toast.error(err.response?.data?.error || 'Failed to update tier');
+        } finally {
+            setTxPending(false);
+        }
+    };
+
+    const handleCreateRewardTier = async (data: any) => {
+        setTxPending(true);
+        try {
+            const result = await stakingApi.createRewardTier(data);
+            await fetchConfigs();
+            toast.success(`Reward tier created! TX: ${result.txHash.slice(0, 10)}...`);
+            handleCloseTierModal();
+        } catch (err: any) {
+            toast.error(err.response?.data?.error || 'Failed to create tier');
+        } finally {
+            setTxPending(false);
+        }
+    };
+
+    const handleUpdateRewardTier = async (data: any) => {
+        if (editingTierId === null) return;
+
+        const tier = rewardTiers.find(t => t.id === editingTierId);
+        if (!tier) return;
+
+        setTxPending(true);
+        try {
+            const result = await stakingApi.updateRewardTier(editingTierId, {
+                ...data,
+                active: tier.active
+            });
+            await fetchConfigs();
+            toast.success(`Reward tier updated! TX: ${result.txHash.slice(0, 10)}...`);
+            handleCloseTierModal();
+        } catch (err: any) {
+            toast.error(err.response?.data?.error || 'Failed to update tier');
+        } finally {
+            setTxPending(false);
+        }
+    };
+
+    const openCreateTierModal = () => {
+        setEditingTierId(null);
+        setTierInitialData(undefined);
+        setIsTierModalOpen(true);
+    };
+
+    const openEditTierModal = (tier: any) => {
+        setEditingTierId(tier.id);
+        setTierInitialData({
+            minNilaAmount: tier.minNilaAmount,
+            maxNilaAmount: tier.maxNilaAmount,
+            instantRewardPercent: tier.instantRewardBps / 100
+        });
+        setIsTierModalOpen(true);
+    };
+
+    const handleCloseTierModal = () => {
+        setIsTierModalOpen(false);
+        setEditingTierId(null);
+        setTierInitialData(undefined);
+    };
+
     // Convert wei to NILA for display
     const formatAmount = (amountWei: string) => {
         const amount = BigInt(amountWei) / BigInt(10 ** 18);
@@ -234,7 +320,7 @@ const StakingPlans = () => {
             <div className="flex items-center justify-between">
                 <div>
                     <h1 className="text-3xl font-bold text-slate-900">Staking Configuration</h1>
-                    <p className="text-slate-600 mt-1">Manage stake amounts and lock durations</p>
+                    <p className="text-slate-600 mt-1">Manage stake amounts, lock durations, and reward tiers</p>
                 </div>
             </div>
 
@@ -249,6 +335,7 @@ const StakingPlans = () => {
                             }`}
                     >
                         Amount Configs
+                        <span className="ml-2 text-xs bg-slate-200 text-slate-600 px-2 py-0.5 rounded-full">Reference</span>
                     </button>
                     <button
                         onClick={() => setActiveTab('locks')}
@@ -259,12 +346,27 @@ const StakingPlans = () => {
                     >
                         Lock Configs
                     </button>
+                    <button
+                        onClick={() => setActiveTab('tiers')}
+                        className={`px-4 py-3 font-medium border-b-2 transition-colors ${activeTab === 'tiers'
+                            ? 'border-red-600 text-red-600'
+                            : 'border-transparent text-slate-600 hover:text-slate-900'
+                            }`}
+                    >
+                        Reward Tiers
+                        <span className="ml-2 text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full">Active</span>
+                    </button>
                 </div>
             </div>
 
             {/* Amount Configs Tab */}
             {activeTab === 'amounts' && (
                 <div className="space-y-4">
+                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
+                        <p className="text-blue-900 text-sm font-medium">
+                            ℹ️ Amount configs are reference values for UI display only. Users can stake any amount. Instant rewards are calculated based on Reward Tiers.
+                        </p>
+                    </div>
                     <div className="flex justify-end">
                         <button
                             onClick={openCreateAmountModal}
@@ -458,6 +560,115 @@ const StakingPlans = () => {
                 </div>
             )}
 
+            {/* Reward Tiers Tab */}
+            {activeTab === 'tiers' && (
+                <div className="space-y-4">
+                    <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-4">
+                        <p className="text-green-900 text-sm font-medium">
+                            ✅ Reward tiers are enforced by the smart contract. Instant rewards are automatically calculated based on the NILA stake amount.
+                        </p>
+                    </div>
+                    <div className="flex justify-end">
+                        <button
+                            onClick={openCreateTierModal}
+                            disabled={txPending}
+                            className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                            <Plus className="w-5 h-5" />
+                            Create Reward Tier
+                        </button>
+                    </div>
+
+                    <div className="bg-white rounded-xl border border-slate-100 shadow-sm overflow-hidden">
+                        <div className="overflow-x-auto">
+                            <table className="w-full">
+                                <thead>
+                                    <tr className="border-b border-slate-100 bg-slate-50">
+                                        <th className="px-6 py-4 text-left text-sm font-semibold text-slate-900">
+                                            ID
+                                        </th>
+                                        <th className="px-6 py-4 text-left text-sm font-semibold text-slate-900">
+                                            Min NILA
+                                        </th>
+                                        <th className="px-6 py-4 text-left text-sm font-semibold text-slate-900">
+                                            Max NILA
+                                        </th>
+                                        <th className="px-6 py-4 text-left text-sm font-semibold text-slate-900">
+                                            Instant Reward
+                                        </th>
+                                        <th className="px-6 py-4 text-left text-sm font-semibold text-slate-900">
+                                            Status
+                                        </th>
+                                        <th className="px-6 py-4 text-left text-sm font-semibold text-slate-900">
+                                            Actions
+                                        </th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {rewardTiers.map((tier) => (
+                                        <tr
+                                            key={tier.id}
+                                            className="border-b border-slate-100 hover:bg-slate-50 transition-colors"
+                                        >
+                                            <td className="px-6 py-4 text-sm font-medium text-slate-900">
+                                                #{tier.id}
+                                            </td>
+                                            <td className="px-6 py-4 text-sm font-semibold text-slate-900">
+                                                {tier.minNilaAmount.toLocaleString()} NILA
+                                            </td>
+                                            <td className="px-6 py-4 text-sm font-semibold text-slate-900">
+                                                {tier.maxNilaAmount === 0 ? 'Unlimited' : `${tier.maxNilaAmount.toLocaleString()} NILA`}
+                                            </td>
+                                            <td className="px-6 py-4 text-sm text-slate-600">
+                                                {(tier.instantRewardBps / 100).toFixed(1)}%
+                                            </td>
+                                            <td className="px-6 py-4">
+                                                <span
+                                                    className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-semibold ${getBadgeStyles(
+                                                        tier.active
+                                                    )}`}
+                                                >
+                                                    {tier.active ? 'Active' : 'Inactive'}
+                                                </span>
+                                            </td>
+                                            <td className="px-6 py-4">
+                                                <div className="flex items-center gap-2">
+                                                    <button
+                                                        onClick={() => openEditTierModal(tier)}
+                                                        disabled={txPending}
+                                                        className="p-2 text-slate-600 hover:bg-slate-100 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                                        title="Edit"
+                                                    >
+                                                        <Pencil className="w-4 h-4" />
+                                                    </button>
+                                                    <button
+                                                        onClick={() => handleToggleTierActive(tier.id)}
+                                                        disabled={txPending}
+                                                        className="p-2 text-slate-600 hover:bg-slate-100 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                                        title={tier.active ? 'Deactivate' : 'Activate'}
+                                                    >
+                                                        {tier.active ? (
+                                                            <PowerOff className="w-4 h-4" />
+                                                        ) : (
+                                                            <Power className="w-4 h-4" />
+                                                        )}
+                                                    </button>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                        {rewardTiers.length === 0 && (
+                            <div className="px-6 py-12 text-center text-slate-600">
+                                No reward tiers found. Create one to get started.
+                            </div>
+                        )}
+                    </div>
+                </div>
+            )}
+
             {/* Modals */}
             <CreateAmountConfigModal
                 isOpen={isAmountModalOpen}
@@ -472,6 +683,13 @@ const StakingPlans = () => {
                 onSubmit={editingLockId !== null ? handleUpdateLockConfig : handleCreateLockConfig}
                 initialData={lockInitialData}
                 isEditing={editingLockId !== null}
+            />
+            <CreateRewardTierModal
+                isOpen={isTierModalOpen}
+                onClose={handleCloseTierModal}
+                onSubmit={editingTierId !== null ? handleUpdateRewardTier : handleCreateRewardTier}
+                initialData={tierInitialData}
+                isEditing={editingTierId !== null}
             />
         </div>
     );
