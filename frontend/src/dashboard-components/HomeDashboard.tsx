@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ArrowRight, Wallet, TrendingUp, Zap, Clock, ChevronRight, RefreshCw, CheckCircle } from 'lucide-react';
+import { ArrowRight, Wallet, TrendingUp, Zap, Clock, ChevronRight, CheckCircle } from 'lucide-react';
 import { useAccount } from 'wagmi';
 import StakeDetailsModal from './StakeDetailsModal';
 import { dashboardApi, type DashboardStats, type StakeWithRewards } from '../services/dashboardApi';
@@ -126,21 +126,6 @@ const HomeDashboard: React.FC<HomeDashboardProps> = ({ onNavigate }) => {
     return (
         <>
             <div className="space-y-6">
-                {/* Welcome Header */}
-                <div className="flex items-center justify-between">
-                    <div>
-                        <h1 className="text-2xl font-bold text-slate-900">Welcome to NILA Staking</h1>
-                        <p className="text-slate-500 mt-1">Track your stakes, rewards, and referrals in one place.</p>
-                    </div>
-                    <button
-                        onClick={loadDashboardData}
-                        className="p-2 hover:bg-slate-100 rounded-full transition-colors"
-                        title="Refresh Data"
-                    >
-                        <RefreshCw className="w-5 h-5 text-slate-400" />
-                    </button>
-                </div>
-
                 {/* Error Message */}
                 {error && (
                     <div className="bg-red-50 border border-red-200 rounded-lg p-4">

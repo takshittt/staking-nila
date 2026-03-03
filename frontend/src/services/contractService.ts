@@ -3,6 +3,10 @@ import { BrowserProvider, Contract, parseUnits } from 'ethers';
 // Contract addresses - these should match your deployed contracts
 const STAKING_CONTRACT_ADDRESS = import.meta.env.VITE_STAKING_CONTRACT_ADDRESS || '0x4b0f512ACE0239A604AA8f8D5C05bD455248D86E';
 const NILA_TOKEN_ADDRESS = import.meta.env.VITE_NILA_TOKEN_ADDRESS || '0xA31fb7667F80306690F5DF0d9A6ea272aBF97926';
+const USDT_TOKEN_ADDRESS = '0xef4f8bdeDad6829817F802a957b8a5232644e1bC'; // BSC Testnet USDT
+
+// Price constant
+const NILA_PRICE_USDT = 0.08; // 1 NILA = 0.08 USDT
 
 // BSC Testnet Chain ID
 const BSC_TESTNET_CHAIN_ID = '0x61'; // 97 in decimal
@@ -20,13 +24,29 @@ const BSC_TESTNET_PARAMS = {
 
 // Minimal ABI for the functions we need
 const STAKING_ABI = [
-  'function stake(uint256 amountId, uint256 lockId) external',
-  'function stakeWithReferral(uint256 amountId, uint256 lockId, address referrer) external',
-  'function claimInstantRewards() external',
-  'function claimReferralRewards() external',
-  'function claimAllRewards() external',
-  'function getClaimableRewards(address user) external view returns (uint256 instantRewards, uint256 referralRewards, uint256 totalClaimable)',
-  'function getReferralConfig() external view returns (uint256 referralPercentageBps, uint256 referrerPercentageBps, bool isPaused)',
+  // Staking functions
+  'function stake(uint256 amount, uint256 lockId)',
+  'function stakeWithReferral(uint256 amount, uint256 lockId, address referrer)',
+  'function stakeWithAmountConfig(uint256 amountId, uint256 lockId)',
+  'function stakeWithAmountConfigAndReferral(uint256 amountId, uint256 lockId, address referrer)',
+  // USDT staking functions
+  'function buyAndStakeWithUSDT(uint256 usdtAmount, uint256 lockId)',
+  'function buyAndStakeWithUSDTAndReferral(uint256 usdtAmount, uint256 lockId, address referrer)',
+  // Claiming functions
+  'function claimInstantRewards()',
+  'function claimReferralRewards()',
+  'function claimAllRewards()',
+  'function claimAllAPYRewards()',
+  'function claimInstantRewardsUSDT()',
+  'function claimReferralRewardsUSDT()',
+  'function claimAllUSDTRewards()',
+  // View functions
+  'function getClaimableRewards(address user) view returns (uint256 instantRewards, uint256 referralRewards, uint256 totalClaimable)',
+  'function getClaimableRewardsDetailed(address user) view returns (uint256 instantRewardsNILA, uint256 referralRewardsNILA, uint256 instantRewardsUSDT, uint256 referralRewardsUSDT, uint256 apyRewardsNILA)',
+  'function getReferralConfig() view returns (uint256 referralPercentageBps, uint256 referrerPercentageBps, bool isPaused)',
+  'function getUserStakes(address user) view returns (tuple(uint256 amount, uint256 usdtPaid, uint256 startTime, uint256 lastClaimTime, uint256 unlockTime, uint256 aprSnapshot, uint256 instantRewardSnapshot, bool unstaked, bool isUsdtStake)[])',
+  'function getNILALiabilityStatus() view returns (uint256 totalLiabilities, uint256 nilaBalance, uint256 deficitOrSurplus, bool hasSurplus)',
+  'function getUSDTBalance() view returns (uint256)',
 ];
 
 const ERC20_ABI = [
@@ -36,7 +56,19 @@ const ERC20_ABI = [
 ];
 
 export interface StakeParams {
+  amount: string; // Amount in NILA tokens (will be converted to wei)
+  lockConfigId: number;
+  referrerAddress?: string;
+}
+
+export interface BuyAndStakeParams {
   amountConfigId: number;
+  lockConfigId: number;
+  referrerAddress?: string;
+}
+
+export interface BuyAndStakeWithUSDTParams {
+  usdtAmount: string; // Amount in USDT (will be converted to wei)
   lockConfigId: number;
   referrerAddress?: string;
 }
@@ -117,6 +149,11 @@ export class ContractService {
     return new Contract(NILA_TOKEN_ADDRESS, ERC20_ABI, signer);
   }
 
+  static async getUSDTContract() {
+    const signer = await this.getSigner();
+    return new Contract(USDT_TOKEN_ADDRESS, ERC20_ABI, signer);
+  }
+
   // Check if user has approved the staking contract to spend their tokens
   static async checkAllowance(userAddress: string, amount: string): Promise<boolean> {
     try {
@@ -156,22 +193,120 @@ export class ContractService {
     }
   }
 
-  // Stake tokens
+  // Check user's USDT token balance
+  static async getUSDTBalance(userAddress: string): Promise<string> {
+    try {
+      const usdtContract = await this.getUSDTContract();
+      const balance = await usdtContract.balanceOf(userAddress);
+      return balance.toString();
+    } catch (error) {
+      return '0';
+    }
+  }
+
+  // Check if user has approved the staking contract to spend their USDT
+  static async checkUSDTAllowance(userAddress: string, amount: string): Promise<boolean> {
+    try {
+      const usdtContract = await this.getUSDTContract();
+      const allowance = await usdtContract.allowance(userAddress, STAKING_CONTRACT_ADDRESS);
+      const requiredAmount = parseUnits(amount, 18);
+      return allowance >= requiredAmount;
+    } catch (error) {
+      return false;
+    }
+  }
+
+  // Approve the staking contract to spend USDT
+  static async approveUSDT(amount: string): Promise<string> {
+    try {
+      const usdtContract = await this.getUSDTContract();
+      const amountWei = parseUnits(amount, 18);
+
+      const tx = await usdtContract.approve(STAKING_CONTRACT_ADDRESS, amountWei);
+
+      await tx.wait();
+
+      return tx.hash;
+    } catch (error: any) {
+      throw new Error(error.message || 'Failed to approve USDT');
+    }
+  }
+
+  // Stake tokens with flexible amount (direct staking - no instant rewards)
   static async stake(params: StakeParams): Promise<string> {
+    try {
+      const stakingContract = await this.getStakingContract();
+      const amountWei = parseUnits(params.amount, 18);
+
+      console.log('Staking with params:', {
+        amount: params.amount,
+        amountWei: amountWei.toString(),
+        lockConfigId: params.lockConfigId,
+        referrerAddress: params.referrerAddress
+      });
+
+      let tx;
+      if (params.referrerAddress) {
+        // Stake with referral
+        console.log('Calling stakeWithReferral...');
+        tx = await stakingContract.stakeWithReferral(
+          amountWei,
+          params.lockConfigId,
+          params.referrerAddress
+        );
+      } else {
+        // Regular stake
+        console.log('Calling stake...');
+        tx = await stakingContract.stake(
+          amountWei,
+          params.lockConfigId
+        );
+      }
+
+      console.log('Transaction sent:', tx.hash);
+
+      // Wait for confirmation
+      await tx.wait();
+
+      return tx.hash;
+    } catch (error: any) {
+      console.error('Stake error:', error);
+
+      // Parse common errors
+      if (error.message?.includes('user rejected')) {
+        throw new Error('Transaction rejected by user');
+      } else if (error.message?.includes('insufficient funds')) {
+        throw new Error('Insufficient funds for transaction');
+      } else if (error.message?.includes('insufficient allowance')) {
+        throw new Error('Insufficient token allowance. Please try approving again.');
+      } else if (error.message?.includes('Amount below minimum')) {
+        throw new Error('Amount must be at least 100 NILA');
+      } else if (error.message?.includes('Invalid lock config') || error.message?.includes('Invalid lockId')) {
+        throw new Error('Invalid lock duration selected');
+      } else if (error.message?.includes('Invalid amountId')) {
+        throw new Error('Invalid staking configuration. Please contact support.');
+      }
+
+      throw new Error(error.message || 'Failed to stake tokens');
+    }
+  }
+
+  // Stake tokens with amount config (Buy & Stake - includes instant rewards)
+  static async stakeWithAmountConfig(params: BuyAndStakeParams): Promise<string> {
     try {
       const stakingContract = await this.getStakingContract();
 
       let tx;
       if (params.referrerAddress) {
         // Stake with referral
-        tx = await stakingContract.stakeWithReferral(
+        tx = await stakingContract.stakeWithAmountConfigAndReferral(
           params.amountConfigId,
           params.lockConfigId,
           params.referrerAddress
         );
       } else {
         // Regular stake
-        tx = await stakingContract.stake(
+        tx = await stakingContract.stakeWithAmountConfig(
           params.amountConfigId,
           params.lockConfigId
         );
@@ -188,8 +323,6 @@ export class ContractService {
         throw new Error('Transaction rejected by user');
       } else if (error.message?.includes('insufficient funds')) {
         throw new Error('Insufficient funds for transaction');
-      } else if (error.message?.includes('insufficient allowance')) {
-        throw new Error('Insufficient token allowance. Please try approving again.');
       } else if (error.message?.includes('Invalid amount config')) {
         throw new Error('Invalid staking package selected');
       } else if (error.message?.includes('Invalid lock config')) {
@@ -197,6 +330,64 @@ export class ContractService {
       }
 
       throw new Error(error.message || 'Failed to stake tokens');
+    }
+  }
+
+  // Buy NILA with USDT and stake (with instant rewards in USDT)
+  static async buyAndStakeWithUSDT(params: BuyAndStakeWithUSDTParams): Promise<string> {
+    try {
+      const stakingContract = await this.getStakingContract();
+      const usdtAmountWei = parseUnits(params.usdtAmount, 18);
+
+      console.log('Buying and staking with USDT:', {
+        usdtAmount: params.usdtAmount,
+        usdtAmountWei: usdtAmountWei.toString(),
+        nilaEquivalent: (parseFloat(params.usdtAmount) / NILA_PRICE_USDT).toFixed(2),
+        lockConfigId: params.lockConfigId,
+        referrerAddress: params.referrerAddress
+      });
+
+      let tx;
+      if (params.referrerAddress) {
+        // Buy and stake with referral
+        console.log('Calling buyAndStakeWithUSDTAndReferral...');
+        tx = await stakingContract.buyAndStakeWithUSDTAndReferral(
+          usdtAmountWei,
+          params.lockConfigId,
+          params.referrerAddress
+        );
+      } else {
+        // Regular buy and stake
+        console.log('Calling buyAndStakeWithUSDT...');
+        tx = await stakingContract.buyAndStakeWithUSDT(
+          usdtAmountWei,
+          params.lockConfigId
+        );
+      }
+
+      console.log('Transaction sent:', tx.hash);
+
+      // Wait for confirmation
+      await tx.wait();
+
+      return tx.hash;
+    } catch (error: any) {
+      console.error('Buy and stake error:', error);
+
+      // Parse common errors
+      if (error.message?.includes('user rejected')) {
+        throw new Error('Transaction rejected by user');
+      } else if (error.message?.includes('insufficient funds')) {
+        throw new Error('Insufficient USDT balance for transaction');
+      } else if (error.message?.includes('insufficient allowance')) {
+        throw new Error('Insufficient USDT allowance. Please try approving again.');
+      } else if (error.message?.includes('Minimum 10 USDT required')) {
+        throw new Error('Minimum purchase amount is 10 USDT');
+      } else if (error.message?.includes('Invalid lock config') || error.message?.includes('Invalid lockId')) {
+        throw new Error('Invalid lock duration selected');
+      }
+
+      throw new Error(error.message || 'Failed to buy and stake with USDT');
     }
   }
 
@@ -289,6 +480,29 @@ export class ContractService {
     }
   }
 
+  // Claim all APY rewards
+  static async claimAPYRewards(): Promise<string> {
+    try {
+      const stakingContract = await this.getStakingContract();
+      const tx = await stakingContract.claimAllAPYRewards();
+
+      await tx.wait();
+
+      return tx.hash;
+    } catch (error: any) {
+
+      if (error.message?.includes('user rejected')) {
+        throw new Error('Transaction rejected by user');
+      } else if (error.message?.includes('No APY rewards to claim')) {
+        throw new Error('No APY rewards available to claim');
+      } else if (error.message?.includes('Insufficient reward pool')) {
+        throw new Error('Something went wrong. The reward pool is temporarily insufficient. Please wait a moment and try again, or contact support if the issue persists.');
+      }
+
+      throw new Error(error.message || 'Failed to claim APY rewards');
+    }
+  }
+
   // Get referral configuration
   static async getReferralConfig(): Promise<{
     referralPercent: number;
@@ -315,6 +529,96 @@ export class ContractService {
         referrerPercent: 3,
         isPaused: false
       };
+    }
+  }
+
+  // Claim instant rewards in USDT
+  static async claimInstantRewardsUSDT(): Promise<string> {
+    try {
+      const stakingContract = await this.getStakingContract();
+      const tx = await stakingContract.claimInstantRewardsUSDT();
+
+      await tx.wait();
+
+      return tx.hash;
+    } catch (error: any) {
+      if (error.message?.includes('user rejected')) {
+        throw new Error('Transaction rejected by user');
+      } else if (error.message?.includes('No USDT instant rewards to claim')) {
+        throw new Error('No USDT instant rewards available to claim');
+      } else if (error.message?.includes('Insufficient USDT balance')) {
+        throw new Error('Insufficient USDT in contract. Please contact support.');
+      }
+
+      throw new Error(error.message || 'Failed to claim USDT instant rewards');
+    }
+  }
+
+  // Claim referral rewards in USDT
+  static async claimReferralRewardsUSDT(): Promise<string> {
+    try {
+      const stakingContract = await this.getStakingContract();
+      const tx = await stakingContract.claimReferralRewardsUSDT();
+
+      await tx.wait();
+
+      return tx.hash;
+    } catch (error: any) {
+      if (error.message?.includes('user rejected')) {
+        throw new Error('Transaction rejected by user');
+      } else if (error.message?.includes('No USDT referral rewards to claim')) {
+        throw new Error('No USDT referral rewards available to claim');
+      } else if (error.message?.includes('Insufficient USDT balance')) {
+        throw new Error('Insufficient USDT in contract. Please contact support.');
+      }
+
+      throw new Error(error.message || 'Failed to claim USDT referral rewards');
+    }
+  }
+
+  // Claim all USDT rewards (instant + referral)
+  static async claimAllUSDTRewards(): Promise<string> {
+    try {
+      const stakingContract = await this.getStakingContract();
+      const tx = await stakingContract.claimAllUSDTRewards();
+
+      await tx.wait();
+
+      return tx.hash;
+    } catch (error: any) {
+      if (error.message?.includes('user rejected')) {
+        throw new Error('Transaction rejected by user');
+      } else if (error.message?.includes('No USDT rewards to claim')) {
+        throw new Error('No USDT rewards available to claim');
+      } else if (error.message?.includes('Insufficient USDT balance')) {
+        throw new Error('Insufficient USDT in contract. Please contact support.');
+      }
+
+      throw new Error(error.message || 'Failed to claim all USDT rewards');
+    }
+  }
+
+  // Get detailed claimable rewards (NILA and USDT)
+  static async getClaimableRewardsDetailed(userAddress: string): Promise<{
+    instantRewardsNILA: string;
+    referralRewardsNILA: string;
+    instantRewardsUSDT: string;
+    referralRewardsUSDT: string;
+    apyRewardsNILA: string;
+  }> {
+    try {
+      const stakingContract = await this.getStakingContract();
+      const rewards = await stakingContract.getClaimableRewardsDetailed(userAddress);
+
+      return {
+        instantRewardsNILA: rewards.instantRewardsNILA.toString(),
+        referralRewardsNILA: rewards.referralRewardsNILA.toString(),
+        instantRewardsUSDT: rewards.instantRewardsUSDT.toString(),
+        referralRewardsUSDT: rewards.referralRewardsUSDT.toString(),
+        apyRewardsNILA: rewards.apyRewardsNILA.toString()
+      };
+    } catch (error: any) {
+      throw new Error(error.message || 'Failed to get detailed claimable rewards');
     }
   }
 }

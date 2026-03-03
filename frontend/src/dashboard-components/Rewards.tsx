@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Trophy, Zap, Users, AlertCircle, TrendingUp, CheckCircle, ArrowUpRight, History, RefreshCw } from 'lucide-react';
+import { Trophy, Zap, Users, AlertCircle, TrendingUp, CheckCircle, ArrowUpRight, History } from 'lucide-react';
 import { rewardApi } from '../services/rewardApi';
 import { transactionApi } from '../services/transactionApi';
 import type { PendingRewards, RewardHistory, LifetimeEarnings } from '../services/rewardApi';
@@ -13,17 +13,19 @@ const Rewards = () => {
     const [history, setHistory] = useState<RewardHistory[]>([]);
     const [isClaiming, setIsClaiming] = useState(false);
     const [isLoading, setIsLoading] = useState(true);
-    const [isSyncing, setIsSyncing] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
-    // Load rewards data
+    // Load rewards data and sync APY
     const loadRewardsData = async () => {
         if (!address) return;
 
         try {
             setIsLoading(true);
             setError(null);
+
+            // Sync APY rewards from blockchain first
+            await rewardApi.syncAPYRewards(address);
 
             const [pendingData, lifetimeData, historyData] = await Promise.all([
                 rewardApi.getPendingRewards(address),
@@ -42,26 +44,8 @@ const Rewards = () => {
         }
     };
 
-    // Sync APY rewards from blockchain
-    const syncAPYRewards = async () => {
-        if (!address) return;
-
-        try {
-            setIsSyncing(true);
-            await rewardApi.syncAPYRewards(address);
-            await loadRewardsData();
-            setSuccessMessage('APY rewards synced successfully');
-            setTimeout(() => setSuccessMessage(null), 3000);
-        } catch (err: any) {
-            console.error('Error syncing APY rewards:', err);
-            setError(err.message || 'Failed to sync APY rewards');
-        } finally {
-            setIsSyncing(false);
-        }
-    };
-
     // Claim rewards
-    const handleClaim = async (type: 'ALL' | 'INSTANT_CASHBACK' | 'REFERRAL_REWARD') => {
+    const handleClaim = async (type: 'ALL' | 'INSTANT_CASHBACK' | 'REFERRAL_REWARD' | 'APY_REWARD') => {
         if (!address || !rewards) return;
 
         try {
@@ -71,6 +55,7 @@ const Rewards = () => {
             // Capture the amounts BEFORE claiming (contract will return 0 after)
             const instantAmount = rewards.instantCashback;
             const referralAmount = rewards.referralRewards;
+            const apyAmount = rewards.stakingRewards;
 
             let txHash: string;
 
@@ -80,6 +65,9 @@ const Rewards = () => {
             } else if (type === 'REFERRAL_REWARD') {
                 // Claim referral rewards via contract
                 txHash = await ContractService.claimReferralRewards();
+            } else if (type === 'APY_REWARD') {
+                // Claim APY rewards via contract
+                txHash = await ContractService.claimAPYRewards();
             } else {
                 // Claim all rewards via contract
                 txHash = await ContractService.claimAllRewards();
@@ -92,7 +80,8 @@ const Rewards = () => {
                 // Also record in transactions table for transaction history
                 const claimAmount = type === 'INSTANT_CASHBACK' ? instantAmount :
                     type === 'REFERRAL_REWARD' ? referralAmount :
-                        instantAmount + referralAmount;
+                        type === 'APY_REWARD' ? apyAmount :
+                            instantAmount + referralAmount + apyAmount;
 
                 await transactionApi.createTransaction({
                     txHash,
@@ -166,39 +155,39 @@ const Rewards = () => {
                 </div>
             )}
 
-            {/* Page Title */}
-            <div className="bg-white rounded-2xl p-6 md:p-8 shadow-sm border border-slate-100">
-                <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-                    <div>
-                        <div className="flex items-center gap-3 mb-2">
-                            <div className="p-2 bg-yellow-100 text-yellow-600 rounded-lg">
-                                <Trophy size={24} />
-                            </div>
-                            <h1 className="text-2xl font-bold text-slate-900">Rewards Center</h1>
-                        </div>
-                        <p className="text-slate-500 max-w-2xl">
-                            Manage and claim your rewards from staking, referrals, and instant cashback.
-                        </p>
-                    </div>
+            <div className="flex flex-col lg:flex-row gap-6 mb-2">
+                {/* Big Promotional/Info Card */}
+                <div className="bg-gradient-to-br from-purple-50 via-purple-100 to-white rounded-2xl p-4 md:p-5 text-slate-800 shadow-sm flex-1 relative overflow-hidden group border border-purple-200 flex items-center h-28">
+                    <div className="absolute top-0 right-0 w-64 h-64 bg-purple-300/20 rounded-full blur-[60px] -mr-32 -mt-32 pointer-events-none transition-transform duration-700 group-hover:scale-150"></div>
+                    <div className="absolute bottom-0 left-0 w-64 h-64 bg-white/40 rounded-full blur-[60px] -ml-32 -mb-32 pointer-events-none"></div>
 
-                    <div className="flex items-center gap-4">
-                        <button
-                            onClick={syncAPYRewards}
-                            disabled={isSyncing}
-                            className="flex items-center gap-2 px-4 py-2 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition-colors disabled:opacity-50"
-                        >
-                            <RefreshCw size={16} className={isSyncing ? 'animate-spin' : ''} />
-                            Sync APY
-                        </button>
-                        <div className="bg-slate-50 px-4 py-3 rounded-xl border border-slate-100 flex items-center gap-3">
-                            <div className="text-right">
-                                <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Lifetime Earnings</p>
-                                <p className="text-xl font-bold text-slate-900">{lifetime?.totalLifetime.toFixed(2) || '0'} NILA</p>
+                    <div className="relative z-10 flex items-center justify-between w-full h-full gap-4">
+                        <div className="flex-1 flex flex-col justify-center">
+                            <div className="flex items-center gap-2 mb-1.5">
+                                <Trophy size={16} className="text-purple-600 shrink-0" />
+                                <span className="text-lg md:text-xl font-black tracking-tight text-slate-900">Maximize Your Yield</span>
                             </div>
-                            <div className="p-2 bg-green-100 text-green-600 rounded-lg">
-                                <TrendingUp size={20} />
-                            </div>
+                            <p className="text-slate-600 text-sm leading-snug">
+                                Claim your instant cashback, APY, and referral bonuses all in one place. Keep staking to grow your NILA portfolio.
+                            </p>
                         </div>
+                    </div>
+                </div>
+
+                {/* Lifetime Earnings */}
+                <div className="bg-white p-4 md:p-5 rounded-2xl border border-slate-100 shadow-sm flex flex-col justify-center min-w-[280px] h-28">
+                    <div className="flex justify-between items-center mb-1">
+                        <div className="flex items-center gap-2">
+                            <div className="p-1.5 bg-green-50 text-green-600 rounded-lg shrink-0">
+                                <TrendingUp size={16} />
+                            </div>
+                            <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Total Earnings</span>
+                        </div>
+                        <span className="text-[10px] font-bold text-green-600 bg-green-50 px-2 py-0.5 rounded-full">+ Lifetime</span>
+                    </div>
+                    <div className="flex items-baseline gap-1.5 mt-1">
+                        <span className="text-2xl md:text-3xl font-black text-slate-900">{lifetime?.totalLifetime.toFixed(2) || '0'}</span>
+                        <span className="text-sm font-medium text-slate-400">NILA</span>
                     </div>
                 </div>
             </div>
@@ -241,12 +230,21 @@ const Rewards = () => {
                         <div className="p-3 bg-blue-50 text-blue-600 rounded-xl">
                             <TrendingUp size={24} />
                         </div>
+                        {rewards && rewards.stakingRewards > 0 && (
+                            <button
+                                onClick={() => handleClaim('APY_REWARD')}
+                                disabled={isClaiming}
+                                className="text-xs font-bold bg-blue-600 text-white px-3 py-1.5 rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
+                            >
+                                {isClaiming ? '...' : 'Claim'}
+                            </button>
+                        )}
                     </div>
                     <h3 className="text-slate-500 font-medium text-sm mb-1 relative z-10">Staking Rewards</h3>
                     <div className="text-3xl font-bold text-slate-900 relative z-10">
                         {rewards?.stakingRewards.toFixed(2) || '0'} <span className="text-sm font-medium text-slate-400">NILA</span>
                     </div>
-                    <p className="text-xs text-slate-400 mt-2 relative z-10">Claim from Stakes page</p>
+                    <p className="text-xs text-slate-400 mt-2 relative z-10">Available instantly</p>
                 </div>
 
                 {/* Referral Rewards Card */}
@@ -287,9 +285,9 @@ const Rewards = () => {
                         <div>
                             <h2 className="text-slate-400 text-sm font-medium uppercase tracking-wider mb-2">Total Claimable Balance</h2>
                             <div className="text-5xl md:text-6xl font-black text-white mb-2 tracking-tight">
-                                {((rewards?.instantCashback || 0) + (rewards?.referralRewards || 0)).toFixed(2)} <span className="text-2xl font-bold text-slate-500">NILA</span>
+                                {((rewards?.instantCashback || 0) + (rewards?.referralRewards || 0) + (rewards?.stakingRewards || 0)).toFixed(2)} <span className="text-2xl font-bold text-slate-500">NILA</span>
                             </div>
-                            <p className="text-xs text-slate-400 mt-2">Staking rewards ({rewards?.stakingRewards.toFixed(2) || '0'} NILA) are claimed per stake</p>
+                            <p className="text-xs text-slate-400 mt-2">Claim all rewards at once or individually</p>
                         </div>
 
                         <div className="flex flex-wrap items-center justify-center md:justify-start gap-3">
@@ -301,9 +299,9 @@ const Rewards = () => {
                                 <span className="w-2 h-2 rounded-full bg-purple-500"></span>
                                 {rewards?.referralRewards.toFixed(2) || '0'} Referral
                             </div>
-                            <div className="inline-flex items-center gap-2 bg-slate-800/80 text-slate-400 px-3 py-1.5 rounded-lg border border-slate-700 text-sm">
+                            <div className="inline-flex items-center gap-2 bg-slate-800/80 text-slate-300 px-3 py-1.5 rounded-lg border border-slate-700 text-sm">
                                 <span className="w-2 h-2 rounded-full bg-blue-500"></span>
-                                {rewards?.stakingRewards.toFixed(2) || '0'} Staking (claim per stake)
+                                {rewards?.stakingRewards.toFixed(2) || '0'} Staking
                             </div>
                         </div>
                     </div>
@@ -311,9 +309,9 @@ const Rewards = () => {
                     <div className="w-full md:w-auto flex flex-col items-center gap-4">
                         <button
                             onClick={() => handleClaim('ALL')}
-                            disabled={!rewards || (rewards.instantCashback + rewards.referralRewards) === 0 || isClaiming}
+                            disabled={!rewards || (rewards.instantCashback + rewards.referralRewards + rewards.stakingRewards) === 0 || isClaiming}
                             className={`w-full md:w-72 py-4 px-6 rounded-xl font-bold text-lg transition-all shadow-lg flex items-center justify-center gap-2
-                                ${rewards && (rewards.instantCashback + rewards.referralRewards) > 0
+                                ${rewards && (rewards.instantCashback + rewards.referralRewards + rewards.stakingRewards) > 0
                                     ? 'bg-gradient-to-r from-red-600 to-red-500 hover:from-red-500 hover:to-red-400 text-white hover:shadow-red-600/30 active:scale-[0.98]'
                                     : 'bg-slate-800 text-slate-500 cursor-not-allowed border border-slate-700'
                                 }`}
@@ -323,7 +321,7 @@ const Rewards = () => {
                             ) : (
                                 <>
                                     <CheckCircle size={24} />
-                                    Claim Instant + Referral
+                                    Claim All Rewards
                                 </>
                             )}
                         </button>

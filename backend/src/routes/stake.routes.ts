@@ -43,7 +43,7 @@ router.post('/', async (req, res) => {
 // Admin endpoint - create manual stake on-chain
 router.post('/manual', authMiddleware, async (req, res) => {
   try {
-    const { walletAddress, amount, lockDays, apy, instantRewardPercent } = req.body;
+    const { walletAddress, amount, lockDays, apy } = req.body;
 
     if (!walletAddress || !amount || !lockDays || !apy) {
       return res.status(400).json({ error: 'Missing required fields' });
@@ -53,8 +53,7 @@ router.post('/manual', authMiddleware, async (req, res) => {
       walletAddress,
       amount,
       lockDays,
-      apy,
-      instantRewardPercent
+      apy
     });
 
     res.json({

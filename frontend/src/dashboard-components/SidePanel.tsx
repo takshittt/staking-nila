@@ -1,4 +1,4 @@
-import { Home, Wallet, Gift, Users, History } from 'lucide-react';
+import { Home, Wallet, Gift, Users, History, ShoppingCart } from 'lucide-react';
 import { useEffect } from 'react';
 
 interface SidePanelProps {
@@ -11,6 +11,7 @@ interface SidePanelProps {
 const SidePanel = ({ activeTab, onTabChange, isOpen, onClose }: SidePanelProps) => {
     const menuItems = [
         { name: 'Home', icon: Home },
+        { name: 'Buy & Stake NILA', icon: ShoppingCart },
         { name: 'Stake Nila', icon: Wallet },
         { name: 'Rewards', icon: Gift },
         { name: 'Referrals', icon: Users },

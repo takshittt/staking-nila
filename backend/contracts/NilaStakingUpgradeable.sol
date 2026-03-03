@@ -16,15 +16,23 @@ contract NilaStakingUpgradeable is
     UUPSUpgradeable 
 {
     IERC20 public nila;
+    IERC20 public usdt;
 
     uint256 public constant BPS = 10_000;
     uint256 public constant CLAIM_INTERVAL = 30 days;
     uint256 public constant MAX_STAKES_PER_USER = 100;
+    uint256 public constant MIN_STAKE_AMOUNT = 100 * 10**18; // 100 NILA minimum
+    uint256 public constant NILA_PRICE_USDT = 8 * 10**16; // 0.08 USDT (18 decimals)
+    uint256 public constant MIN_USDT_PURCHASE = 10 * 10**18; // 10 USDT minimum
 
     /* ================= GLOBAL ACCOUNTING ================= */
     uint256 public totalStaked;
     uint256 public uniqueStakers;
     mapping(address => bool) private hasStaked;
+    
+    /* ================= USDT STAKING ACCOUNTING ================= */
+    uint256 public totalNilaLiabilities; // Total NILA recorded but not yet distributed
+    uint256 public totalUsdtCollected; // Total USDT collected from purchases
 
     /* ================= CONFIG STRUCTS ================= */
     struct AmountConfig {
@@ -41,18 +49,35 @@ contract NilaStakingUpgradeable is
 
     struct StakeInfo {
         uint256 amount;
+        uint256 usdtPaid;
         uint256 startTime;
         uint256 lastClaimTime;
         uint256 unlockTime;
         uint256 aprSnapshot;
         uint256 instantRewardSnapshot;
         bool unstaked;
+        bool isUsdtStake;
     }
 
     struct ReferralConfig {
         uint256 referralPercentageBps;
         uint256 referrerPercentageBps;
         bool isPaused;
+    }
+
+    struct StakeDetails {
+        uint256 amount;
+        uint256 usdtPaid;
+        uint256 startTime;
+        uint256 lastClaimTime;
+        uint256 unlockTime;
+        uint256 apr;
+        uint256 instantReward;
+        bool unstaked;
+        bool isUsdtStake;
+        uint256 pendingRewards;
+        bool canClaim;
+        bool canUnstake;
     }
 
     AmountConfig[] public amountConfigs;
@@ -69,6 +94,8 @@ contract NilaStakingUpgradeable is
     /* ================= CLAIMABLE REWARDS ================= */
     mapping(address => uint256) public claimableInstantRewards;
     mapping(address => uint256) public claimableReferralRewards;
+    mapping(address => uint256) public claimableInstantRewardsUSDT;
+    mapping(address => uint256) public claimableReferralRewardsUSDT;
 
     /* ================= EVENTS ================= */
     event AmountConfigAdded(uint256 indexed id, uint256 amount, uint256 instantRewardBps);
@@ -79,7 +106,6 @@ contract NilaStakingUpgradeable is
     event RewardClaimed(address indexed user, uint256 indexed stakeId, uint256 reward);
     event Unstaked(address indexed user, uint256 indexed stakeId, uint256 amount);
     event EmergencyUnstaked(address indexed user, uint256 indexed stakeId, uint256 amount);
-    event RewardFunded(address indexed from, uint256 amount);
     event ExcessRewardsWithdrawn(address indexed owner, uint256 amount);
     event ERC20Recovered(address indexed token, uint256 amount);
     event ReferralConfigUpdated(uint256 referralPercentageBps, uint256 referrerPercentageBps, bool isPaused);
@@ -88,14 +114,18 @@ contract NilaStakingUpgradeable is
     event InstantRewardClaimed(address indexed user, uint256 indexed stakeId, uint256 amount);
     event ReferralBonusClaimed(address indexed user, uint256 amount);
     event ContractUpgraded(address indexed newImplementation);
+    event USDTStakeCreated(address indexed user, uint256 indexed stakeId, uint256 usdtPaid, uint256 nilaRecorded);
+    event NILADepositedForLiabilities(address indexed admin, uint256 amount);
+    event USDTWithdrawn(address indexed admin, uint256 amount);
 
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
         _disableInitializers();
     }
 
-    function initialize(address _nila) public initializer {
-        require(_nila != address(0), "Invalid token");
+    function initialize(address _nila, address _usdt) public initializer {
+        require(_nila != address(0), "Invalid NILA token");
+        require(_usdt != address(0), "Invalid USDT token");
         
         __ReentrancyGuard_init();
         __Pausable_init();
@@ -103,6 +133,7 @@ contract NilaStakingUpgradeable is
         __UUPSUpgradeable_init();
         
         nila = IERC20(_nila);
+        usdt = IERC20(_usdt);
         
         referralConfig = ReferralConfig({
             referralPercentageBps: 500,
@@ -158,11 +189,6 @@ contract NilaStakingUpgradeable is
         emit LockConfigUpdated(id, apr, active);
     }
 
-    function notifyRewardDeposit(uint256 amount) external {
-        require(amount > 0, "Zero amount");
-        emit RewardFunded(msg.sender, amount);
-    }
-
     function pause() external onlyOwner { _pause(); }
     function unpause() external onlyOwner { _unpause(); }
 
@@ -181,44 +207,6 @@ contract NilaStakingUpgradeable is
         referralConfig.isPaused = isPaused;
         
         emit ReferralConfigUpdated(referralPercentageBps, referrerPercentageBps, isPaused);
-    }
-
-    function setReferralPercentage(uint256 percentage) external onlyOwner {
-        require(percentage <= BPS, "Invalid percentage");
-        referralConfig.referralPercentageBps = percentage;
-        emit ReferralConfigUpdated(
-            referralConfig.referralPercentageBps,
-            referralConfig.referrerPercentageBps,
-            referralConfig.isPaused
-        );
-    }
-
-    function setReferrerPercentage(uint256 percentage) external onlyOwner {
-        require(percentage <= BPS, "Invalid percentage");
-        referralConfig.referrerPercentageBps = percentage;
-        emit ReferralConfigUpdated(
-            referralConfig.referralPercentageBps,
-            referralConfig.referrerPercentageBps,
-            referralConfig.isPaused
-        );
-    }
-
-    function pauseReferrals() external onlyOwner {
-        referralConfig.isPaused = true;
-        emit ReferralConfigUpdated(
-            referralConfig.referralPercentageBps,
-            referralConfig.referrerPercentageBps,
-            true
-        );
-    }
-
-    function unpauseReferrals() external onlyOwner {
-        referralConfig.isPaused = false;
-        emit ReferralConfigUpdated(
-            referralConfig.referralPercentageBps,
-            referralConfig.referrerPercentageBps,
-            false
-        );
     }
 
     /* ================= SAFE WITHDRAWALS ================= */
@@ -243,37 +231,24 @@ contract NilaStakingUpgradeable is
      * Admin function to manually create a stake without token transfer
      * Used for manual stake assignments, off-chain payments, or special cases
      * Note: This creates a liability - tokens must be deposited to cover rewards
+     * Admin-created stakes do NOT receive instant rewards
      * 
      * @param user The address to create the stake for
      * @param amount The stake amount (in wei)
      * @param lockDays The lock duration in days
      * @param apr The APR in basis points (e.g., 1000 = 10%)
-     * @param instantRewardBps Instant reward percentage in basis points (e.g., 500 = 5%)
      */
     function adminCreateStake(
         address user,
         uint256 amount,
         uint256 lockDays,
-        uint256 apr,
-        uint256 instantRewardBps
+        uint256 apr
     ) external onlyOwner nonReentrant {
         require(user != address(0), "Invalid user");
         require(amount > 0, "Invalid amount");
         require(lockDays > 0, "Invalid lock days");
         require(apr <= 50000, "APR too high");
-        require(instantRewardBps <= BPS, "Invalid reward bps");
         require(activeStakeCount[user] < MAX_STAKES_PER_USER, "Too many active stakes");
-
-        // Calculate instant reward
-        uint256 instantReward = (amount * instantRewardBps) / BPS;
-
-        // Verify reward pool has enough for instant rewards
-        require(availableRewards() >= instantReward, "Insufficient reward pool");
-
-        // Add instant reward to claimable balance
-        if (instantReward > 0) {
-            claimableInstantRewards[user] += instantReward;
-        }
 
         // Track unique stakers
         if (!hasStaked[user]) {
@@ -281,18 +256,20 @@ contract NilaStakingUpgradeable is
             uniqueStakers++;
         }
 
-        // Create stake record (without token transfer)
+        // Create stake record (without token transfer and without instant rewards)
         uint256 stakeId = userStakes[user].length;
         uint256 lockDuration = lockDays * 1 days;
         
         userStakes[user].push(
             StakeInfo(
                 amount,
+                0,
                 block.timestamp,
                 block.timestamp,
                 block.timestamp + lockDuration,
                 apr,
-                instantReward,
+                0, // No instant rewards for admin-created stakes
+                false,
                 false
             )
         );
@@ -305,19 +282,126 @@ contract NilaStakingUpgradeable is
         emit Staked(user, stakeId, amount, 0); // lockId = 0 for manual stakes
     }
 
-    /* ================= USER ================= */
+    /* ================= USER STAKING ================= */
 
-    function stake(uint256 amountId, uint256 lockId) external nonReentrant whenNotPaused {
-        _stake(amountId, lockId, address(0));
+    /**
+     * @notice Stake any amount of NILA tokens for a specified lock period
+     * @dev Direct staking does NOT provide instant rewards (only Buy & Stake does)
+     * @param amount The amount of NILA tokens to stake (must be >= MIN_STAKE_AMOUNT)
+     * @param lockId The ID of the lock configuration to use
+     */
+    function stake(uint256 amount, uint256 lockId) external nonReentrant whenNotPaused {
+        _stakeFlexible(amount, lockId, address(0));
     }
 
-    function stakeWithReferral(uint256 amountId, uint256 lockId, address referrer) external nonReentrant whenNotPaused {
+    /**
+     * @notice Stake any amount of NILA tokens with a referrer
+     * @dev Direct staking does NOT provide instant rewards (only Buy & Stake does)
+     * @param amount The amount of NILA tokens to stake (must be >= MIN_STAKE_AMOUNT)
+     * @param lockId The ID of the lock configuration to use
+     * @param referrer The address of the referrer
+     */
+    function stakeWithReferral(uint256 amount, uint256 lockId, address referrer) external nonReentrant whenNotPaused {
         require(referrer != address(0), "Invalid referrer");
         require(referrer != msg.sender, "Cannot refer yourself");
-        _stake(amountId, lockId, referrer);
+        _stakeFlexible(amount, lockId, referrer);
     }
 
-    function _stake(uint256 amountId, uint256 lockId, address referrer) internal {
+    /**
+     * @dev Internal function for flexible amount staking (no instant rewards)
+     */
+    function _stakeFlexible(uint256 amount, uint256 lockId, address referrer) internal {
+        require(amount >= MIN_STAKE_AMOUNT, "Amount below minimum");
+        require(lockId < lockConfigs.length, "Invalid lockId");
+        require(activeStakeCount[msg.sender] < MAX_STAKES_PER_USER, "Too many active stakes");
+
+        LockConfig memory l = lockConfigs[lockId];
+        require(l.active, "Inactive lock config");
+
+        // Transfer tokens from user
+        nila.transferFrom(msg.sender, address(this), amount);
+        totalStaked += amount;
+
+        // Handle referral rewards (if applicable)
+        if (referrer != address(0) && !referralConfig.isPaused && referrers[msg.sender] == address(0)) {
+            referrers[msg.sender] = referrer;
+            referralCount[referrer]++;
+            
+            uint256 referralReward = (amount * referralConfig.referralPercentageBps) / BPS;
+            uint256 referrerBonus = (amount * referralConfig.referrerPercentageBps) / BPS;
+            
+            uint256 totalReferralReward = referralReward + referrerBonus;
+            
+            require(availableRewards() >= totalReferralReward, "Insufficient reward pool for referrals");
+            
+            if (referralReward > 0) {
+                claimableReferralRewards[referrer] += referralReward;
+                referralEarnings[referrer] += referralReward;
+            }
+            
+            if (referrerBonus > 0) {
+                claimableReferralRewards[msg.sender] += referrerBonus;
+            }
+            
+            emit ReferralRegistered(referrer, msg.sender);
+        }
+
+        // Track unique stakers
+        if (!hasStaked[msg.sender]) {
+            hasStaked[msg.sender] = true;
+            uniqueStakers++;
+        }
+
+        // Create stake record (NO instant rewards for direct staking)
+        uint256 stakeId = userStakes[msg.sender].length;
+        userStakes[msg.sender].push(
+            StakeInfo(
+                amount,
+                0,
+                block.timestamp,
+                block.timestamp,
+                block.timestamp + l.lockDuration,
+                l.apr,
+                0, // No instant rewards for direct staking
+                false,
+                false
+            )
+        );
+
+        activeStakeCount[msg.sender]++;
+        emit Staked(msg.sender, stakeId, amount, lockId);
+    }
+
+    /* ================= BUY & STAKE (with instant rewards) ================= */
+
+    /**
+     * @notice Stake using predefined amount configs (for Buy & Stake feature)
+     * @dev This function provides instant rewards based on amount config
+     * @param amountId The ID of the amount configuration
+     * @param lockId The ID of the lock configuration
+     */
+    function stakeWithAmountConfig(uint256 amountId, uint256 lockId) external nonReentrant whenNotPaused {
+        _stakeWithConfig(amountId, lockId, address(0));
+    }
+
+    /**
+     * @notice Stake using predefined amount configs with referrer (for Buy & Stake feature)
+     * @dev This function provides instant rewards based on amount config
+     * @param amountId The ID of the amount configuration
+     * @param lockId The ID of the lock configuration
+     * @param referrer The address of the referrer
+     */
+    function stakeWithAmountConfigAndReferral(uint256 amountId, uint256 lockId, address referrer) external nonReentrant whenNotPaused {
+        require(referrer != address(0), "Invalid referrer");
+        require(referrer != msg.sender, "Cannot refer yourself");
+        _stakeWithConfig(amountId, lockId, referrer);
+    }
+
+    /**
+     * @dev Internal function for config-based staking (with instant rewards)
+     * This is used for Buy & Stake feature only
+     */
+    function _stakeWithConfig(uint256 amountId, uint256 lockId, address referrer) internal {
         require(amountId < amountConfigs.length, "Invalid amountId");
         require(lockId < lockConfigs.length, "Invalid lockId");
         require(activeStakeCount[msg.sender] < MAX_STAKES_PER_USER, "Too many active stakes");
@@ -369,11 +453,13 @@ contract NilaStakingUpgradeable is
         userStakes[msg.sender].push(
             StakeInfo(
                 a.amount,
+                0,
                 block.timestamp,
                 block.timestamp,
                 block.timestamp + l.lockDuration,
                 l.apr,
                 instantReward,
+                false,
                 false
             )
         );
@@ -381,6 +467,132 @@ contract NilaStakingUpgradeable is
         activeStakeCount[msg.sender]++;
         emit Staked(msg.sender, stakeId, a.amount, lockId);
     }
+
+    /* ================= USDT PURCHASE & STAKE ================= */
+
+    /**
+     * @notice Buy NILA with USDT and stake (with instant rewards in USDT)
+     * @param usdtAmount Amount of USDT to spend (must be >= 10 USDT)
+     * @param lockId Lock configuration ID
+     */
+    function buyAndStakeWithUSDT(uint256 usdtAmount, uint256 lockId) 
+        external 
+        nonReentrant 
+        whenNotPaused 
+    {
+        _buyAndStakeWithUSDT(usdtAmount, lockId, address(0));
+    }
+
+    /**
+     * @notice Buy NILA with USDT and stake with referrer
+     * @param usdtAmount Amount of USDT to spend
+     * @param lockId Lock configuration ID
+     * @param referrer Referrer address
+     */
+    function buyAndStakeWithUSDTAndReferral(
+        uint256 usdtAmount, 
+        uint256 lockId, 
+        address referrer
+    ) 
+        external 
+        nonReentrant 
+        whenNotPaused 
+    {
+        require(referrer != address(0), "Invalid referrer");
+        require(referrer != msg.sender, "Cannot refer yourself");
+        _buyAndStakeWithUSDT(usdtAmount, lockId, referrer);
+    }
+
+    /**
+     * @dev Internal function for USDT purchase staking
+     */
+    function _buyAndStakeWithUSDT(
+        uint256 usdtAmount, 
+        uint256 lockId, 
+        address referrer
+    ) internal {
+        require(usdtAmount >= MIN_USDT_PURCHASE, "Minimum 10 USDT required");
+        require(lockId < lockConfigs.length, "Invalid lockId");
+        require(activeStakeCount[msg.sender] < MAX_STAKES_PER_USER, "Too many active stakes");
+
+        LockConfig memory l = lockConfigs[lockId];
+        require(l.active, "Inactive lock config");
+
+        // Calculate NILA equivalent: nilaAmount = (usdtAmount * 1e18) / 0.08e18
+        uint256 nilaAmount = (usdtAmount * 10**18) / NILA_PRICE_USDT;
+        
+        // Transfer USDT from user to contract
+        usdt.transferFrom(msg.sender, address(this), usdtAmount);
+        totalUsdtCollected += usdtAmount;
+        
+        // Record NILA liability (no actual NILA transfer)
+        totalNilaLiabilities += nilaAmount;
+
+        // Calculate instant reward in USDT (based on amount config if using packages)
+        uint256 instantRewardUSDT = 0;
+        
+        // Try to find matching amount config for instant rewards
+        for (uint256 i = 0; i < amountConfigs.length; i++) {
+            if (amountConfigs[i].active && amountConfigs[i].amount == nilaAmount) {
+                // Calculate instant reward in USDT
+                instantRewardUSDT = (usdtAmount * amountConfigs[i].instantRewardBps) / BPS;
+                break;
+            }
+        }
+        
+        // Add instant rewards to claimable (in USDT)
+        if (instantRewardUSDT > 0) {
+            claimableInstantRewardsUSDT[msg.sender] += instantRewardUSDT;
+        }
+
+        // Handle referral rewards (in USDT)
+        if (referrer != address(0) && !referralConfig.isPaused && referrers[msg.sender] == address(0)) {
+            referrers[msg.sender] = referrer;
+            referralCount[referrer]++;
+            
+            uint256 referralRewardUSDT = (usdtAmount * referralConfig.referralPercentageBps) / BPS;
+            uint256 referrerBonusUSDT = (usdtAmount * referralConfig.referrerPercentageBps) / BPS;
+            
+            if (referralRewardUSDT > 0) {
+                claimableReferralRewardsUSDT[referrer] += referralRewardUSDT;
+                referralEarnings[referrer] += referralRewardUSDT;
+            }
+            
+            if (referrerBonusUSDT > 0) {
+                claimableReferralRewardsUSDT[msg.sender] += referrerBonusUSDT;
+            }
+            
+            emit ReferralRegistered(referrer, msg.sender);
+        }
+
+        // Track unique stakers
+        if (!hasStaked[msg.sender]) {
+            hasStaked[msg.sender] = true;
+            uniqueStakers++;
+        }
+
+        // Create stake record (NILA recorded as liability)
+        uint256 stakeId = userStakes[msg.sender].length;
+        userStakes[msg.sender].push(
+            StakeInfo({
+                amount: nilaAmount,
+                usdtPaid: usdtAmount,
+                startTime: block.timestamp,
+                lastClaimTime: block.timestamp,
+                unlockTime: block.timestamp + l.lockDuration,
+                aprSnapshot: l.apr,
+                instantRewardSnapshot: instantRewardUSDT,
+                unstaked: false,
+                isUsdtStake: true
+            })
+        );
+
+        activeStakeCount[msg.sender]++;
+        emit USDTStakeCreated(msg.sender, stakeId, usdtAmount, nilaAmount);
+        emit Staked(msg.sender, stakeId, nilaAmount, lockId);
+    }
+
+    /* ================= CLAIM FUNCTIONS ================= */
 
     function claim(uint256 index) external nonReentrant {
         _validateIndex(msg.sender, index);
@@ -420,7 +632,25 @@ contract NilaStakingUpgradeable is
     function claimAllRewards() external nonReentrant {
         uint256 instantAmount = claimableInstantRewards[msg.sender];
         uint256 referralAmount = claimableReferralRewards[msg.sender];
-        uint256 totalAmount = instantAmount + referralAmount;
+        uint256 apyAmount = 0;
+        
+        StakeInfo[] storage stakes = userStakes[msg.sender];
+        
+        for (uint256 i = 0; i < stakes.length; i++) {
+            StakeInfo storage s = stakes[i];
+            
+            if (!s.unstaked && block.timestamp >= s.lastClaimTime + CLAIM_INTERVAL) {
+                uint256 reward = pendingReward(msg.sender, i);
+                
+                if (reward > 0) {
+                    s.lastClaimTime = block.timestamp;
+                    apyAmount += reward;
+                    emit RewardClaimed(msg.sender, i, reward);
+                }
+            }
+        }
+        
+        uint256 totalAmount = instantAmount + referralAmount + apyAmount;
         
         require(totalAmount > 0, "No rewards to claim");
         require(availableRewards() >= totalAmount, "Insufficient reward pool");
@@ -438,25 +668,130 @@ contract NilaStakingUpgradeable is
         nila.transfer(msg.sender, totalAmount);
     }
 
+    function claimAllAPYRewards() external nonReentrant {
+        StakeInfo[] storage stakes = userStakes[msg.sender];
+        require(stakes.length > 0, "No stakes found");
+
+        uint256 totalReward = 0;
+        uint256 claimedCount = 0;
+
+        for (uint256 i = 0; i < stakes.length; i++) {
+            StakeInfo storage s = stakes[i];
+            
+            if (!s.unstaked && block.timestamp >= s.lastClaimTime + CLAIM_INTERVAL) {
+                uint256 reward = pendingReward(msg.sender, i);
+                
+                if (reward > 0) {
+                    s.lastClaimTime = block.timestamp;
+                    totalReward += reward;
+                    claimedCount++;
+                    emit RewardClaimed(msg.sender, i, reward);
+                }
+            }
+        }
+
+        require(totalReward > 0, "No APY rewards to claim");
+        require(availableRewards() >= totalReward, "Insufficient reward pool");
+
+        nila.transfer(msg.sender, totalReward);
+    }
+
+    /**
+     * @notice Claim instant rewards in USDT
+     */
+    function claimInstantRewardsUSDT() external nonReentrant {
+        uint256 amount = claimableInstantRewardsUSDT[msg.sender];
+        require(amount > 0, "No USDT instant rewards to claim");
+        require(usdt.balanceOf(address(this)) >= amount, "Insufficient USDT balance");
+
+        claimableInstantRewardsUSDT[msg.sender] = 0;
+        usdt.transfer(msg.sender, amount);
+        emit InstantRewardClaimed(msg.sender, 0, amount);
+    }
+
+    /**
+     * @notice Claim referral rewards in USDT
+     */
+    function claimReferralRewardsUSDT() external nonReentrant {
+        uint256 amount = claimableReferralRewardsUSDT[msg.sender];
+        require(amount > 0, "No USDT referral rewards to claim");
+        require(usdt.balanceOf(address(this)) >= amount, "Insufficient USDT balance");
+
+        claimableReferralRewardsUSDT[msg.sender] = 0;
+        usdt.transfer(msg.sender, amount);
+        emit ReferralBonusClaimed(msg.sender, amount);
+    }
+
+    /**
+     * @notice Claim all USDT rewards (instant + referral)
+     */
+    function claimAllUSDTRewards() external nonReentrant {
+        uint256 instantAmount = claimableInstantRewardsUSDT[msg.sender];
+        uint256 referralAmount = claimableReferralRewardsUSDT[msg.sender];
+        uint256 totalAmount = instantAmount + referralAmount;
+        
+        require(totalAmount > 0, "No USDT rewards to claim");
+        require(usdt.balanceOf(address(this)) >= totalAmount, "Insufficient USDT balance");
+
+        if (instantAmount > 0) {
+            claimableInstantRewardsUSDT[msg.sender] = 0;
+            emit InstantRewardClaimed(msg.sender, 0, instantAmount);
+        }
+
+        if (referralAmount > 0) {
+            claimableReferralRewardsUSDT[msg.sender] = 0;
+            emit ReferralBonusClaimed(msg.sender, referralAmount);
+        }
+
+        usdt.transfer(msg.sender, totalAmount);
+    }
+
     function unstake(uint256 index) external nonReentrant {
         _validateIndex(msg.sender, index);
         StakeInfo storage s = userStakes[msg.sender][index];
         require(!s.unstaked, "Already unstaked");
         require(block.timestamp >= s.unlockTime, "Lock active");
 
-        uint256 reward = pendingReward(msg.sender, index);
-        if (reward > 0) {
-            require(availableRewards() >= reward, "Insufficient reward pool");
-            nila.transfer(msg.sender, reward);
-            emit RewardClaimed(msg.sender, index, reward);
+        if (s.isUsdtStake) {
+            // USDT purchase stake: Pay principal + APY rewards in NILA
+            
+            // Calculate APY rewards in NILA
+            uint256 apyReward = pendingReward(msg.sender, index);
+            uint256 totalNilaToReturn = s.amount + apyReward;
+            
+            require(nila.balanceOf(address(this)) >= totalNilaToReturn, "Insufficient NILA for payout");
+            
+            // Update liability tracking
+            totalNilaLiabilities -= s.amount;
+            
+            // Mark as unstaked
+            s.unstaked = true;
+            activeStakeCount[msg.sender]--;
+            
+            // Transfer NILA (principal + APY rewards)
+            nila.transfer(msg.sender, totalNilaToReturn);
+            
+            if (apyReward > 0) {
+                emit RewardClaimed(msg.sender, index, apyReward);
+            }
+            emit Unstaked(msg.sender, index, s.amount);
+            
+        } else {
+            // Old direct NILA stake: Existing logic
+            uint256 reward = pendingReward(msg.sender, index);
+            if (reward > 0) {
+                require(availableRewards() >= reward, "Insufficient reward pool");
+                nila.transfer(msg.sender, reward);
+                emit RewardClaimed(msg.sender, index, reward);
+            }
+
+            s.unstaked = true;
+            totalStaked -= s.amount;
+            activeStakeCount[msg.sender]--;
+
+            nila.transfer(msg.sender, s.amount);
+            emit Unstaked(msg.sender, index, s.amount);
         }
-
-        s.unstaked = true;
-        totalStaked -= s.amount;
-        activeStakeCount[msg.sender]--;
-
-        nila.transfer(msg.sender, s.amount);
-        emit Unstaked(msg.sender, index, s.amount);
     }
 
     function emergencyUnstake(uint256 index) external nonReentrant {
@@ -472,6 +807,62 @@ contract NilaStakingUpgradeable is
 
         nila.transfer(msg.sender, s.amount);
         emit EmergencyUnstaked(msg.sender, index, s.amount);
+    }
+
+    /* ================= ADMIN LIABILITY MANAGEMENT ================= */
+
+    /**
+     * @notice Admin deposits NILA to cover liabilities
+     * @param amount Amount of NILA to deposit
+     */
+    function depositNILAForLiabilities(uint256 amount) external onlyOwner {
+        require(amount > 0, "Invalid amount");
+        nila.transferFrom(msg.sender, address(this), amount);
+        emit NILADepositedForLiabilities(msg.sender, amount);
+    }
+
+    /**
+     * @notice Admin withdraws collected USDT
+     * @param amount Amount of USDT to withdraw
+     */
+    function withdrawUSDT(uint256 amount) external onlyOwner {
+        require(amount > 0, "Invalid amount");
+        uint256 balance = usdt.balanceOf(address(this));
+        require(amount <= balance, "Insufficient USDT balance");
+        
+        usdt.transfer(owner(), amount);
+        emit USDTWithdrawn(owner(), amount);
+    }
+
+    /**
+     * @notice Get NILA liability status
+     */
+    function getNILALiabilityStatus() external view returns (
+        uint256 totalLiabilities,
+        uint256 nilaBalance,
+        uint256 deficitOrSurplus,
+        bool hasSurplus
+    ) {
+        totalLiabilities = totalNilaLiabilities;
+        nilaBalance = nila.balanceOf(address(this));
+        
+        // For old stakes, we need to account for totalStaked
+        uint256 requiredNila = totalLiabilities + totalStaked;
+        
+        if (nilaBalance >= requiredNila) {
+            hasSurplus = true;
+            deficitOrSurplus = nilaBalance - requiredNila;
+        } else {
+            hasSurplus = false;
+            deficitOrSurplus = requiredNila - nilaBalance;
+        }
+    }
+
+    /**
+     * @notice Get USDT balance in contract
+     */
+    function getUSDTBalance() external view returns (uint256) {
+        return usdt.balanceOf(address(this));
     }
 
     /* ================= VIEW ================= */
@@ -516,34 +907,23 @@ contract NilaStakingUpgradeable is
     function getStakeDetails(address user, uint256 index)
         external
         view
-        returns (
-            uint256 amount,
-            uint256 startTime,
-            uint256 lastClaimTime,
-            uint256 unlockTime,
-            uint256 apr,
-            uint256 instantReward,
-            bool unstaked,
-            uint256 pendingRewards,
-            bool canClaim,
-            bool canUnstake
-        )
+        returns (StakeDetails memory details)
     {
         require(index < userStakes[user].length, "Invalid index");
-        StakeInfo memory s = userStakes[user][index];
+        StakeInfo storage s = userStakes[user][index];
 
-        return (
-            s.amount,
-            s.startTime,
-            s.lastClaimTime,
-            s.unlockTime,
-            s.aprSnapshot,
-            s.instantRewardSnapshot,
-            s.unstaked,
-            pendingReward(user, index),
-            !s.unstaked && block.timestamp >= s.lastClaimTime + CLAIM_INTERVAL,
-            !s.unstaked && block.timestamp >= s.unlockTime
-        );
+        details.amount = s.amount;
+        details.usdtPaid = s.usdtPaid;
+        details.startTime = s.startTime;
+        details.lastClaimTime = s.lastClaimTime;
+        details.unlockTime = s.unlockTime;
+        details.apr = s.aprSnapshot;
+        details.instantReward = s.instantRewardSnapshot;
+        details.unstaked = s.unstaked;
+        details.isUsdtStake = s.isUsdtStake;
+        details.pendingRewards = pendingReward(user, index);
+        details.canClaim = !s.unstaked && block.timestamp >= s.lastClaimTime + CLAIM_INTERVAL;
+        details.canUnstake = !s.unstaked && block.timestamp >= s.unlockTime;
     }
 
     function getUserTotals(address user)
@@ -563,6 +943,19 @@ contract NilaStakingUpgradeable is
             }
             totalInstantRewardsReceived += stakes[i].instantRewardSnapshot;
         }
+    }
+
+    function getTotalPendingAPYRewards(address user) external view returns (uint256) {
+        StakeInfo[] memory stakes = userStakes[user];
+        uint256 total = 0;
+        
+        for (uint256 i = 0; i < stakes.length; i++) {
+            if (!stakes[i].unstaked) {
+                total += pendingReward(user, i);
+            }
+        }
+        
+        return total;
     }
 
     function getReferralConfig() external view returns (
@@ -603,8 +996,29 @@ contract NilaStakingUpgradeable is
         totalClaimable = instantRewards + referralRewards;
     }
 
+    function getClaimableRewardsDetailed(address user) external view returns (
+        uint256 instantRewardsNILA,
+        uint256 referralRewardsNILA,
+        uint256 instantRewardsUSDT,
+        uint256 referralRewardsUSDT,
+        uint256 apyRewardsNILA
+    ) {
+        instantRewardsNILA = claimableInstantRewards[user];
+        referralRewardsNILA = claimableReferralRewards[user];
+        instantRewardsUSDT = claimableInstantRewardsUSDT[user];
+        referralRewardsUSDT = claimableReferralRewardsUSDT[user];
+        
+        // Calculate total APY rewards
+        StakeInfo[] memory stakes = userStakes[user];
+        for (uint256 i = 0; i < stakes.length; i++) {
+            if (!stakes[i].unstaked) {
+                apyRewardsNILA += pendingReward(user, i);
+            }
+        }
+    }
+
     function version() external pure virtual returns (string memory) {
-        return "1.0.0";
+        return "2.0.0";
     }
 
     /**

@@ -2,6 +2,7 @@ import { useState } from 'react';
 import DashboardNavbar from '../dashboard-components/DashboardNavbar';
 import SidePanel from '../dashboard-components/SidePanel';
 import StakeNila from '../dashboard-components/StakeNila';
+import BuyStakeNila from '../dashboard-components/BuyStakeNila';
 import Rewards from '../dashboard-components/Rewards';
 import Referrals from '../dashboard-components/Referrals';
 import Transactions from '../dashboard-components/Transactions';
@@ -57,6 +58,8 @@ const Dashboard = () => {
             <div className="pt-24 px-4 md:px-6 max-w-7xl mx-auto md:ml-64">
 
                 {activeTab === 'Home' && <HomeDashboard onNavigate={setActiveTab} />}
+
+                {activeTab === 'Buy & Stake NILA' && <BuyStakeNila />}
 
                 {activeTab === 'Stake Nila' && <StakeNila />}
 

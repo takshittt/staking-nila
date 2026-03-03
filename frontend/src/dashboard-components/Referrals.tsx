@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { Copy, CheckCircle, Users, Gift, Share2, TrendingUp, Loader2, ArrowRight } from 'lucide-react';
 import { useWallet } from '../hooks/useWallet';
 import { userApi } from '../services/userApi';
-import { ContractService } from '../services/contractService';
+import { referralApi } from '../services/referralApi';
 
 const Referrals = () => {
     const { address } = useWallet();
@@ -26,12 +26,12 @@ const Referrals = () => {
 
     useEffect(() => {
         const fetchData = async () => {
-            // Fetch referral config (public)
+            // Fetch referral config from database (synced data)
             try {
-                const config = await ContractService.getReferralConfig();
+                const config = await referralApi.getConfig();
                 setReferralConfig({
-                    referralPercent: config.referralPercent,
-                    referrerPercent: config.referrerPercent
+                    referralPercent: config.referralPercentage,
+                    referrerPercent: config.referrerPercentage
                 });
             } catch (error) {
                 console.error('Failed to fetch referral config:', error);
@@ -90,18 +90,7 @@ const Referrals = () => {
 
     return (
         <div className="space-y-6 pb-8">
-            {/* Page Title */}
-            <div className="bg-white rounded-xl p-5 shadow-sm border border-slate-100">
-                <div className="flex items-center gap-3 mb-1">
-                    <div className="p-2 bg-purple-100 text-purple-600 rounded-lg">
-                        <Users size={20} />
-                    </div>
-                    <h1 className="text-xl font-bold text-slate-900">Referral Program</h1>
-                </div>
-                <p className="text-slate-500 text-sm max-w-xl">
-                    Earn passive rewards by inviting others to stake NILA. Build your network and check earning stats.
-                </p>
-            </div>
+            {/* Page Title Removed */}
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 {/* Left Column: Code & Rules */}

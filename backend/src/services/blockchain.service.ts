@@ -4,7 +4,8 @@ import dotenv from 'dotenv';
 dotenv.config();
 
 // Import contract ABI (using upgradeable version)
-const NilaStakingABI = require('../abis/NilaStakingUpgradeable.json');
+const NilaStakingArtifact = require('../abis/NilaStakingUpgradeable.json');
+const NilaStakingABI = NilaStakingArtifact.abi;
 
 export class BlockchainService {
   private static provider: ethers.JsonRpcProvider;
@@ -211,7 +212,7 @@ export class BlockchainService {
     const config = await contract.getReferralConfig();
     
     return {
-      referralPercentage: Number(config.referralPercentageBps) / 100, // Convert BPS to percentage
+      referralPercentage: Number(config.referralPercentageBps) / 100, // BPS to percentage (500 bps = 5%)
       referrerPercentage: Number(config.referrerPercentageBps) / 100,
       isPaused: config.isPaused
     };
@@ -229,54 +230,6 @@ export class BlockchainService {
     const referrerBps = Math.floor(referrerPercentage * 100);
     
     const tx = await contract.setReferralConfig(referralBps, referrerBps, isPaused);
-    const receipt = await tx.wait();
-    
-    return {
-      txHash: receipt.hash,
-      blockNumber: receipt.blockNumber
-    };
-  }
-
-  static async setReferralPercentage(percentage: number) {
-    const contract = this.getContract();
-    const bps = Math.floor(percentage * 100);
-    
-    const tx = await contract.setReferralPercentage(bps);
-    const receipt = await tx.wait();
-    
-    return {
-      txHash: receipt.hash,
-      blockNumber: receipt.blockNumber
-    };
-  }
-
-  static async setReferrerPercentage(percentage: number) {
-    const contract = this.getContract();
-    const bps = Math.floor(percentage * 100);
-    
-    const tx = await contract.setReferrerPercentage(bps);
-    const receipt = await tx.wait();
-    
-    return {
-      txHash: receipt.hash,
-      blockNumber: receipt.blockNumber
-    };
-  }
-
-  static async pauseReferrals() {
-    const contract = this.getContract();
-    const tx = await contract.pauseReferrals();
-    const receipt = await tx.wait();
-    
-    return {
-      txHash: receipt.hash,
-      blockNumber: receipt.blockNumber
-    };
-  }
-
-  static async unpauseReferrals() {
-    const contract = this.getContract();
-    const tx = await contract.unpauseReferrals();
     const receipt = await tx.wait();
     
     return {
@@ -347,14 +300,6 @@ export class BlockchainService {
     // Transfer tokens to contract
     const transferTx = await nilaToken.transfer(process.env.CONTRACT_ADDRESS, amount);
     const receipt = await transferTx.wait();
-    
-    // Notify contract of deposit
-    try {
-      const notifyTx = await contract.notifyRewardDeposit(amount);
-      await notifyTx.wait();
-    } catch (error) {
-      console.warn('Notify deposit failed (non-critical):', error);
-    }
     
     return {
       txHash: receipt.hash,
@@ -536,13 +481,26 @@ export class BlockchainService {
     }
   }
 
-  // Admin Create Stake (without token transfer)
+  // Claim all APY rewards via contract
+  static async claimAllAPYRewards(walletAddress: string) {
+    const contract = this.getContract();
+    
+    try {
+      const tx = await contract.claimAllAPYRewards();
+      const receipt = await tx.wait();
+      
+      return receipt.hash;
+    } catch (error: any) {
+      throw new Error(`Failed to claim APY rewards: ${error.message}`);
+    }
+  }
+
+  // Admin Create Stake (without token transfer, no instant rewards)
   static async adminCreateStake(
     userAddress: string,
     amount: string,
     lockDays: number,
-    apr: number,
-    instantRewardBps: number
+    apr: number
   ) {
     const contract = this.getContract();
     
@@ -551,8 +509,7 @@ export class BlockchainService {
         userAddress,
         amount,
         lockDays,
-        apr,
-        instantRewardBps
+        apr
       );
       const receipt = await tx.wait();
       
@@ -608,4 +565,113 @@ export class BlockchainService {
       throw new Error(`Failed to calculate liabilities: ${error.message}`);
     }
   }
+
+  // ============================================
+  // USDT MANAGEMENT
+  // ============================================
+
+  // Get USDT balance in contract
+  static async getUSDTBalance() {
+    const contract = this.getContract();
+    
+    try {
+      const balance = await contract.getUSDTBalance();
+      const totalCollected = await contract.totalUsdtCollected();
+      
+      return {
+        balance: balance.toString(),
+        totalCollected: totalCollected.toString()
+      };
+    } catch (error: any) {
+      throw new Error(`Failed to get USDT balance: ${error.message}`);
+    }
+  }
+
+  // Withdraw USDT from contract
+  static async withdrawUSDT(amount: string) {
+    const contract = this.getContract();
+    
+    try {
+      const tx = await contract.withdrawUSDT(amount);
+      const receipt = await tx.wait();
+      
+      return {
+        txHash: receipt.hash,
+        blockNumber: receipt.blockNumber
+      };
+    } catch (error: any) {
+      throw new Error(`Failed to withdraw USDT: ${error.message}`);
+    }
+  }
+
+  // ============================================
+  // NILA LIABILITY MANAGEMENT
+  // ============================================
+
+  // Get NILA liability status
+  static async getNILALiabilityStatus() {
+    const contract = this.getContract();
+    
+    try {
+      const status = await contract.getNILALiabilityStatus();
+      
+      return {
+        totalLiabilities: status.totalLiabilities.toString(),
+        nilaBalance: status.nilaBalance.toString(),
+        deficitOrSurplus: status.deficitOrSurplus.toString(),
+        hasSurplus: status.hasSurplus
+      };
+    } catch (error: any) {
+      throw new Error(`Failed to get NILA liability status: ${error.message}`);
+    }
+  }
+
+  // Deposit NILA for liabilities
+  static async depositNILAForLiabilities(amount: string) {
+    const contract = this.getContract();
+    const wallet = this.wallet;
+    
+    try {
+      // Get NILA token contract address
+      const nilaTokenAddress = await contract.nila();
+      
+      // Create NILA token contract instance
+      const nilaToken = new ethers.Contract(
+        nilaTokenAddress,
+        [
+          'function approve(address spender, uint256 amount) returns (bool)',
+          'function allowance(address owner, address spender) view returns (uint256)',
+          'function balanceOf(address) view returns (uint256)'
+        ],
+        wallet
+      );
+      
+      // Check wallet balance
+      const walletBalance = await nilaToken.balanceOf(wallet.address);
+      if (BigInt(walletBalance) < BigInt(amount)) {
+        throw new Error('Insufficient NILA balance in admin wallet');
+      }
+      
+      // Check allowance
+      const currentAllowance = await nilaToken.allowance(wallet.address, process.env.CONTRACT_ADDRESS);
+      
+      // Approve if needed
+      if (BigInt(currentAllowance) < BigInt(amount)) {
+        const approveTx = await nilaToken.approve(process.env.CONTRACT_ADDRESS, amount);
+        await approveTx.wait();
+      }
+      
+      // Deposit NILA for liabilities
+      const tx = await contract.depositNILAForLiabilities(amount);
+      const receipt = await tx.wait();
+      
+      return {
+        txHash: receipt.hash,
+        blockNumber: receipt.blockNumber
+      };
+    } catch (error: any) {
+      throw new Error(`Failed to deposit NILA for liabilities: ${error.message}`);
+    }
+  }
 }
+

@@ -435,8 +435,7 @@ export const verifyIntent = async (req: Request, res: Response) => {
                 paymentIntent.walletAddress,
                 nilaAmountWei,
                 lockConfig.lockDuration,
-                aprBps,
-                0 // No instant reward for card payments
+                aprBps
             );
 
             console.log(`[VERIFY_INTENT] Stake created on blockchain: ${blockchainResult.txHash}`);

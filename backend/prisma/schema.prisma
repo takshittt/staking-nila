@@ -50,6 +50,9 @@ model User {
   status            String          @default("active")
   firstConnectedAt  DateTime        @default(now())
   lastSeenAt        DateTime        @updatedAt
+  lastSyncedBlock   Int?
+  lastSyncedAt      DateTime?
+  syncStatus        String          @default("NEVER_SYNCED")
   pendingRewards    PendingReward[]
   stakes            Stake[]
 
@@ -145,4 +148,14 @@ model PaymentIntent {
   updatedAt      DateTime @updatedAt
 
   @@map("payment_intents")
+}
+
+model SyncState {
+  id                    String   @id @default(auto()) @map("_id") @db.ObjectId
+  key                   String   @unique
+  lastSyncedBlock       Int
+  lastSyncedAt          DateTime @updatedAt
+  lastSyncedBlockHash   String?
+
+  @@map("sync_state")
 }

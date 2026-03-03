@@ -9,6 +9,25 @@ export interface TreasuryStats {
   surplus: string;
   coverageRatio: number;
   healthStatus: 'healthy' | 'low' | 'critical';
+  // USDT fields
+  usdtBalance?: string;
+  totalUsdtCollected?: string;
+  // NILA liability fields
+  nilaLiabilities?: string;
+  nilaDeficitOrSurplus?: string;
+  nilaHasSurplus?: boolean;
+}
+
+export interface NILALiabilityStatus {
+  totalLiabilities: string;
+  nilaBalance: string;
+  deficitOrSurplus: string;
+  hasSurplus: boolean;
+}
+
+export interface USDTBalance {
+  balance: string;
+  totalCollected: string;
 }
 
 export interface ContractStatus {
@@ -85,6 +104,30 @@ export const treasuryApi = {
   // Get detailed liability breakdown
   getLiabilitiesBreakdown: async () => {
     const response = await api.get('/treasury/liabilities/breakdown');
+    return response.data;
+  },
+
+  // Get USDT balance in contract
+  getUSDTBalance: async (): Promise<USDTBalance> => {
+    const response = await api.get('/treasury/usdt-balance');
+    return response.data;
+  },
+
+  // Withdraw USDT from contract
+  withdrawUSDT: async (amount: number): Promise<TransactionResult> => {
+    const response = await api.post('/treasury/withdraw-usdt', { amount });
+    return response.data;
+  },
+
+  // Get NILA liability status
+  getNILALiabilityStatus: async (): Promise<NILALiabilityStatus> => {
+    const response = await api.get('/treasury/nila-liability-status');
+    return response.data;
+  },
+
+  // Deposit NILA for liabilities
+  depositNILAForLiabilities: async (amount: number): Promise<TransactionResult> => {
+    const response = await api.post('/treasury/deposit-nila-liabilities', { amount });
     return response.data;
   },
 };

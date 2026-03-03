@@ -86,7 +86,7 @@ export const rewardApi = {
   // Record a claim that happened on-chain (for instant cashback and referral rewards)
   async recordClaim(
     walletAddress: string,
-    type: 'INSTANT_CASHBACK' | 'REFERRAL_REWARD' | 'ALL',
+    type: 'INSTANT_CASHBACK' | 'REFERRAL_REWARD' | 'APY_REWARD' | 'ALL',
     instantAmount: number,
     referralAmount: number,
     txHash: string

@@ -169,7 +169,6 @@ export class StakeService {
     amount: number;
     lockDays: number;
     apy: number;
-    instantRewardPercent?: number;
   }) {
     const normalizedAddress = data.walletAddress.toLowerCase();
 
@@ -178,22 +177,16 @@ export class StakeService {
     
     // Convert APY percentage to basis points (e.g., 10% = 1000 bps)
     const aprBps = Math.floor(data.apy * 100);
-    
-    // Convert instant reward percentage to basis points
-    const instantRewardBps = data.instantRewardPercent 
-      ? Math.floor(data.instantRewardPercent * 100) 
-      : 0;
 
-    // Call smart contract to create stake
+    // Call smart contract to create stake (no instant rewards for admin-created stakes)
     const result = await BlockchainService.adminCreateStake(
       normalizedAddress,
       amountWei,
       data.lockDays,
-      aprBps,
-      instantRewardBps
+      aprBps
     );
 
-    // Create database record
+    // Create database record (no instant rewards for admin-created stakes)
     const stake = await this.createStake({
       walletAddress: normalizedAddress,
       planName: 'Manual Assignment',
@@ -201,7 +194,7 @@ export class StakeService {
       amount: data.amount,
       apy: data.apy,
       lockDays: data.lockDays,
-      instantRewardPercent: data.instantRewardPercent,
+      instantRewardPercent: 0, // No instant rewards for admin stakes
       txHash: result.txHash
     });
 

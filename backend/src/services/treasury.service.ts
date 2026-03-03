@@ -7,16 +7,41 @@ export class TreasuryService {
   // Get comprehensive treasury stats
   static async getTreasuryStats() {
     try {
-      const stats = await BlockchainService.getTreasuryStats();
+      const { ethers } = require('ethers');
+
+      // Get total staked from database (active stakes only)
+      const activeStakes = await prisma.stake.findMany({
+        where: { status: 'active' },
+        select: { amount: true }
+      });
+
+      const totalStakedAmount = activeStakes.reduce((sum: number, stake: any) => sum + parseFloat(stake.amount), 0);
+      const totalStakedWei = ethers.parseUnits(totalStakedAmount.toString(), 18).toString();
+
+      // Get all pending rewards from database
       const allPendingRewards = await this.calculateAllPendingRewards();
 
-      const contractBalance = BigInt(stats.contractBalance);
-      const availableRewards = BigInt(stats.availableRewards);
-      const pendingRewards = BigInt(allPendingRewards);
+      // Get all claimed rewards from database (for available rewards calculation)
+      const claimedRewards = await prisma.pendingReward.findMany({
+        where: { status: 'claimed' },
+        select: { amount: true }
+      });
 
-      const surplus = availableRewards - pendingRewards;
-      const coverageRatio = pendingRewards > 0
-        ? Number(availableRewards) / Number(pendingRewards)
+      const totalClaimedAmount = claimedRewards.reduce((sum: number, reward: any) => sum + parseFloat(reward.amount), 0);
+      const totalClaimedWei = ethers.parseUnits(totalClaimedAmount.toString(), 18).toString();
+
+      // Calculate contract balance (total staked + available rewards)
+      const contractBalance = (BigInt(totalStakedWei) + BigInt(totalClaimedWei)).toString();
+
+      // Calculate available rewards (claimed + pending)
+      const availableRewards = (BigInt(totalClaimedWei) + BigInt(ethers.parseUnits(allPendingRewards, 18).toString())).toString();
+
+      const pendingRewardsBigInt = BigInt(ethers.parseUnits(allPendingRewards, 18).toString());
+      const availableRewardsBigInt = BigInt(availableRewards);
+
+      const surplus = availableRewardsBigInt - pendingRewardsBigInt;
+      const coverageRatio = pendingRewardsBigInt > 0n
+        ? Number(availableRewardsBigInt) / Number(pendingRewardsBigInt)
         : 999; // Infinite coverage if no pending rewards
 
       let healthStatus: 'healthy' | 'low' | 'critical';
@@ -26,10 +51,10 @@ export class TreasuryService {
 
       return {
         contractAddress: process.env.CONTRACT_ADDRESS || '',
-        contractBalance: stats.contractBalance,
-        totalStaked: stats.totalStaked,
-        availableRewards: stats.availableRewards,
-        pendingRewards: allPendingRewards,
+        contractBalance,
+        totalStaked: totalStakedWei,
+        availableRewards,
+        pendingRewards: ethers.parseUnits(allPendingRewards, 18).toString(),
         surplus: surplus.toString(),
         coverageRatio: Math.min(coverageRatio, 999), // Cap at 999 for display
         healthStatus
@@ -46,56 +71,26 @@ export class TreasuryService {
       const cached = await this.getCachedPendingRewards();
       if (cached) return cached;
 
-      // Get all unique wallet addresses with active stakes
-      const activeStakes = await prisma.stake.findMany({
-        where: { status: 'active' },
-        select: {
-          user: {
-            select: { walletAddress: true }
-          }
-        },
-        distinct: ['userId']
-      });
-
-      let totalPending = BigInt(0);
-
-      // Calculate pending rewards for each user
-      for (const stake of activeStakes) {
-        try {
-          const userRewards = await BlockchainService.getUserPendingRewards(
-            stake.user.walletAddress
-          );
-          totalPending += BigInt(userRewards.totalPendingRewards);
-        } catch (error) {
-          // Continue with other users even if one fails
-        }
-      }
-
-      const result = totalPending.toString();
-
-      // NEW: Add pending INSTANT and REFERRAL rewards from DB
-      // MongoDB doesn't support aggregate _sum on string fields, fetch and sum manually
+      // Get all pending rewards from database (all types)
       const dbPendingRewards = await prisma.pendingReward.findMany({
         where: {
-          status: 'pending',
-          type: {
-            in: ['INSTANT_CASHBACK', 'REFERRAL_REWARD']
-          }
+          status: 'pending'
         },
         select: {
           amount: true
         }
       });
 
-      const dbPendingSum = dbPendingRewards.reduce((sum, r) => sum + parseFloat(r.amount), 0);
-      const dbPendingAmount = BigInt(Math.floor(dbPendingSum * 1e18));
-      const totalWithDb = BigInt(result) + dbPendingAmount;
-      const finalResult = totalWithDb.toString();
+      // Sum all pending rewards
+      const totalPendingAmount = dbPendingRewards.reduce((sum, r) => sum + parseFloat(r.amount), 0);
+      
+      // Convert to Wei string
+      const totalPendingWei = (BigInt(Math.floor(totalPendingAmount * 1e18))).toString();
 
       // Cache for 5 minutes
-      await this.cachePendingRewards(finalResult, 300);
+      await this.cachePendingRewards(totalPendingWei, 300);
 
-      return finalResult;
+      return totalPendingWei;
     } catch (error: any) {
       // Return 0 if calculation fails to prevent blocking
       return '0';
@@ -431,6 +426,111 @@ export class TreasuryService {
       };
     } catch (error: any) {
       throw new Error(`Failed to get liability breakdown: ${error.message}`);
+    }
+  }
+
+  // ============================================
+  // USDT MANAGEMENT
+  // ============================================
+
+  // Get USDT balance in contract
+  static async getUSDTBalance() {
+    try {
+      const result = await BlockchainService.getUSDTBalance();
+      return result;
+    } catch (error: any) {
+      throw new Error(`Failed to get USDT balance: ${error.message}`);
+    }
+  }
+
+  // Withdraw USDT from contract
+  static async withdrawUSDT(adminId: number, amount: number) {
+    if (amount <= 0) {
+      throw new Error('Amount must be greater than 0');
+    }
+
+    // Convert to wei (18 decimals)
+    const amountWei = (BigInt(Math.floor(amount * 1e8)) * BigInt(10 ** 10)).toString();
+
+    try {
+      // Create audit log
+      const auditLog = await prisma.auditLog.create({
+        data: {
+          adminId,
+          action: 'WITHDRAW_USDT',
+          txHash: null
+        }
+      });
+
+      // Execute withdrawal
+      const result = await BlockchainService.withdrawUSDT(amountWei);
+
+      // Update audit log
+      await prisma.auditLog.update({
+        where: { id: auditLog.id },
+        data: { txHash: result.txHash }
+      });
+
+      return {
+        ...result,
+        amount: amount.toString()
+      };
+    } catch (error: any) {
+      throw new Error(`Failed to withdraw USDT: ${error.message}`);
+    }
+  }
+
+  // ============================================
+  // NILA LIABILITY MANAGEMENT
+  // ============================================
+
+  // Get NILA liability status
+  static async getNILALiabilityStatus() {
+    try {
+      const result = await BlockchainService.getNILALiabilityStatus();
+      return result;
+    } catch (error: any) {
+      throw new Error(`Failed to get NILA liability status: ${error.message}`);
+    }
+  }
+
+  // Deposit NILA for liabilities
+  static async depositNILAForLiabilities(adminId: number, amount: number) {
+    if (amount <= 0) {
+      throw new Error('Amount must be greater than 0');
+    }
+
+    // Convert to wei (18 decimals)
+    const amountWei = (BigInt(Math.floor(amount * 1e8)) * BigInt(10 ** 10)).toString();
+
+    try {
+      // Create audit log
+      const auditLog = await prisma.auditLog.create({
+        data: {
+          adminId,
+          action: 'DEPOSIT_NILA_LIABILITIES',
+          txHash: null
+        }
+      });
+
+      // Execute deposit
+      const result = await BlockchainService.depositNILAForLiabilities(amountWei);
+
+      // Update audit log
+      await prisma.auditLog.update({
+        where: { id: auditLog.id },
+        data: { txHash: result.txHash }
+      });
+
+      // Invalidate cache
+      await this.invalidateCache();
+
+      return {
+        ...result,
+        amount: amount.toString()
+      };
+    } catch (error: any) {
+      throw new Error(`Failed to deposit NILA for liabilities: ${error.message}`);
     }
   }
 }

@@ -147,8 +147,7 @@ export const handle3thixWebhook = async (req: Request, res: Response) => {
                     paymentIntent.walletAddress,
                     nilaAmountWei,
                     lockConfig.lockDuration,
-                    aprBps,
-                    0 // No instant reward for card payments
+                    aprBps
                 );
 
                 // Create stake record in database

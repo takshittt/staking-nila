@@ -13,8 +13,8 @@ import paymentRoutes from './routes/payment.routes';
 import cryptoStakeRoutes from './routes/crypto-stake.routes';
 import webhookRoutes from './routes/webhook.routes';
 import { BlockchainService } from './services/blockchain.service';
+import { EventListenerService } from './services/eventListener.service';
 
-// Load environment variables
 dotenv.config();
 
 const app = express();
@@ -23,8 +23,12 @@ const PORT = parseInt(process.env.PORT || '3001', 10);
 // Initialize blockchain service
 try {
   BlockchainService.initialize();
+  
+  EventListenerService.startListening().catch((error) => {
+    console.error('Failed to start event listeners:', error.message);
+  });
 } catch (error: any) {
-  // Staking endpoints will not work until blockchain is configured
+  console.error('Blockchain initialization failed:', error.message);
 }
 
 // Middleware
@@ -66,12 +70,30 @@ app.get('/debug/env', (req, res) => {
 
 // Error handling
 app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
-  res.status(500).json({ error: 'Internal server error' });
+  console.error('Server error:', {
+    message: err.message,
+    stack: err.stack,
+    url: req.url,
+    method: req.method
+  });
+  res.status(500).json({ error: err.message || 'Internal server error' });
 });
 
 // Start server
 app.listen(PORT, '0.0.0.0', () => {
-  // Server started
+  console.log(`✅ Server running on port ${PORT}`);
+});
+
+process.on('SIGTERM', async () => {
+  console.log('SIGTERM received, shutting down gracefully...');
+  EventListenerService.stopListening();
+  process.exit(0);
+});
+
+process.on('SIGINT', async () => {
+  console.log('SIGINT received, shutting down gracefully...');
+  EventListenerService.stopListening();
+  process.exit(0);
 });
 
 export default app;

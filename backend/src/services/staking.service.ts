@@ -18,6 +18,9 @@ export class StakingService {
   static async getAmountConfig(id: number) {
     try {
       const config = await BlockchainService.getAmountConfig(id);
+      if (!config) {
+        throw new Error(`Amount config with id ${id} not found`);
+      }
       return config;
     } catch (error: any) {
       throw new Error(`Failed to fetch amount config: ${error.message}`);
@@ -118,6 +121,9 @@ export class StakingService {
   static async getLockConfig(id: number) {
     try {
       const config = await BlockchainService.getLockConfig(id);
+      if (!config) {
+        throw new Error(`Lock config with id ${id} not found`);
+      }
       return config;
     } catch (error: any) {
       throw new Error(`Failed to fetch lock config: ${error.message}`);
@@ -200,9 +206,6 @@ export class StakingService {
   // Stats
   static async getStakingStats() {
     try {
-      // Get available rewards from blockchain
-      const blockchainStats = await BlockchainService.getStakingStats();
-
       // Calculate total staked from DB (active stakes only)
       // MongoDB doesn't support aggregate _sum on string fields, fetch and sum manually
       const activeStakes = await prisma.stake.findMany({
@@ -218,13 +221,29 @@ export class StakingService {
         where: { status: 'active' }
       });
 
-      // Convert total staked to Wei string (matches frontend expectation)
+      // Get available rewards from database (claimed + pending)
+      const claimedRewards = await prisma.pendingReward.findMany({
+        where: { status: 'claimed' },
+        select: { amount: true }
+      });
+
+      const pendingRewards = await prisma.pendingReward.findMany({
+        where: { status: 'pending' },
+        select: { amount: true }
+      });
+
+      const totalClaimedAmount = claimedRewards.reduce((sum, reward) => sum + parseFloat(reward.amount), 0);
+      const totalPendingAmount = pendingRewards.reduce((sum, reward) => sum + parseFloat(reward.amount), 0);
+      const totalAvailableRewards = totalClaimedAmount + totalPendingAmount;
+
+      // Convert to Wei strings (matches frontend expectation)
       const totalStakedWei = ethers.parseUnits(totalStakedAmount.toString(), 18).toString();
+      const availableRewardsWei = ethers.parseUnits(totalAvailableRewards.toString(), 18).toString();
 
       return {
         totalStaked: totalStakedWei,
         uniqueStakers: uniqueStakersResult.length,
-        availableRewards: blockchainStats.availableRewards
+        availableRewards: availableRewardsWei
       };
     } catch (error: any) {
       throw new Error(`Failed to fetch staking stats: ${error.message}`);

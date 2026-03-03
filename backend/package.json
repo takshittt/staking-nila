@@ -16,6 +16,7 @@
     "start": "tsx src/server.ts",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
+    "prisma:push": "prisma db push",
     "prisma:studio": "prisma studio",
     "admin:delete": "tsx scripts/deleteAdmin.ts",
     "test:users": "tsx scripts/testUserTracking.ts",
@@ -24,7 +25,8 @@
     "sample:transactions": "tsx scripts/createSampleTransactions.ts",
     "check:users": "tsx scripts/checkUsers.ts",
     "rewards:sync": "tsx scripts/syncAllAPYRewards.ts",
-    "db:clear": "tsx scripts/clearDatabase.ts"
+    "db:clear": "tsx scripts/clearDatabase.ts",
+    "test:sync": "tsx scripts/testSyncSystem.ts"
   },
   "keywords": [],
   "author": "",

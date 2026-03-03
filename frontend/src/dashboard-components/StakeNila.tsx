@@ -1,34 +1,53 @@
 import { useState, useMemo, useEffect } from 'react';
-import { Info, ShieldCheck, Zap, Loader2 } from 'lucide-react';
-import { stakingApi, type AmountConfig, type LockConfig } from '../services/stakingApi';
-import { transactionApi } from '../services/transactionApi';
-import { userApi } from '../services/userApi';
+import { Info, ShieldCheck, Zap, Loader2, Wallet, CheckCircle2, Circle, TrendingUp } from 'lucide-react';
 import { ContractService } from '../services/contractService';
 import { useWallet } from '../hooks/useWallet';
 import { useAccount } from 'wagmi';
-import EthicsPaymentModal from './EthicsPaymentModal';
 import toast from 'react-hot-toast';
 import { handleError } from '../utils/errorHandler';
+import { formatUnits } from 'ethers';
+import { stakingApi, type LockConfig, type AmountConfig } from '../services/stakingApi';
 
 const StakeNila = () => {
-    const [selectedPackage, setSelectedPackage] = useState<string | null>(null);
-    const [selectedDuration, setSelectedDuration] = useState<number | null>(null);
-    const [amountConfigs, setAmountConfigs] = useState<AmountConfig[]>([]);
-    const [lockConfigs, setLockConfigs] = useState<LockConfig[]>([]);
-    const [loading, setLoading] = useState(true);
+    const [plans, setPlans] = useState<LockConfig[]>([]);
+    const [loadingPlans, setLoadingPlans] = useState(true);
+    const [selectedPlanId, setSelectedPlanId] = useState<number | null>(null);
+    const [stakeAmount, setStakeAmount] = useState<string>('');
+    const [nilaBalance, setNilaBalance] = useState<string>('0');
+
+    // Status states
+    const [loadingBalance, setLoadingBalance] = useState(false);
     const [staking, setStaking] = useState(false);
-    const [approving, setApproving] = useState(false);
     const [statusMessage, setStatusMessage] = useState<string>('');
     const [isCorrectNetwork, setIsCorrectNetwork] = useState<boolean>(true);
-    const [referrerAddress, setReferrerAddress] = useState<string | undefined>(undefined);
-    const [paymentMethod, setPaymentMethod] = useState<'crypto' | 'card'>('crypto');
-    const [showEthicsModal, setShowEthicsModal] = useState(false);
-    const [, setCardPaymentError] = useState<string | null>(null);
 
     const { address, isConnected, chain } = useAccount();
     const { connect } = useWallet();
 
-    // Check network and fetch referrer when connected
+    const selectedPlan = plans.find(p => p.id === selectedPlanId);
+
+    // Fetch staking plans from backend
+    useEffect(() => {
+        const fetchPlans = async () => {
+            try {
+                setLoadingPlans(true);
+                const lockConfigs = await stakingApi.getActiveLockConfigs();
+                setPlans(lockConfigs);
+                // Auto-select first plan if available
+                if (lockConfigs.length > 0 && !selectedPlanId) {
+                    setSelectedPlanId(lockConfigs[0].id);
+                }
+            } catch (error) {
+                console.error('Failed to fetch staking plans:', error);
+                toast.error('Failed to load staking plans');
+            } finally {
+                setLoadingPlans(false);
+            }
+        };
+        fetchPlans();
+    }, []);
+
+    // Check network when connected
     useEffect(() => {
         const checkNetwork = async () => {
             if (isConnected) {
@@ -36,609 +55,398 @@ const StakeNila = () => {
                 setIsCorrectNetwork(correct);
             }
         };
-        const fetchReferrer = async () => {
-            if (isConnected && address) {
-                try {
-                    const user = await userApi.getUser(address);
-                    if (user.referrerWallet) {
-                        setReferrerAddress(user.referrerWallet);
-                        console.log('Referrer found:', user.referrerWallet);
-                    }
-                } catch (error) {
-                    console.error('Failed to fetch referrer:', error);
-                }
-            }
-        }
         checkNetwork();
-        fetchReferrer();
     }, [isConnected, chain, address]);
 
-    // Fetch configs from backend
+    // Fetch NILA Balance
     useEffect(() => {
-        const fetchConfigs = async () => {
-            setLoading(true);
-            try {
-                const [amounts, locks] = await Promise.all([
-                    stakingApi.getActiveAmountConfigs(),
-                    stakingApi.getActiveLockConfigs()
-                ]);
-
-                setAmountConfigs(amounts);
-                setLockConfigs(locks);
-
-                // Set defaults if available
-                if (amounts.length > 0 && !selectedPackage) {
-                    setSelectedPackage(amounts[0].amount);
+        const fetchBalance = async () => {
+            if (isConnected && address) {
+                try {
+                    setLoadingBalance(true);
+                    const balanceWei = await ContractService.getTokenBalance(address);
+                    const balanceFormatted = formatUnits(balanceWei, 18);
+                    setNilaBalance(balanceFormatted);
+                } catch (error) {
+                    console.error('Failed to fetch NILA balance:', error);
+                    setNilaBalance('0');
+                } finally {
+                    setLoadingBalance(false);
                 }
-                if (locks.length > 0 && !selectedDuration) {
-                    setSelectedDuration(locks[0].lockDuration);
-                }
-            } catch (error) {
-                console.error('Failed to fetch staking configs:', error);
-            } finally {
-                setLoading(false);
+            } else {
+                setLoadingBalance(false);
+                setNilaBalance('0');
             }
         };
+        fetchBalance();
+    }, [isConnected, address]);
 
-        fetchConfigs();
-    }, []);
+    const handleQuickSelect = (percentage: number) => {
+        const balanceNum = parseFloat(nilaBalance);
+        if (isNaN(balanceNum) || balanceNum <= 0) return;
 
-    const handleStake = async () => {
-        if (!selectedPackage || !selectedDuration) {
-            toast.error('Please select a package and duration');
-            return;
-        }
-
-        // Validate configs exist
-        const amountConfig = amountConfigs.find(c => c.amount === selectedPackage);
-        const lockConfig = lockConfigs.find(c => c.lockDuration === selectedDuration);
-
-        if (!amountConfig || !lockConfig) {
-            toast.error('Invalid configuration selected');
-            return;
-        }
-
-        // Route based on payment method
-        if (paymentMethod === 'crypto') {
-            await handleCryptoStake();
-        } else {
-            // Open Ethics payment modal for card payment
-            setShowEthicsModal(true);
-        }
+        const amount = (balanceNum * percentage) / 100;
+        // Format to a reasonable number of decimal places, avoid trailing zeros
+        setStakeAmount(amount.toFixed(4).replace(/\.?0+$/, ''));
     };
 
-    const handleCryptoStake = async () => {
+    const handleStake = async () => {
         if (!isConnected || !address) {
             connect();
             return;
         }
 
-        if (!selectedPackage || !selectedDuration) {
-            toast.error('Please select a package and duration');
+        const amountNum = parseFloat(stakeAmount);
+        if (isNaN(amountNum) || amountNum <= 0) {
+            toast.error('Please enter a valid stake amount');
             return;
         }
 
-        const amountConfig = amountConfigs.find(c => c.amount === selectedPackage);
-        const lockConfig = lockConfigs.find(c => c.lockDuration === selectedDuration);
-
-        if (!amountConfig || !lockConfig) {
-            toast.error('Invalid configuration selected');
+        if (amountNum < 100) {
+            toast.error('Minimum stake amount is 100 NILA');
             return;
         }
 
-        // Convert wei to NILA for display (this is the USD display amount)
-        const displayAmount = Number(BigInt(amountConfig.amount) / BigInt(10 ** 18));
+        if (amountNum > parseFloat(nilaBalance)) {
+            toast.error('Insufficient NILA balance');
+            return;
+        }
 
-        // Calculate actual NILA amount user needs to pay (displayAmount ÷ 0.08)
-        const nilaAmount = displayAmount / 0.08;
-
-        // Convert NILA amount to wei string for contract calls
-        // const nilaAmountWei = (BigInt(Math.floor(nilaAmount)) * BigInt(10 ** 18)).toString();
+        if (selectedPlanId === null || selectedPlanId === undefined) {
+            toast.error('Please select a staking plan');
+            return;
+        }
 
         try {
             setStaking(true);
-
-            // Check and switch to BSC Testnet if needed
             setStatusMessage('Checking network...');
             await ContractService.ensureCorrectNetwork();
 
             setStatusMessage('Checking token allowance...');
-
-            // Check if approval is needed (use wei amount)
-            const hasAllowance = await ContractService.checkAllowance(address, nilaAmount.toString());
+            const hasAllowance = await ContractService.checkAllowance(address, stakeAmount);
 
             if (!hasAllowance) {
-                setApproving(true);
-                setStatusMessage('Please approve NILA tokens in your wallet...');
-
-                // Approve with wei amount
-                await ContractService.approveToken(nilaAmount.toString());
-
-                setApproving(false);
-                setStatusMessage('Approval confirmed! Waiting for blockchain confirmation...');
-
-                // Wait for blockchain to update state
-                await new Promise(resolve => setTimeout(resolve, 3000));
-
-                // Verify approval was successful
-                const verifyAllowance = await ContractService.checkAllowance(address, nilaAmount.toString());
-                if (!verifyAllowance) {
-                    throw new Error('Approval verification failed. Please try again.');
-                }
-
-                setStatusMessage('Approval verified! Proceeding to stake...');
+                setStatusMessage('Approving tokens...');
+                await ContractService.approveToken(stakeAmount);
+                toast.success('Token approval successful!');
             }
 
-            setStatusMessage('Please confirm the staking transaction in your wallet...');
-
-            // Stake tokens
+            setStatusMessage('Preparing stake transaction...');
             const txHash = await ContractService.stake({
-                amountConfigId: amountConfig.id,
-                lockConfigId: lockConfig.id,
-                referrerAddress // Pass referrer address if available
+                amount: stakeAmount,
+                lockConfigId: selectedPlanId
             });
 
-            setStatusMessage('Recording stake in database...');
+            setStatusMessage('Stake successful!');
+            toast.success(`Successfully staked ${amountNum.toLocaleString()} NILA for ${selectedPlan?.lockDuration || 0} days!`);
 
-            // Record stake in backend
-            await stakingApi.recordStake({
-                walletAddress: address,
-                planName: 'NILA Staking',
-                planVersion: 1,
-                amount: nilaAmount,
-                apy: lockConfig.apr / 100,
-                lockDays: lockConfig.lockDuration,
-                instantRewardPercent: amountConfig.instantRewardBps / 100,
-                txHash
-            });
-
-            // Record transaction for transaction history
-            await transactionApi.createTransaction({
-                txHash,
-                walletAddress: address,
-                type: 'STAKE',
-                amount: nilaAmount,
-                status: 'confirmed'
-            });
-
-            setStatusMessage('');
-            toast.success(`Successfully staked ${nilaAmount.toLocaleString()} NILA!\nTransaction: ${txHash.slice(0, 10)}...`);
-
-            // Reset selections
-            setSelectedPackage(null);
-            setSelectedDuration(null);
+            // Refresh balance
+            const newBalance = await ContractService.getTokenBalance(address);
+            setNilaBalance(formatUnits(newBalance, 18));
+            setStakeAmount('');
 
         } catch (error: any) {
-            setStatusMessage('');
             handleError(error, 'Failed to stake tokens. Please try again.');
         } finally {
             setStaking(false);
-            setApproving(false);
+            setStatusMessage('');
         }
     };
 
-    const handleCardPaymentSuccess = async (invoiceId: string, intentId: string) => {
-        try {
-            setStaking(true);
-            setStatusMessage('Verifying payment...');
-
-            if (!address) {
-                throw new Error('Wallet not connected');
-            }
-
-            const amountConfig = amountConfigs.find(c => c.amount === selectedPackage);
-            const lockConfig = lockConfigs.find(c => c.lockDuration === selectedDuration);
-
-            if (!amountConfig || !lockConfig) {
-                throw new Error('Invalid configuration');
-            }
-
-            setStatusMessage('Processing your stake...');
-
-            // Call verify-intent endpoint - backend will create the stake
-            const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
-            const response = await fetch(`${API_URL}/verify-intent`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    intent_id: intentId,
-                    invoice_id: invoiceId
-                })
-            });
-
-            const data = await response.json();
-
-            if (!response.ok || !data.success) {
-                throw new Error(data.error || 'Failed to verify payment');
-            }
-
-            setStatusMessage('');
-            setShowEthicsModal(false);
-            toast.success(`Successfully staked ${data.nilaAmount.toLocaleString()} NILA!\nTransaction: ${data.txHash.slice(0, 10)}...`);
-
-            // Reset selections
-            setSelectedPackage(null);
-            setSelectedDuration(null);
-
-        } catch (error: any) {
-            setStatusMessage('');
-            const msg = handleError(error, 'Failed to stake tokens. Please try again.');
-            setCardPaymentError(msg);
-        } finally {
-            setStaking(false);
-        }
-    };
-
-    // Auto-calculate rewards
+    // Calculate Earnings Preview
     const calculations = useMemo(() => {
-        if (!selectedPackage || !selectedDuration) {
+        const amountNum = parseFloat(stakeAmount) || 0;
+
+        if (!selectedPlan) {
             return {
-                amount: 0,
-                instantCashbackAmount: 0,
-                apyRewards: 0,
-                totalRewards: 0,
-                instantRewardPercent: 0,
-                aprPercent: 0,
-                lockDuration: 0
+                amount: amountNum,
+                profit: 0,
+                total: amountNum,
+                duration: 0,
+                apr: 0
             };
         }
 
-        const amountConfig = amountConfigs.find(c => c.amount === selectedPackage);
-        const lockConfig = lockConfigs.find(c => c.lockDuration === selectedDuration);
+        // Convert APR from basis points to percentage (e.g., 500 bps = 5%)
+        const aprPercent = selectedPlan.apr / 100;
 
-        if (!amountConfig || !lockConfig) {
-            return {
-                amount: 0,
-                instantCashbackAmount: 0,
-                apyRewards: 0,
-                totalRewards: 0,
-                instantRewardPercent: 0,
-                aprPercent: 0,
-                lockDuration: 0
-            };
-        }
-
-        // Use amount directly (admin assigns USD/USDT amount)
-        const amount = Number(BigInt(amountConfig.amount) / BigInt(10 ** 18));
-
-        // Convert basis points to percentage (divide by 100)
-        // If payment method is card, instant reward is 0
-        const instantRewardPercent = paymentMethod === 'card' ? 0 : amountConfig.instantRewardBps / 100;
-        const aprPercent = lockConfig.apr / 100;
-
-        // Calculate instant cashback in USD/USDT
-        const instantCashbackAmount = Math.floor((amount * instantRewardPercent) / 100);
-
-        // Calculate APY rewards in USD/USDT using simple interest
-        // Formula: Principal * Rate * Time (in years)
-        const apyRewards = Math.floor(amount * (aprPercent / 100) * (lockConfig.lockDuration / 365));
-
-        const totalRewards = instantCashbackAmount + apyRewards;
+        // Simple interest formula for preview
+        const profit = amountNum * (aprPercent / 100) * (selectedPlan.lockDuration / 365);
+        const total = amountNum + profit;
 
         return {
-            amount,
-            instantCashbackAmount,
-            apyRewards,
-            totalRewards,
-            instantRewardPercent,
-            aprPercent,
-            lockDuration: lockConfig.lockDuration
+            amount: amountNum,
+            profit,
+            total,
+            duration: selectedPlan.lockDuration,
+            apr: aprPercent
         };
-    }, [selectedPackage, selectedDuration, amountConfigs, lockConfigs, paymentMethod]);
+    }, [stakeAmount, selectedPlan]);
 
-    if (loading) {
-        return (
-            <div className="flex items-center justify-center h-64">
-                <Loader2 className="w-8 h-8 animate-spin text-red-600" />
-            </div>
-        );
-    }
-
-    if (amountConfigs.length === 0 || lockConfigs.length === 0) {
-        return (
-            <div className="bg-white rounded-2xl p-8 text-center">
-                <p className="text-slate-600">No staking options available at the moment. Please check back later.</p>
-            </div>
-        );
-    }
-
-    const isProcessing = staking || approving;
+    const isProcessing = staking;
 
     return (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 pb-12">
+        <div className="pb-12 space-y-8 max-w-7xl mx-auto">
+            {/* Header Area Removed */}
+
+            {/* Reward Information Message */}
+            <div className="bg-blue-50 border border-blue-200 rounded-2xl p-4 flex items-center gap-4 shadow-sm">
+                <div className="bg-blue-100 p-2.5 rounded-full shrink-0">
+                    <Info className="w-5 h-5 text-blue-600" />
+                </div>
+                <div className="space-y-0.5">
+                    <p className="text-blue-900 font-bold">Reward Notice</p>
+                    <p className="text-blue-800 text-sm font-medium leading-relaxed">
+                        Please note that direct staking of NILA tokens does not provide instant or referral rewards.
+                        These benefits are exclusively available when using the <span className="font-bold text-blue-900">Buy & Stake NILA</span> option.
+                    </p>
+                </div>
+            </div>
+
             {/* Network Warning */}
             {isConnected && !isCorrectNetwork && (
-                <div className="lg:col-span-3">
-                    <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 flex items-center justify-between">
-                        <div className="flex items-center gap-3">
-                            <Info className="w-5 h-5 text-yellow-600" />
-                            <div>
-                                <p className="text-yellow-800 font-medium">Wrong Network</p>
-                                <p className="text-yellow-700 text-sm">Please switch to BSC Testnet to stake</p>
-                            </div>
+                <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 flex items-center justify-between shadow-sm">
+                    <div className="flex items-center gap-3">
+                        <div className="bg-amber-100 p-2 rounded-full">
+                            <Info className="w-5 h-5 text-amber-600" />
                         </div>
-                        <button
-                            onClick={async () => {
-                                try {
-                                    await ContractService.switchToBscTestnet();
-                                    setIsCorrectNetwork(true);
-                                } catch (error: any) {
-                                    toast.error(error.message || 'Failed to switch network');
-                                }
-                            }}
-                            className="px-4 py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 transition-colors font-medium"
-                        >
-                            Switch Network
-                        </button>
+                        <div>
+                            <p className="text-amber-900 font-bold">Wrong Network Connected</p>
+                            <p className="text-amber-700 text-sm font-medium">Please switch to BSC Testnet to interact with the staking contract.</p>
+                        </div>
                     </div>
+                    <button
+                        onClick={async () => {
+                            try {
+                                await ContractService.switchToBscTestnet();
+                                setIsCorrectNetwork(true);
+                            } catch (error: any) {
+                                toast.error(error.message || 'Failed to switch network');
+                            }
+                        }}
+                        className="px-5 py-2.5 bg-amber-500 text-white rounded-xl hover:bg-amber-600 transition-colors font-bold shadow-sm shadow-amber-500/20 active:scale-95"
+                    >
+                        Switch Network
+                    </button>
                 </div>
             )}
 
             {/* Status Message */}
             {statusMessage && (
-                <div className="lg:col-span-3">
-                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 flex items-center gap-3">
-                        <Loader2 className="w-5 h-5 animate-spin text-blue-600" />
-                        <span className="text-blue-800">{statusMessage}</span>
-                    </div>
+                <div className="bg-blue-50/80 backdrop-blur-sm border border-blue-200 rounded-2xl p-4 flex items-center gap-3 shadow-sm animate-in fade-in slide-in-from-top-4">
+                    <Loader2 className="w-5 h-5 animate-spin text-blue-600" />
+                    <span className="text-blue-900 font-medium">{statusMessage}</span>
                 </div>
             )}
 
-            {/* Left Column: Selections */}
-            <div className="lg:col-span-2 space-y-8">
+            {/* STAKE NILA CONTENT */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 animate-in fade-in duration-500 slide-in-from-bottom-4">
 
-                {/* Page Headline */}
-                <div className="bg-white rounded-2xl p-6 md:p-8 shadow-sm border border-slate-100">
-                    <h1 className="text-2xl font-bold text-slate-900 mb-2">Stake NILA & Earn Rewards</h1>
-                    <p className="text-slate-500">
-                        Stake NILA securely and earn <span className="text-red-600 font-semibold">instant cashback</span> + APY rewards based on your selected package and duration.
-                    </p>
+                {/* Left Column: Input & Plan Selection */}
+                <div className="lg:col-span-2 space-y-6">
 
-                    {/* Payment Method Toggle */}
-                    <div className="flex p-1 bg-slate-100 rounded-xl mt-6 w-fit">
-                        <button
-                            onClick={() => setPaymentMethod('crypto')}
-                            className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all ${paymentMethod === 'crypto'
-                                ? 'bg-red-600 text-white shadow-md'
-                                : 'text-slate-500 hover:text-red-700'
-                                }`}
-                        >
-                            Pay with Crypto
-                        </button>
-                        <button
-                            onClick={() => setPaymentMethod('card')}
-                            className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all ${paymentMethod === 'card'
-                                ? 'bg-red-600 text-white shadow-md'
-                                : 'text-slate-500 hover:text-red-700'
-                                }`}
-                        >
-                            Pay with Credit Card
-                        </button>
-                    </div>
+                    {/* 1. Stake Amount Card */}
+                    <div className="bg-white rounded-3xl p-5 md:p-6 shadow-sm border border-slate-100 relative overflow-hidden group hover:border-red-100 transition-colors">
+                        <div className="absolute top-0 right-0 w-64 h-64 bg-red-50 rounded-full blur-[80px] -mr-32 -mt-32 opacity-50 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none"></div>
 
-                    {paymentMethod === 'card' && (
-                        <div className="mt-4 bg-yellow-50 border border-yellow-200 rounded-lg p-3 flex items-start gap-3">
-                            <Info className="w-5 h-5 text-yellow-600 shrink-0 mt-0.5" />
-                            <p className="text-sm text-yellow-800">
-                                No instant cashback or referral rewards will be given when staking with credit card.
-                            </p>
-                        </div>
-                    )}
-                </div>
-
-                {/* Step 1: Select Staking Package */}
-                <div className="bg-white rounded-2xl p-6 md:p-8 shadow-sm border border-slate-100">
-                    <div className="flex items-center gap-3 mb-6">
-                        <div className="bg-red-50 text-red-600 font-bold w-8 h-8 rounded-full flex items-center justify-center">1</div>
-                        <h2 className="text-xl font-bold text-slate-900">Choose Your Package</h2>
-                    </div>
-
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        {amountConfigs.map((config) => {
-                            const amount = Number(BigInt(config.amount) / BigInt(10 ** 18));
-                            // Show configured percentage in UI, but calculation will be 0 if card
-                            const displayInstantRewardPercent = config.instantRewardBps / 100;
-                            const isSelected = selectedPackage === config.amount;
-
-                            return (
-                                <button
-                                    key={config.id}
-                                    onClick={() => setSelectedPackage(config.amount)}
-                                    className={`relative p-5 rounded-xl border-2 text-left transition-all duration-200 group ${isSelected
-                                        ? 'border-red-600 bg-red-50/30'
-                                        : 'border-slate-100 hover:border-slate-300 hover:bg-slate-50'
-                                        }`}
-                                >
-                                    <div className="mb-2">
-                                        <span className="text-2xl font-bold text-slate-900">{amount.toLocaleString()}</span>
-                                        <span className="text-sm font-medium text-slate-500 ml-1">
-                                            {paymentMethod === 'crypto' ? 'USDT' : 'USD'}
-                                        </span>
-                                    </div>
-
-                                    {paymentMethod === 'crypto' && (
-                                        <div className="flex items-center gap-2 text-sm">
-                                            <span className="bg-green-100 text-green-700 px-2 py-0.5 rounded font-medium">
-                                                {displayInstantRewardPercent}% Cashback
-                                            </span>
-                                        </div>
-                                    )}
-                                </button>
-                            );
-                        })}
-                    </div>
-                    <p className="mt-4 text-sm text-slate-500 flex items-center gap-2">
-                        <Info size={16} className="text-slate-400" />
-                        {paymentMethod === 'card'
-                            ? 'Instant cashback and referral rewards are not available for credit card payments.'
-                            : 'Higher packages unlock additional instant cashback credited immediately after staking.'}
-                    </p>
-                </div>
-
-                {/* Step 2: Select Lock Period */}
-                <div className="bg-white rounded-2xl p-6 md:p-8 shadow-sm border border-slate-100">
-                    <div className="flex items-center gap-3 mb-6">
-                        <div className="bg-red-50 text-red-600 font-bold w-8 h-8 rounded-full flex items-center justify-center">2</div>
-                        <h2 className="text-xl font-bold text-slate-900">Choose Staking Duration</h2>
-                    </div>
-
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                        {lockConfigs.map((config) => {
-                            const aprPercent = config.apr / 100;
-                            const isSelected = selectedDuration === config.lockDuration;
-                            return (
-                                <button
-                                    key={config.id}
-                                    onClick={() => setSelectedDuration(config.lockDuration)}
-                                    className={`p-4 rounded-xl border-2 text-center transition-all duration-200 ${isSelected
-                                        ? 'border-red-600 bg-red-50/30'
-                                        : 'border-slate-100 hover:border-slate-300 hover:bg-slate-50'
-                                        }`}
-                                >
-                                    <div className="text-xl font-bold text-slate-900 mb-1">{config.lockDuration}</div>
-                                    <div className="text-xs text-slate-500 uppercase tracking-wide font-medium mb-2">Days</div>
-                                    <div className="inline-block bg-green-100 text-green-700 px-2 py-1 rounded text-sm font-bold">
-                                        {aprPercent}% APR
-                                    </div>
-                                </button>
-                            );
-                        })}
-                    </div>
-                    <p className="mt-4 text-sm text-slate-500 flex items-center gap-2">
-                        <Info size={16} className="text-slate-400" />
-                        <span>Longer lock periods earn higher APY. Staked NILA remains <span className="font-medium text-slate-700">locked</span> until maturity.</span>
-                    </p>
-                </div>
-            </div>
-
-            {/* Right Column: Live Reward Preview */}
-            <div className="lg:col-span-1">
-                <div className="bg-slate-900 text-white rounded-2xl p-6 md:p-8 sticky top-28 shadow-xl">
-                    <div className="flex items-center gap-2 mb-6">
-                        <div className="p-2 bg-slate-800 rounded-lg">
-                            <Zap className="text-yellow-400" size={20} />
-                        </div>
-                        <h3 className="text-xl font-bold">Staking Summary</h3>
-                    </div>
-
-                    <div className="space-y-6 relative z-10">
-                        {/* Package Info */}
-                        <div className="pb-6 border-b border-slate-700/50">
-                            <div className="text-slate-400 text-sm mb-1">Selected Package</div>
-                            <div className="text-2xl font-bold text-white">
-                                {calculations.amount?.toLocaleString() || 0} {paymentMethod === 'crypto' ? 'USDT' : 'USD'}
+                        <div className="relative z-10 flex flex-col sm:flex-row sm:items-center justify-between mb-4 gap-4">
+                            <div className="flex items-center gap-3">
+                                <div className="bg-red-50 text-red-600 font-bold w-8 h-8 rounded-full flex items-center justify-center ring-4 ring-red-50/50 shrink-0 text-sm">1</div>
+                                <h2 className="text-lg font-bold text-slate-900">Enter Stake Amount</h2>
                             </div>
-                            <div className="text-xs text-slate-400 mt-1">
-                                You will receive: {calculations.amount ? (calculations.amount / 0.08).toLocaleString() : 0} NILA
-                            </div>
-                        </div>
 
-                        {/* Lock Period Info */}
-                        <div className="pb-6 border-b border-slate-700/50">
-                            <div className="text-slate-400 text-sm mb-1">Lock Period</div>
-                            <div className="text-2xl font-bold text-white flex items-center gap-2">
-                                {selectedDuration || 0} Days
-                                {selectedDuration && (
-                                    <span className="text-xs bg-slate-700 text-slate-300 px-2 py-1 rounded-full font-normal">
-                                        Maturity: {new Date(Date.now() + selectedDuration * 24 * 60 * 60 * 1000).toLocaleDateString()}
+                            {/* Available Balance Display */}
+                            <div className="flex items-center gap-2 bg-slate-50 px-3 py-1.5 rounded-xl border border-slate-100">
+                                <Wallet size={14} className="text-slate-400" />
+                                <span className="text-xs font-bold text-slate-500 uppercase tracking-tight">Available:</span>
+                                {loadingBalance ? (
+                                    <Loader2 className="w-3 h-3 animate-spin text-slate-400" />
+                                ) : (
+                                    <span className="text-sm font-bold text-slate-900">
+                                        {parseFloat(nilaBalance).toLocaleString(undefined, { maximumFractionDigits: 2 })} NILA
                                     </span>
                                 )}
                             </div>
                         </div>
 
-                        {/* Rewards Breakdown */}
-                        <div className="space-y-3 pb-6 border-b border-slate-700/50">
-                            <div className="flex justify-between items-center">
-                                <span className="text-slate-400 text-sm flex items-center gap-1">
-                                    Instant Cashback
-                                    <span title="Credited to your wallet immediately after staking" className="cursor-help">
-                                        <Info size={12} className="text-slate-500" />
-                                    </span>
-                                </span>
-                                <span className={`font-bold ${calculations.instantCashbackAmount > 0 ? 'text-green-400' : 'text-slate-500'}`}>
-                                    {calculations.instantCashbackAmount.toLocaleString()} {paymentMethod === 'crypto' ? 'USDT' : 'USD'}
-                                </span>
-                            </div>
-                            <div className="flex justify-between items-center">
-                                <span className="text-slate-400 text-sm">APR ({calculations.aprPercent}%)</span>
-                                <span className="text-green-400 font-bold">{calculations.apyRewards.toLocaleString()} {paymentMethod === 'crypto' ? 'USDT' : 'USD'}</span>
-                            </div>
-                        </div>
-
-                        {/* Total Estimations */}
-                        <div className="bg-slate-800/50 rounded-xl p-4 border border-slate-700">
-                            <div className="text-slate-400 text-sm mb-1">Estimated Total Rewards</div>
-                            <div className="text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-yellow-200 to-yellow-500">
-                                {calculations.totalRewards.toLocaleString()} {paymentMethod === 'crypto' ? 'USDT' : 'USD'}
+                        <div className="relative mb-4 z-10 sm:ml-11 pl-1 sm:pl-0">
+                            <div className="relative flex items-center bg-slate-50/50 border-2 border-slate-200 rounded-2xl focus-within:border-red-500 focus-within:ring-4 focus-within:ring-red-50 transition-all shadow-sm">
+                                <input
+                                    type="number"
+                                    value={stakeAmount}
+                                    onChange={(e) => setStakeAmount(e.target.value)}
+                                    placeholder="0.0"
+                                    className="w-full bg-transparent px-5 py-4 text-2xl font-bold text-slate-900 placeholder:text-slate-300 border-none outline-none focus:ring-0"
+                                    min="0"
+                                    step="any"
+                                />
+                                <div className="pr-5 flex items-center gap-2 select-none">
+                                    <div className="w-7 h-7 bg-red-600 rounded-full flex items-center justify-center shrink-0 shadow-sm border border-red-700">
+                                        <span className="text-white text-[10px] font-bold leading-none tracking-tighter">N</span>
+                                    </div>
+                                    <span className="text-base font-bold text-slate-400">NILA</span>
+                                </div>
                             </div>
                         </div>
 
-                        {/* Helper Text */}
-                        <div className="text-xs text-slate-400 space-y-1">
-                            {paymentMethod === 'card' ? (
-                                <p className="text-yellow-500">• Instant cashback applied only for crypto payments.</p>
-                            ) : (
-                                <p>• Instant cashback is credited immediately.</p>
-                            )}
-                            <p>• APR rewards accumulate and are claimable at maturity.</p>
-                            <p>• Backend will calculate NILA amount based on $0.08 per NILA.</p>
+                        {/* Quick Select Chips */}
+                        <div className="flex flex-wrap items-center gap-2 sm:ml-11 pl-1 sm:pl-0 z-10 relative">
+                            {[25, 50, 75].map(percent => (
+                                <button
+                                    key={percent}
+                                    onClick={() => handleQuickSelect(percent)}
+                                    className="px-4 py-2 bg-red-50 hover:bg-red-100 text-red-600 font-bold rounded-xl text-sm transition-colors active:scale-95"
+                                >
+                                    {percent}%
+                                </button>
+                            ))}
+                            <button
+                                onClick={() => handleQuickSelect(100)}
+                                className="px-4 py-2 bg-red-100 hover:bg-red-200 text-red-700 font-bold rounded-xl text-sm transition-colors active:scale-95"
+                            >
+                                Max
+                            </button>
+                        </div>
+                    </div>
+
+                    {/* 2. Plan Selection Cards */}
+                    <div className="bg-white rounded-3xl p-5 md:p-6 shadow-sm border border-slate-100">
+                        <div className="flex items-center gap-3 mb-4">
+                            <div className="bg-red-50 text-red-600 font-bold w-8 h-8 rounded-full flex items-center justify-center ring-4 ring-red-50/50 shrink-0 text-sm">2</div>
+                            <h2 className="text-lg font-bold text-slate-900">Select Stake Period</h2>
                         </div>
 
-                        {/* Action Button */}
-                        <button
-                            onClick={handleStake}
-                            disabled={isProcessing || !selectedPackage || !selectedDuration || (paymentMethod === 'crypto' && !isConnected)}
-                            className="w-full bg-red-600 hover:bg-red-700 text-white font-bold py-4 rounded-xl transition-all shadow-lg hover:shadow-red-600/20 active:scale-[0.98] mt-2 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-red-600 flex items-center justify-center gap-2"
-                        >
-                            {isProcessing ? (
-                                <>
-                                    <Loader2 className="w-5 h-5 animate-spin" />
-                                    {approving ? 'Approving...' : 'Staking...'}
-                                </>
-                            ) : paymentMethod === 'crypto' && !isConnected ? (
-                                'Connect Wallet to Stake'
-                            ) : (
-                                'Buy & Stake NILA'
-                            )}
-                        </button>
+                        {loadingPlans ? (
+                            <div className="flex items-center justify-center py-12 sm:ml-12 pl-1 sm:pl-0">
+                                <Loader2 className="w-6 h-6 animate-spin text-red-500" />
+                                <span className="ml-3 text-slate-500 font-medium">Loading plans...</span>
+                            </div>
+                        ) : plans.length === 0 ? (
+                            <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 flex items-center gap-2.5 shadow-sm sm:ml-12 pl-1 sm:pl-0">
+                                <Info className="w-4 h-4 text-amber-600 shrink-0" />
+                                <span className="text-amber-900 font-medium text-sm">No staking plans available at the moment.</span>
+                            </div>
+                        ) : (
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:ml-11 pl-1 sm:pl-0">
+                                {plans.map((plan) => {
+                                    const isSelected = selectedPlanId === plan.id;
+                                    const aprPercent = plan.apr / 100; // Convert basis points to percentage
+                                    return (
+                                        <button
+                                            key={plan.id}
+                                            onClick={() => setSelectedPlanId(plan.id)}
+                                            className={`relative flex flex-col p-4 rounded-xl border-2 text-left transition-all duration-300 focus:outline-none ${isSelected
+                                                ? 'border-red-500 bg-red-50/40 shadow-md ring-4 ring-red-50'
+                                                : 'border-slate-100 hover:border-slate-300 hover:bg-slate-50'
+                                                }`}
+                                        >
+                                            <div className="flex items-center justify-end mb-2 w-full">
+                                                {isSelected ? (
+                                                    <CheckCircle2 className="w-4 h-4 text-red-500" />
+                                                ) : (
+                                                    <Circle className="w-4 h-4 text-slate-300" />
+                                                )}
+                                            </div>
 
-                        <div className="flex items-start gap-2 text-xs text-slate-500 mt-4 text-center justify-center">
-                            <ShieldCheck size={14} className="shrink-0 mt-0.5" />
-                            <span>By staking, you agree that your NILA will remain locked for the selected duration.</span>
+                                            <div className="mb-3">
+                                                <div className="text-2xl font-bold text-slate-900 mb-0.5">{plan.lockDuration}</div>
+                                                <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Days Lock</div>
+                                            </div>
+
+                                            <div className="mt-auto">
+                                                <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold ${isSelected ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-600'
+                                                    }`}>
+                                                    <TrendingUp className="w-3.5 h-3.5" />
+                                                    {aprPercent}% APR
+                                                </div>
+                                            </div>
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                        )}
+                    </div>
+                </div>
+
+                {/* Right Column: Earnings Summary */}
+                <div className="lg:col-span-1">
+                    <div className="bg-slate-900 text-white rounded-3xl p-6 md:p-8 sticky top-28 shadow-2xl border border-slate-800 relative overflow-hidden group">
+                        {/* Decorative background glow */}
+                        <div className="absolute top-0 right-0 w-64 h-64 bg-yellow-500/10 rounded-full blur-[100px] -mr-20 -mt-20 pointer-events-none"></div>
+                        <div className="absolute bottom-0 left-0 w-64 h-64 bg-red-500/10 rounded-full blur-[100px] -ml-20 -mb-20 pointer-events-none"></div>
+
+                        <div className="relative z-10">
+                            <div className="flex items-center gap-3 mb-8">
+                                <div className="p-2.5 bg-slate-800 rounded-xl ring-1 ring-slate-700">
+                                    <Zap className="text-yellow-400 w-5 h-5" />
+                                </div>
+                                <h3 className="text-xl font-bold">Earnings Preview</h3>
+                            </div>
+
+                            <div className="space-y-6">
+                                {/* Breakdown section */}
+                                <div className="space-y-4 pb-6 border-b border-slate-800">
+                                    <div className="flex justify-between items-center text-sm">
+                                        <span className="text-slate-400 font-medium">Staking Amount</span>
+                                        <span className="font-bold">{calculations.amount.toLocaleString(undefined, { maximumFractionDigits: 2 })} NILA</span>
+                                    </div>
+                                    <div className="flex justify-between items-center text-sm">
+                                        <span className="text-slate-400 font-medium">Lock Duration</span>
+                                        <span className="font-bold">{calculations.duration} Days</span>
+                                    </div>
+                                    <div className="flex justify-between items-center text-sm">
+                                        <span className="text-slate-400 font-medium text-emerald-400">Estimated Profit (+{calculations.apr}%)</span>
+                                        <span className="font-bold text-emerald-400">+{calculations.profit.toLocaleString(undefined, { maximumFractionDigits: 4 })} NILA</span>
+                                    </div>
+                                </div>
+
+                                {/* Final Return block */}
+                                <div className="pt-2 pb-6">
+                                    <div className="text-slate-400 text-sm font-medium mb-2">You will receive</div>
+                                    <div className="text-4xl font-black tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-yellow-300 via-amber-300 to-yellow-500 drop-shadow-sm mb-2">
+                                        {calculations.total.toLocaleString(undefined, { maximumFractionDigits: 4 })}
+                                    </div>
+                                    <div className="text-yellow-500 text-sm font-bold flex items-center gap-1.5 opacity-90">
+                                        <TrendingUp size={16} /> Total NILA at maturity
+                                    </div>
+                                </div>
+
+                                {/* Action Button */}
+                                <button
+                                    onClick={handleStake}
+                                    disabled={isProcessing || calculations.amount <= 0 || !isConnected || selectedPlanId === null}
+                                    className={`w-full py-4 rounded-xl font-bold flex items-center justify-center gap-2 transition-all duration-300
+                                            ${(isProcessing || calculations.amount <= 0 || !isConnected || selectedPlanId === null)
+                                            ? 'bg-slate-800 text-slate-500 cursor-not-allowed'
+                                            : 'bg-gradient-to-r from-red-600 to-red-500 hover:from-red-500 hover:to-red-400 text-white shadow-[0_0_20px_rgba(220,38,38,0.3)] hover:shadow-[0_0_30px_rgba(220,38,38,0.5)] active:scale-[0.98]'
+                                        }
+                                        `}
+                                >
+                                    {isProcessing ? (
+                                        <>
+                                            <Loader2 className="w-5 h-5 animate-spin" />
+                                            Processing...
+                                        </>
+                                    ) : !isConnected ? (
+                                        'Connect Wallet to Stake'
+                                    ) : selectedPlanId === null ? (
+                                        'Select a Staking Plan'
+                                    ) : calculations.amount <= 0 ? (
+                                        'Enter Amount to Stake'
+                                    ) : (
+                                        'Confirm Stake'
+                                    )}
+                                </button>
+
+                                <div className="flex items-start gap-2.5 text-xs text-slate-400 mt-6 leading-relaxed bg-slate-800/50 p-4 rounded-xl border border-slate-700/50">
+                                    <ShieldCheck size={18} className="shrink-0 text-emerald-400" />
+                                    <span>Your principal NILA tokens remain completely secure and are locked exactly for the duration you chose.</span>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
             </div>
-
-            {/* Ethics Payment Modal */}
-            {showEthicsModal && (() => {
-                const amountConfig = amountConfigs.find(c => c.amount === selectedPackage);
-                const lockConfig = lockConfigs.find(c => c.lockDuration === selectedDuration);
-
-                if (!amountConfig || !lockConfig) {
-                    console.error('[MODAL] Cannot render: missing configs', { amountConfig, lockConfig });
-                    return null;
-                }
-
-                return (
-                    <EthicsPaymentModal
-                        show={showEthicsModal}
-                        amount={calculations.amount}
-                        usdPrice={calculations.amount}
-                        referralBonus={referrerAddress ? 3 : 0}
-                        paymentMethod={paymentMethod}
-                        amountConfigId={amountConfig.id}
-                        lockConfigId={lockConfig.id}
-                        walletAddress={address}
-                        onSuccess={handleCardPaymentSuccess}
-                        onCancel={() => {
-                            setShowEthicsModal(false);
-                            setCardPaymentError(null);
-                        }}
-                        onError={(error) => setCardPaymentError(error)}
-                    />
-                );
-            })()}
         </div>
     );
 };

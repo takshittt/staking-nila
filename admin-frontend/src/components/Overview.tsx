@@ -102,18 +102,9 @@ const Overview = () => {
 
     return (
         <div className="space-y-6">
-            <div className="flex items-center justify-between">
-                <div>
-                    <h1 className="text-2xl font-bold text-slate-900">Platform Health Snapshot</h1>
-                    <p className="text-slate-500 mt-1">Real-time status of protocol growth and liabilities</p>
-                </div>
-                <button
-                    onClick={loadStats}
-                    className="p-2 hover:bg-slate-100 rounded-full transition-colors"
-                    title="Refresh Data"
-                >
-                    <Clock className="w-5 h-5 text-slate-400" />
-                </button>
+            <div>
+                <h1 className="text-2xl font-bold text-slate-900">Platform Health Snapshot</h1>
+                <p className="text-slate-500 mt-1">Real-time status of protocol growth and liabilities</p>
             </div>
 
             {/* Row 1: Key Metrics (Big Numbers) */}

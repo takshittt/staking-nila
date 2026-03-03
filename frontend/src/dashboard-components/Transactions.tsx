@@ -21,7 +21,7 @@ const Transactions = () => {
 
     const fetchTransactions = async () => {
         if (!address) return;
-        
+
         setLoading(true);
         try {
             const data = await transactionApi.getWalletTransactions(address, page, 20);
@@ -125,10 +125,7 @@ const Transactions = () => {
     if (!address) {
         return (
             <div className="space-y-6 animate-fade-in">
-                <div>
-                    <h1 className="text-2xl font-bold text-slate-900">Transaction History</h1>
-                    <p className="text-slate-500 mt-1">View all staking, reward, and referral transactions.</p>
-                </div>
+                {/* Header Area Removed */}
                 <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-12 text-center">
                     <p className="text-slate-500">Please connect your wallet to view transactions.</p>
                 </div>
@@ -138,11 +135,7 @@ const Transactions = () => {
 
     return (
         <div className="space-y-6 animate-fade-in">
-            {/* Page Header */}
-            <div>
-                <h1 className="text-2xl font-bold text-slate-900">Transaction History</h1>
-                <p className="text-slate-500 mt-1">View all staking, reward, and referral transactions.</p>
-            </div>
+            {/* Page Header Removed */}
 
             <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
                 {/* Filters */}

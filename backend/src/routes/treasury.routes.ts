@@ -148,4 +148,68 @@ router.get('/liabilities/breakdown', async (req: AuthRequest, res) => {
   }
 });
 
+// ============================================
+// USDT MANAGEMENT
+// ============================================
+
+// Get USDT balance in contract
+router.get('/usdt-balance', async (req: AuthRequest, res) => {
+  try {
+    const balance = await TreasuryService.getUSDTBalance();
+    res.json(balance);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Withdraw USDT from contract
+router.post('/withdraw-usdt',
+  body('amount').isFloat({ min: 0.01 }),
+  validate,
+  async (req: AuthRequest, res) => {
+    try {
+      const { amount } = req.body;
+      const result = await TreasuryService.withdrawUSDT(
+        req.adminId!,
+        amount
+      );
+      res.json(result);
+    } catch (error: any) {
+      res.status(400).json({ error: error.message });
+    }
+  }
+);
+
+// ============================================
+// NILA LIABILITY MANAGEMENT
+// ============================================
+
+// Get NILA liability status
+router.get('/nila-liability-status', async (req: AuthRequest, res) => {
+  try {
+    const status = await TreasuryService.getNILALiabilityStatus();
+    res.json(status);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Deposit NILA for liabilities
+router.post('/deposit-nila-liabilities',
+  body('amount').isFloat({ min: 0.01 }),
+  validate,
+  async (req: AuthRequest, res) => {
+    try {
+      const { amount } = req.body;
+      const result = await TreasuryService.depositNILAForLiabilities(
+        req.adminId!,
+        amount
+      );
+      res.json(result);
+    } catch (error: any) {
+      res.status(400).json({ error: error.message });
+    }
+  }
+);
+
 export default router;

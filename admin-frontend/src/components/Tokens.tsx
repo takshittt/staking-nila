@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react';
-import { ShieldCheck, AlertTriangle, AlertOctagon, Wallet, ArrowDownCircle, ArrowUpCircle } from 'lucide-react';
+import { ShieldCheck, AlertTriangle, AlertOctagon, Wallet, ArrowDownCircle, ArrowUpCircle, DollarSign, TrendingDown, TrendingUp } from 'lucide-react';
 import { DepositModal, WithdrawModal } from './TreasuryModals';
+import { USDTWithdrawModal, NILALiabilityDepositModal } from './USDTModals';
 import { treasuryApi } from '../api/treasuryApi';
-import type { TreasuryStats } from '../api/treasuryApi';
+import type { TreasuryStats, NILALiabilityStatus, USDTBalance } from '../api/treasuryApi';
 import toast from 'react-hot-toast';
 
 const Tokens = () => {
@@ -12,14 +13,41 @@ const Tokens = () => {
     const [isDepositOpen, setIsDepositOpen] = useState(false);
     const [isWithdrawOpen, setIsWithdrawOpen] = useState(false);
     const [isProcessing, setIsProcessing] = useState(false);
+    
+    // USDT states
+    const [usdtBalance, setUsdtBalance] = useState<USDTBalance | null>(null);
+    const [isUSDTWithdrawOpen, setIsUSDTWithdrawOpen] = useState(false);
+    
+    // NILA Liability states
+    const [nilaLiabilityStatus, setNilaLiabilityStatus] = useState<NILALiabilityStatus | null>(null);
+    const [isNILALiabilityDepositOpen, setIsNILALiabilityDepositOpen] = useState(false);
 
     // Fetch treasury stats
     const fetchStats = async () => {
         try {
             setLoading(true);
             setError(null);
+            
+            // Fetch main treasury stats
             const data = await treasuryApi.getStats();
             setStats(data);
+            
+            // Fetch USDT balance
+            try {
+                const usdtData = await treasuryApi.getUSDTBalance();
+                setUsdtBalance(usdtData);
+            } catch (err) {
+                console.error('Failed to fetch USDT balance:', err);
+            }
+            
+            // Fetch NILA liability status
+            try {
+                const liabilityData = await treasuryApi.getNILALiabilityStatus();
+                setNilaLiabilityStatus(liabilityData);
+            } catch (err) {
+                console.error('Failed to fetch NILA liability status:', err);
+            }
+            
         } catch (err: any) {
             setError(err.response?.data?.error || 'Failed to fetch treasury stats');
         } finally {
@@ -53,10 +81,41 @@ const Tokens = () => {
             setIsProcessing(true);
             await treasuryApi.withdraw(amount);
             setIsWithdrawOpen(false);
+            toast.success(`Successfully withdrew ${amount} NILA`);
             // Refresh stats after withdrawal
             await fetchStats();
         } catch (err: any) {
             toast.error(err.response?.data?.error || 'Failed to withdraw tokens');
+        } finally {
+            setIsProcessing(false);
+        }
+    };
+
+    const handleUSDTWithdraw = async (amount: number) => {
+        try {
+            setIsProcessing(true);
+            await treasuryApi.withdrawUSDT(amount);
+            setIsUSDTWithdrawOpen(false);
+            toast.success(`Successfully withdrew ${amount} USDT`);
+            // Refresh stats after withdrawal
+            await fetchStats();
+        } catch (err: any) {
+            toast.error(err.response?.data?.error || 'Failed to withdraw USDT');
+        } finally {
+            setIsProcessing(false);
+        }
+    };
+
+    const handleNILALiabilityDeposit = async (amount: number) => {
+        try {
+            setIsProcessing(true);
+            await treasuryApi.depositNILAForLiabilities(amount);
+            setIsNILALiabilityDepositOpen(false);
+            toast.success(`Successfully deposited ${amount} NILA for liabilities`);
+            // Refresh stats after deposit
+            await fetchStats();
+        } catch (err: any) {
+            toast.error(err.response?.data?.error || 'Failed to deposit NILA for liabilities');
         } finally {
             setIsProcessing(false);
         }
@@ -81,10 +140,16 @@ const Tokens = () => {
     if (!stats) return null;
 
     // Convert wei to tokens (18 decimals)
-    const contractBalance = Number(stats.contractBalance) / 1e18;
-    const pendingRewards = Number(stats.pendingRewards) / 1e18;
+    const contractBalance = Number(stats.contractBalance || 0) / 1e18;
+    const pendingRewards = Number(stats.pendingRewards || 0) / 1e18;
     const healthStatus = stats.healthStatus;
     const tokensNeeded = Math.max(0, pendingRewards - contractBalance);
+
+    // Helper function to safely format numbers
+    const formatNumber = (value: number) => {
+        if (isNaN(value) || !isFinite(value)) return '0';
+        return value.toLocaleString(undefined, { maximumFractionDigits: 2 });
+    };
 
     const renderHealthBanner = () => {
         switch (healthStatus) {
@@ -121,7 +186,7 @@ const Tokens = () => {
                         <div>
                             <h3 className="font-semibold text-red-900">Treasury Critical</h3>
                             <p className="text-sm text-red-700">
-                                <strong>{tokensNeeded.toLocaleString()} NILA</strong> deficit. Immediate deposit required to ensure solvency.
+                                <strong>{formatNumber(tokensNeeded)} NILA</strong> deficit. Immediate deposit required to ensure solvency.
                             </p>
                         </div>
                     </div>
@@ -155,6 +220,118 @@ const Tokens = () => {
             </div>
 
             {renderHealthBanner()}
+
+            {/* NILA Liability Status Section */}
+            {nilaLiabilityStatus && (
+                <div className="bg-gradient-to-br from-red-50 to-orange-50 rounded-2xl p-6 border border-red-100 shadow-sm">
+                    <div className="flex items-center justify-between mb-4">
+                        <div className="flex items-center gap-3">
+                            <div className="p-2 bg-red-100 rounded-lg">
+                                <TrendingDown className="w-5 h-5 text-red-600" />
+                            </div>
+                            <div>
+                                <h3 className="text-lg font-bold text-slate-900">NILA Liabilities (USDT Purchases)</h3>
+                                <p className="text-sm text-slate-600">NILA recorded from USDT purchases - must be covered</p>
+                            </div>
+                        </div>
+                        <button
+                            onClick={() => setIsNILALiabilityDepositOpen(true)}
+                            className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-medium shadow-sm"
+                        >
+                            <ArrowDownCircle className="w-5 h-5" />
+                            Deposit NILA
+                        </button>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                        <div className="bg-white/80 backdrop-blur-sm p-4 rounded-xl border border-red-100">
+                            <p className="text-sm text-slate-600 mb-1">Total Liabilities</p>
+                            <p className="text-2xl font-bold text-slate-900">
+                                {(Number(nilaLiabilityStatus.totalLiabilities) / 1e18).toLocaleString()}
+                            </p>
+                            <p className="text-xs text-slate-500 mt-1">NILA recorded</p>
+                        </div>
+
+                        <div className="bg-white/80 backdrop-blur-sm p-4 rounded-xl border border-red-100">
+                            <p className="text-sm text-slate-600 mb-1">NILA Balance</p>
+                            <p className="text-2xl font-bold text-slate-900">
+                                {(Number(nilaLiabilityStatus.nilaBalance) / 1e18).toLocaleString()}
+                            </p>
+                            <p className="text-xs text-slate-500 mt-1">Available to pay</p>
+                        </div>
+
+                        <div className="bg-white/80 backdrop-blur-sm p-4 rounded-xl border border-red-100">
+                            <p className="text-sm text-slate-600 mb-1">
+                                {nilaLiabilityStatus.hasSurplus ? 'Surplus' : 'Deficit'}
+                            </p>
+                            <p className={`text-2xl font-bold ${nilaLiabilityStatus.hasSurplus ? 'text-green-600' : 'text-red-600'}`}>
+                                {nilaLiabilityStatus.hasSurplus ? '+' : '-'}
+                                {(Math.abs(Number(nilaLiabilityStatus.deficitOrSurplus)) / 1e18).toLocaleString()}
+                            </p>
+                            <p className="text-xs text-slate-500 mt-1">
+                                {nilaLiabilityStatus.hasSurplus ? 'Extra buffer' : 'Need to deposit'}
+                            </p>
+                        </div>
+
+                        <div className="bg-white/80 backdrop-blur-sm p-4 rounded-xl border border-red-100 flex items-center justify-center">
+                            {nilaLiabilityStatus.hasSurplus ? (
+                                <div className="text-center">
+                                    <ShieldCheck className="w-8 h-8 text-green-600 mx-auto mb-2" />
+                                    <p className="text-sm font-bold text-green-700">Covered</p>
+                                </div>
+                            ) : (
+                                <div className="text-center">
+                                    <AlertOctagon className="w-8 h-8 text-red-600 mx-auto mb-2" />
+                                    <p className="text-sm font-bold text-red-700">Action Needed</p>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* USDT Treasury Section */}
+            {usdtBalance && (
+                <div className="bg-gradient-to-br from-blue-50 to-cyan-50 rounded-2xl p-6 border border-blue-100 shadow-sm">
+                    <div className="flex items-center justify-between mb-4">
+                        <div className="flex items-center gap-3">
+                            <div className="p-2 bg-blue-100 rounded-lg">
+                                <DollarSign className="w-5 h-5 text-blue-600" />
+                            </div>
+                            <div>
+                                <h3 className="text-lg font-bold text-slate-900">USDT Treasury</h3>
+                                <p className="text-sm text-slate-600">Collected from USDT purchases</p>
+                            </div>
+                        </div>
+                        <button
+                            onClick={() => setIsUSDTWithdrawOpen(true)}
+                            disabled={Number(usdtBalance.balance) === 0}
+                            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                            <ArrowUpCircle className="w-5 h-5" />
+                            Withdraw USDT
+                        </button>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="bg-white/80 backdrop-blur-sm p-4 rounded-xl border border-blue-100">
+                            <p className="text-sm text-slate-600 mb-1">Current Balance</p>
+                            <p className="text-3xl font-bold text-slate-900">
+                                {(Number(usdtBalance.balance) / 1e18).toLocaleString()}
+                            </p>
+                            <p className="text-xs text-slate-500 mt-1">USDT available to withdraw</p>
+                        </div>
+
+                        <div className="bg-white/80 backdrop-blur-sm p-4 rounded-xl border border-blue-100">
+                            <p className="text-sm text-slate-600 mb-1">Total Collected</p>
+                            <p className="text-3xl font-bold text-slate-900">
+                                {(Number(usdtBalance.totalCollected) / 1e18).toLocaleString()}
+                            </p>
+                            <p className="text-xs text-slate-500 mt-1">USDT from all purchases</p>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 {/* Contract Balance (Treasury Assets) */}
@@ -252,6 +429,26 @@ const Tokens = () => {
                 onConfirm={handleWithdraw}
                 isProcessing={isProcessing}
                 maxAmount={contractBalance}
+            />
+
+            <USDTWithdrawModal
+                isOpen={isUSDTWithdrawOpen}
+                onClose={() => setIsUSDTWithdrawOpen(false)}
+                onConfirm={handleUSDTWithdraw}
+                isProcessing={isProcessing}
+                currentBalance={usdtBalance ? Number(usdtBalance.balance) / 1e18 : 0}
+                totalCollected={usdtBalance ? Number(usdtBalance.totalCollected) / 1e18 : 0}
+            />
+
+            <NILALiabilityDepositModal
+                isOpen={isNILALiabilityDepositOpen}
+                onClose={() => setIsNILALiabilityDepositOpen(false)}
+                onConfirm={handleNILALiabilityDeposit}
+                isProcessing={isProcessing}
+                totalLiabilities={nilaLiabilityStatus ? Number(nilaLiabilityStatus.totalLiabilities) / 1e18 : 0}
+                nilaBalance={nilaLiabilityStatus ? Number(nilaLiabilityStatus.nilaBalance) / 1e18 : 0}
+                deficit={nilaLiabilityStatus ? Math.abs(Number(nilaLiabilityStatus.deficitOrSurplus)) / 1e18 : 0}
+                hasSurplus={nilaLiabilityStatus?.hasSurplus || false}
             />
         </div >
     );

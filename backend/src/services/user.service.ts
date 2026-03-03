@@ -8,37 +8,42 @@ export class UserService {
     return Math.random().toString(36).substring(2, 10).toUpperCase();
   }
 
-  // Connect wallet - create or update user
+  // Connect wallet - create or update user (lightweight, no blockchain sync)
   static async connectWallet(walletAddress: string, referralCode?: string) {
     const normalizedAddress = walletAddress.toLowerCase();
 
     try {
-      // Check if user exists
       let user = await prisma.user.findUnique({
         where: { walletAddress: normalizedAddress }
       });
 
       if (user) {
-        // Update last seen
+        // Just update last seen, no sync needed - events handle everything
         user = await prisma.user.update({
           where: { id: user.id },
-          data: { lastSeenAt: new Date() }
+          data: { 
+            lastSeenAt: new Date(),
+            syncStatus: 'SYNCED' // Event-driven, always synced
+          }
         });
+
+        console.log(`✅ Wallet reconnected: ${normalizedAddress}`);
         return user;
       }
 
-      // Create new user
+      // New user - create record only, events will populate data
       const newReferralCode = this.generateReferralCode();
 
       user = await prisma.user.create({
         data: {
           walletAddress: normalizedAddress,
           referralCode: newReferralCode,
-          referredBy: referralCode || null
+          referredBy: referralCode || null,
+          syncStatus: 'SYNCED' // Event-driven sync
         }
       });
 
-      // Create referral record if referred
+      // Create referral relationship if code provided
       if (referralCode) {
         const referrer = await prisma.user.findUnique({
           where: { referralCode }
@@ -49,18 +54,17 @@ export class UserService {
             data: {
               referrerWallet: referrer.walletAddress,
               referredWallet: normalizedAddress,
-              earnings: 0 // Will be updated when they stake
+              earnings: '0'
             }
           });
+          console.log(`✅ Referral linked: ${normalizedAddress} → ${referrer.walletAddress}`);
         }
       }
 
-      return user;
+      console.log(`✅ New wallet registered: ${normalizedAddress}`);
       return user;
     } catch (error: any) {
-      // Handle race condition - if user was created between check and create
       if (error.code === 'P2002') {
-        // User was created by another request, fetch and return it
         const user = await prisma.user.findUnique({
           where: { walletAddress: normalizedAddress }
         });

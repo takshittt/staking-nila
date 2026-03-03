@@ -4,11 +4,13 @@ import * as path from "path";
 
 async function main() {
   const NILA_TOKEN = process.env.NILA_TOKEN_ADDRESS || "0xA31fb7667F80306690F5DF0d9A6ea272aBF97926";
+  const USDT_TOKEN = "0xef4f8bdeDad6829817F802a957b8a5232644e1bC"; // BSC Testnet USDT
 
   console.log("========================================");
   console.log("Deploying NilaStakingUpgradeable with UUPS Proxy");
   console.log("========================================");
   console.log("NILA Token Address:", NILA_TOKEN);
+  console.log("USDT Token Address:", USDT_TOKEN);
   console.log("Deployer:", (await ethers.provider.getSigner()).address);
 
   // Deploy proxy
@@ -17,7 +19,7 @@ async function main() {
   console.log("\nDeploying proxy...");
   const proxy = await upgrades.deployProxy(
     NilaStakingUpgradeable,
-    [NILA_TOKEN],
+    [NILA_TOKEN, USDT_TOKEN],
     {
       initializer: "initialize",
       kind: "uups",
@@ -45,6 +47,7 @@ async function main() {
     implementation: implementationAddress,
     admin: adminAddress,
     nilaToken: NILA_TOKEN,
+    usdtToken: USDT_TOKEN,
     deployedAt: new Date().toISOString(),
     deployer: (await ethers.provider.getSigner()).address,
   };
