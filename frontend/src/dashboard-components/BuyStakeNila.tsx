@@ -1,14 +1,15 @@
 import { useState, useMemo, useEffect } from 'react';
-import { Info, ShieldCheck, Zap, Loader2, CheckCircle2, Circle, TrendingUp } from 'lucide-react';
-import { ContractService } from '../services/contractService';
-import { useWallet } from '../hooks/useWallet';
-import { useAccount } from 'wagmi';
+import { Info, ShieldCheck, Zap, Loader2, CheckCircle2, Circle, TrendingUp, ExternalLink, Wallet } from 'lucide-react';
+import { useMultiChainWallet } from '../hooks/useMultiChainWallet';
+import { useAccount } from 'wagmi'; // Import to get EVM address
 import toast from 'react-hot-toast';
 import { handleError } from '../utils/errorHandler';
 import { stakingApi, type LockConfig, type AmountConfig } from '../services/stakingApi';
 import { PriceService, type PriceData } from '../services/priceService';
 import { transactionApi } from '../services/transactionApi';
-import { formatUnits } from 'ethers';
+import { MultiChainPaymentService } from '../services/multiChainPaymentService';
+import { TransactionService, type TransactionProgress } from '../services/transactionService';
+import { TronLinkService } from '../services/tronLinkService';
 
 const MIN_USDT_PURCHASE = 1; // Minimum 10 USDT
 
@@ -24,8 +25,17 @@ const BuyStakeNila = () => {
     const [selectedChain, setSelectedChain] = useState<'BSC' | 'ETH' | 'TRON'>('BSC');
     const [selectedToken, setSelectedToken] = useState<'USDT' | 'USDC' | 'NATIVE'>('USDT');
     const [basePriceUnit, setBasePriceUnit] = useState<'USDT' | 'NILA'>('USDT');
-    const [usdtBalance, setUsdtBalance] = useState<string>('0');
-    const [loadingUsdtBalance, setLoadingUsdtBalance] = useState(false);
+
+    // Gateway flow states
+    // @ts-ignore - Used by setters
+    const [orderId, setOrderId] = useState<string | null>(null);
+    // @ts-ignore - Used by setters
+    const [paymentAddress, setPaymentAddress] = useState<string | null>(null);
+    // @ts-ignore - Used by setters
+    const [amountToPay, setAmountToPay] = useState<number | null>(null);
+    // @ts-ignore - Used by setters
+    const [userTxHash, setUserTxHash] = useState<string>('');
+    const [paymentStep, setPaymentStep] = useState<'select' | 'payment' | 'verify' | 'success'>('select');
 
     // Real-time prices state
     const [prices, setPrices] = useState<PriceData | null>(null);
@@ -33,12 +43,28 @@ const BuyStakeNila = () => {
     const [priceError, setPriceError] = useState<string | null>(null);
 
     // Status states
-    const [staking, setStaking] = useState(false);
+    const [processing, setProcessing] = useState(false);
     const [statusMessage, setStatusMessage] = useState<string>('');
-    const [isCorrectNetwork, setIsCorrectNetwork] = useState<boolean>(true);
+    const [successTxHash, setSuccessTxHash] = useState<string | null>(null);
 
-    const { address, isConnected, chain } = useAccount();
-    const { connect } = useWallet();
+    const {
+        getWalletInfo,
+        connectWallet,
+        switchToChain,
+        isCorrectChain,
+        getChainName,
+        tronInstalled,
+        chainId,
+        getProvider,
+        evmAddress // Get EVM address from multi-chain wallet
+    } = useMultiChainWallet();
+
+    // Also get EVM address directly from wagmi for TRON payments
+    const { address: wagmiEvmAddress } = useAccount();
+
+    const walletInfo = getWalletInfo(selectedChain);
+    const address = walletInfo.address;
+    const isConnected = walletInfo.isConnected;
 
     const selectedPlan = plans.find(p => p.id === selectedPlanId);
     const selectedPackage = packages.find(p => p.id === selectedPackageId);
@@ -109,42 +135,51 @@ const BuyStakeNila = () => {
         fetchPackages();
     }, []);
 
-    // Check network when connected
+    // Reset flow when user changes selection
     useEffect(() => {
-        const checkNetwork = async () => {
-            if (isConnected) {
-                const correct = await ContractService.checkNetwork();
-                setIsCorrectNetwork(correct);
-            }
-        };
-        checkNetwork();
-    }, [isConnected, chain, address]);
+        if (paymentStep !== 'select') {
+            setPaymentStep('select');
+            setOrderId(null);
+            setPaymentAddress(null);
+            setAmountToPay(null);
+            setUserTxHash('');
+            setSuccessTxHash(null);
+        }
+    }, [selectedChain, selectedToken, selectedPackageId, selectedPlanId, customUsdtAmount]);
 
-    // Fetch USDT Balance
+    // Auto-switch chain when user changes selection
     useEffect(() => {
-        const fetchUsdtBalance = async () => {
-            if (isConnected && address) {
+        const handleChainSwitch = async () => {
+            if (isConnected && selectedChain !== 'TRON' && !isCorrectChain(selectedChain)) {
                 try {
-                    const balanceWei = await ContractService.getUSDTBalance(address);
-                    const balanceFormatted = formatUnits(balanceWei, 18);
-                    setUsdtBalance(balanceFormatted);
+                    await switchToChain(selectedChain);
                 } catch (error) {
-                    console.error('Failed to fetch USDT balance:', error);
-                    setUsdtBalance('0');
-                } finally {
-                    setLoadingUsdtBalance(false);
+                    console.error('Failed to switch chain:', error);
                 }
-            } else {
-                setLoadingUsdtBalance(false);
-                setUsdtBalance('0');
             }
         };
-        fetchUsdtBalance();
-    }, [isConnected, address]);
+
+        handleChainSwitch();
+    }, [selectedChain, isConnected, isCorrectChain, switchToChain]);
 
     const handleBuyAndStake = async () => {
         if (!isConnected || !address) {
-            connect();
+            try {
+                await connectWallet(selectedChain);
+            } catch (error) {
+                return; // Error already handled in connectWallet
+            }
+            return;
+        }
+
+        // Check if on correct chain for EVM
+        if (selectedChain !== 'TRON' && !isCorrectChain(selectedChain)) {
+            toast.error(`Please switch to ${selectedChain} network`);
+            try {
+                await switchToChain(selectedChain);
+            } catch (error) {
+                return;
+            }
             return;
         }
 
@@ -155,83 +190,150 @@ const BuyStakeNila = () => {
             return;
         }
 
-        if (usdtSpent > parseFloat(usdtBalance)) {
-            toast.error('Insufficient USDT balance');
-            return;
-        }
-
         if (!selectedPlan) {
             toast.error('Please select a staking plan');
             return;
         }
 
         try {
-            setStaking(true);
-            setStatusMessage('Checking network...');
-            await ContractService.ensureCorrectNetwork();
+            setProcessing(true);
+            setPaymentStep('payment');
+            setStatusMessage('Creating order...');
 
-            setStatusMessage('Checking USDT allowance...');
-            const hasAllowance = await ContractService.checkUSDTAllowance(address, usdtSpent.toString());
-
-            if (!hasAllowance) {
-                setStatusMessage('Approving USDT...');
-                await ContractService.approveUSDT(usdtSpent.toString());
-                toast.success('USDT approval successful!');
+            // Step 1: Create order on backend
+            const network = MultiChainPaymentService.getNetworkCode(selectedChain, selectedToken);
+            
+            // For TRON payments, we need to send both TRON address and EVM address
+            // The EVM address will be used for staking on BSC
+            let orderWallet = address;
+            let trcWallet = undefined;
+            
+            if (selectedChain === 'TRON') {
+                // Check if user has connected EVM wallet
+                const userEvmAddress = evmAddress || wagmiEvmAddress;
+                
+                if (!userEvmAddress) {
+                    toast.error('Please connect your EVM wallet (MetaMask/WalletConnect) first before paying with TRON');
+                    setProcessing(false);
+                    return;
+                }
+                
+                // For TRON: wallet = EVM address (for staking), trcWallet = TRON address (for payment)
+                orderWallet = userEvmAddress;
+                trcWallet = address; // TRON address
+                
+                console.log('TRON Payment Setup:');
+                console.log('  - EVM Address (for staking):', orderWallet);
+                console.log('  - TRON Address (for payment):', trcWallet);
             }
-
-            setStatusMessage('Processing purchase...');
-            const txHash = await ContractService.buyAndStakeWithUSDT({
-                usdtAmount: usdtSpent.toString(),
-                lockConfigId: selectedPlanId!
+            
+            const order = await MultiChainPaymentService.createOrder({
+                wallet: orderWallet,
+                pyrandAmount: calculations.nilaStaked,
+                network,
+                trcWallet
             });
 
-            setStatusMessage('Recording stake...');
-            // Record stake in backend database
+            setOrderId(order.orderId);
+            setPaymentAddress(order.recipient);
+            setAmountToPay(order.stableAmount || order.cryptoAmount || 0);
+
+            // Step 2: Send payment automatically
+            setStatusMessage('Preparing transaction...');
+
+            const provider = selectedChain !== 'TRON' ? await getProvider() : undefined;
+
+            const paymentResult = await TransactionService.sendPayment({
+                chain: selectedChain,
+                token: selectedToken,
+                recipientAddress: order.recipient,
+                amount: order.stableAmount || order.cryptoAmount || 0,
+                provider: provider || undefined,
+                onProgress: (progress: TransactionProgress) => {
+                    setStatusMessage(progress.message);
+                    if (progress.txHash) {
+                        setUserTxHash(progress.txHash);
+                    }
+                }
+            });
+
+            setUserTxHash(paymentResult.txHash);
+
+            // Step 3: Verify transaction automatically
+            setPaymentStep('verify');
+            setStatusMessage('Verifying your payment on-chain...');
+
+            const result = await MultiChainPaymentService.verifyTransaction({
+                orderId: order.orderId,
+                txHash: paymentResult.txHash,
+                network
+            });
+
+            setStatusMessage('Recording stake in database...');
+
+            // Step 4: Record in our backend database
             try {
                 await stakingApi.recordStake({
-                    walletAddress: address,
+                    walletAddress: address!,
                     planName: `${selectedPlan?.lockDuration} Days`,
                     planVersion: 1,
-                    amount: calculations.nilaStaked,
+                    amount: result.pyrandSent,
                     apy: selectedPlan?.apr || 0,
                     lockDays: selectedPlan?.lockDuration || 0,
                     instantRewardPercent: calculations.cashbackPercent,
-                    txHash
+                    txHash: result.tokenTx,
+                    onChainStakeId: undefined
                 });
 
                 // Record transaction
                 await transactionApi.createTransaction({
-                    txHash,
-                    walletAddress: address,
+                    txHash: result.tokenTx,
+                    walletAddress: address!,
                     type: 'STAKE',
-                    amount: calculations.nilaStaked,
+                    amount: result.pyrandSent,
                     status: 'confirmed'
                 });
             } catch (backendError: any) {
                 console.error('Failed to record stake in backend:', backendError);
-                // Don't fail the whole operation if backend recording fails
-                // The stake already succeeded on-chain
             }
 
-            setStatusMessage('Purchase successful!');
+            setSuccessTxHash(result.tokenTx);
+            setPaymentStep('success');
+            setStatusMessage('');
+            
             toast.success(
-                `Successfully purchased ${calculations.nilaStaked.toLocaleString()} NILA with ${usdtSpent} USDT!`
+                `Successfully purchased ${result.pyrandSent.toLocaleString()} NILA!`
             );
 
-            // Refresh balance
-            const newBalance = await ContractService.getUSDTBalance(address);
-            setUsdtBalance(formatUnits(newBalance, 18));
-
-            // Reset form
-            setCustomUsdtAmount('');
-            setIsCustom(false);
-
         } catch (error: any) {
-            handleError(error, 'Failed to complete purchase. Please try again.');
+            console.error('Buy & Stake error:', error);
+            
+            // User rejected transaction
+            if (error.message?.includes('user rejected') || 
+                error.message?.includes('User denied') ||
+                error.message?.includes('rejected by user')) {
+                toast.error('Transaction cancelled');
+                setPaymentStep('select');
+            } else {
+                handleError(error, 'Failed to complete purchase. Please try again.');
+                setPaymentStep('select');
+            }
         } finally {
-            setStaking(false);
-            setStatusMessage('');
+            setProcessing(false);
         }
+    };
+
+    const handleReset = () => {
+        setPaymentStep('select');
+        setOrderId(null);
+        setPaymentAddress(null);
+        setAmountToPay(null);
+        setUserTxHash('');
+        setSuccessTxHash(null);
+        setCustomUsdtAmount('');
+        setIsCustom(false);
+        setProcessing(false);
+        setStatusMessage('');
     };
 
     // Calculate Earnings Preview
@@ -326,7 +428,7 @@ const BuyStakeNila = () => {
         };
     }, [selectedPackage, selectedPlan, isCustom, customUsdtAmount, selectedChain, selectedToken, prices]);
 
-    const isProcessing = staking;
+    const isProcessing = processing;
 
     return (
         <div className="pb-12 space-y-8 max-w-7xl mx-auto">
@@ -360,30 +462,94 @@ const BuyStakeNila = () => {
                 </div>
             )}
 
-            {/* Network Warning */}
-            {isConnected && !isCorrectNetwork && (
+            {/* Show error overlay when prices are not available */}
+            {!loadingPrices && !prices && !priceError && (
                 <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 flex items-center justify-between shadow-sm">
                     <div className="flex items-center gap-3">
                         <div className="bg-amber-100 p-2 rounded-full">
                             <Info className="w-5 h-5 text-amber-600" />
                         </div>
                         <div>
-                            <p className="text-amber-900 font-bold">Wrong Network Connected</p>
-                            <p className="text-amber-700 text-sm font-medium">Please switch to BSC Testnet to interact with the contract.</p>
+                            <p className="text-amber-900 font-bold">Prices Not Available</p>
+                            <p className="text-amber-700 text-sm font-medium">Unable to load price data. Please refresh the page or try again later.</p>
                         </div>
                     </div>
                     <button
-                        onClick={async () => {
-                            try {
-                                await ContractService.switchToBscTestnet();
-                                setIsCorrectNetwork(true);
-                            } catch (error: any) {
-                                toast.error(error.message || 'Failed to switch network');
-                            }
-                        }}
+                        onClick={() => window.location.reload()}
                         className="px-5 py-2.5 bg-amber-500 text-white rounded-xl hover:bg-amber-600 transition-colors font-bold shadow-sm shadow-amber-500/20 active:scale-95"
                     >
-                        Switch Network
+                        Refresh Page
+                    </button>
+                </div>
+            )}
+
+            {/* Wallet Connection Warning */}
+            {!isConnected && (
+                <div className="bg-blue-50 border border-blue-200 rounded-2xl p-4 flex items-center justify-between shadow-sm">
+                    <div className="flex items-center gap-3">
+                        <div className="bg-blue-100 p-2 rounded-full">
+                            <Wallet className="w-5 h-5 text-blue-600" />
+                        </div>
+                        <div>
+                            <p className="text-blue-900 font-bold">
+                                {selectedChain === 'TRON' ? 'TronLink Not Connected' : 'Wallet Not Connected'}
+                            </p>
+                            <p className="text-blue-700 text-sm font-medium">
+                                {selectedChain === 'TRON' 
+                                    ? 'Please connect your TronLink wallet to continue.'
+                                    : 'Please connect your wallet to continue.'}
+                            </p>
+                        </div>
+                    </div>
+                    <button
+                        onClick={() => connectWallet(selectedChain)}
+                        className="px-5 py-2.5 bg-blue-500 text-white rounded-xl hover:bg-blue-600 transition-colors font-bold shadow-sm shadow-blue-500/20 active:scale-95"
+                    >
+                        {selectedChain === 'TRON' ? 'Connect TronLink' : 'Connect Wallet'}
+                    </button>
+                </div>
+            )}
+
+            {/* TronLink Not Installed Warning */}
+            {selectedChain === 'TRON' && !tronInstalled && (
+                <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 flex items-center justify-between shadow-sm">
+                    <div className="flex items-center gap-3">
+                        <div className="bg-amber-100 p-2 rounded-full">
+                            <Info className="w-5 h-5 text-amber-600" />
+                        </div>
+                        <div>
+                            <p className="text-amber-900 font-bold">TronLink Not Installed</p>
+                            <p className="text-amber-700 text-sm font-medium">Please install TronLink extension to use TRON network.</p>
+                        </div>
+                    </div>
+                    <button
+                        onClick={() => window.open(TronLinkService.getDownloadUrl(), '_blank')}
+                        className="px-5 py-2.5 bg-amber-500 text-white rounded-xl hover:bg-amber-600 transition-colors font-bold shadow-sm shadow-amber-500/20 active:scale-95"
+                    >
+                        Install TronLink
+                    </button>
+                </div>
+            )}
+
+            {/* Wrong Network Warning */}
+            {isConnected && selectedChain !== 'TRON' && !isCorrectChain(selectedChain) && (
+                <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 flex items-center justify-between shadow-sm">
+                    <div className="flex items-center gap-3">
+                        <div className="bg-amber-100 p-2 rounded-full">
+                            <Info className="w-5 h-5 text-amber-600" />
+                        </div>
+                        <div>
+                            <p className="text-amber-900 font-bold">Wrong Network</p>
+                            <p className="text-amber-700 text-sm font-medium">
+                                You're on {getChainName(chainId)}. Please switch to {selectedChain}.
+                            </p>
+                        </div>
+                    </div>
+                    <button
+                        onClick={() => switchToChain(selectedChain)}
+                        className="px-5 py-2.5 bg-amber-500 text-white rounded-xl hover:bg-amber-600 transition-colors font-bold shadow-sm shadow-amber-500/20 active:scale-95"
+                    >
+                        Switch to {selectedChain}
                     </button>
                 </div>
             )}
@@ -397,7 +563,25 @@ const BuyStakeNila = () => {
             )}
 
             {/* STAKE NILA CONTENT */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 animate-in fade-in duration-500 slide-in-from-bottom-4">
+            {!loadingPrices && !prices ? (
+                <div className="bg-slate-50/80 backdrop-blur-sm border border-slate-200 rounded-3xl p-8 flex flex-col items-center justify-center text-center">
+                    <div className="bg-slate-100 p-4 rounded-full mb-4">
+                        <Info className="w-12 h-12 text-slate-400" />
+                    </div>
+                    <h3 className="text-xl font-bold text-slate-700 mb-2">Price Data Required</h3>
+                    <p className="text-slate-500 mb-6 max-w-md">
+                        Real-time price data is required to calculate staking amounts and rewards. 
+                        Please refresh the page or try again later when price data is available.
+                    </p>
+                    <button
+                        onClick={() => window.location.reload()}
+                        className="px-6 py-3 bg-slate-600 text-white rounded-xl font-bold hover:bg-slate-700 transition-colors"
+                    >
+                        Refresh Page
+                    </button>
+                </div>
+            ) : (
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 animate-in fade-in duration-500 slide-in-from-bottom-4">
 
                 {/* Left Column: Input & Plan Selection */}
                 <div className="lg:col-span-2 space-y-5">
@@ -764,24 +948,91 @@ const BuyStakeNila = () => {
                                         </>
                                     ) : !prices ? (
                                         'Prices Unavailable'
-                                    ) : !isConnected && selectedChain !== 'TRON' ? (
-                                        'Connect Wallet to Buy'
+                                    ) : !isConnected ? (
+                                        selectedChain === 'TRON' ? 'Connect TronLink' : 'Connect Wallet'
                                     ) : calculations.cryptoSpent === 0 ? (
                                         `Select Amount`
                                     ) : (
-                                        `Buy & Stake with ${selectedToken === 'NATIVE' ? (selectedChain === 'BSC' ? 'BNB' : selectedChain === 'ETH' ? 'ETH' : 'TRX') : selectedToken}`
+                                        `Buy & Stake NILA`
                                     )}
                                 </button>
 
                                 <div className="flex items-start gap-2.5 text-xs text-slate-400 mt-6 leading-relaxed bg-slate-800/50 p-4 rounded-xl border border-slate-700/50">
                                     <ShieldCheck size={18} className="shrink-0 text-emerald-400" />
-                                    <span>You pay in {selectedToken === 'NATIVE' ? (selectedChain === 'BSC' ? 'BNB' : selectedChain === 'ETH' ? 'ETH' : 'TRX') : selectedToken} on {selectedChain === 'BSC' ? 'BNB Chain' : selectedChain === 'ETH' ? 'Ethereum' : 'Tron'} and receive NILA recorded in the contract. Instant cashback is in NILA. At maturity, you receive your principal + APY rewards in NILA tokens.</span>
+                                    <span>You pay in {selectedToken === 'NATIVE' ? (selectedChain === 'BSC' ? 'BNB' : selectedChain === 'ETH' ? 'ETH' : 'TRX') : selectedToken} on {selectedChain === 'BSC' ? 'BNB Chain' : selectedChain === 'ETH' ? 'Ethereum' : 'Tron'}. After payment verification, NILA will be staked automatically. Instant cashback is in NILA. At maturity, you receive your principal + APY rewards in NILA tokens.</span>
                                 </div>
                             </div>
                         </div>
                     </div>
                 </div>
             </div>
+            )}
+
+            {/* Verification Progress Modal */}
+            {(paymentStep === 'payment' || paymentStep === 'verify') && (
+                <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+                    <div className="bg-white rounded-3xl p-8 max-w-md w-full shadow-2xl animate-in fade-in slide-in-from-bottom-4">
+                        <div className="flex flex-col items-center text-center">
+                            <div className="bg-blue-50 p-4 rounded-full mb-4">
+                                <Loader2 className="w-12 h-12 text-blue-600 animate-spin" />
+                            </div>
+                            <h2 className="text-2xl font-bold text-slate-900 mb-2">
+                                {paymentStep === 'payment' ? 'Processing Payment' : 'Verifying Payment'}
+                            </h2>
+                            <p className="text-slate-500 mb-4">{statusMessage}</p>
+                            <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
+                                <div className="bg-blue-500 h-full rounded-full animate-pulse" style={{ width: paymentStep === 'payment' ? '40%' : '80%' }}></div>
+                            </div>
+                            <p className="text-xs text-slate-400 mt-4">
+                                {paymentStep === 'payment' 
+                                    ? 'Please confirm the transaction in your wallet...' 
+                                    : 'This may take 1-2 minutes...'}
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Success Modal */}
+            {paymentStep === 'success' && successTxHash && (
+                <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+                    <div className="bg-white rounded-3xl p-8 max-w-md w-full shadow-2xl animate-in fade-in slide-in-from-bottom-4">
+                        <div className="flex flex-col items-center text-center">
+                            <div className="bg-green-50 p-4 rounded-full mb-4">
+                                <CheckCircle2 className="w-12 h-12 text-green-600" />
+                            </div>
+                            <h2 className="text-2xl font-bold text-slate-900 mb-2">Stake Successful!</h2>
+                            <p className="text-slate-500 mb-6">
+                                Your {calculations.nilaStaked.toLocaleString()} NILA has been staked successfully.
+                            </p>
+
+                            <div className="w-full bg-slate-50 rounded-xl p-4 mb-6 text-left">
+                                <div className="flex items-center justify-between mb-2">
+                                    <span className="text-sm text-slate-500">Staking Transaction</span>
+                                    <a
+                                        href={`https://testnet.bscscan.com/tx/${successTxHash}`}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="text-blue-500 hover:text-blue-600 flex items-center gap-1 text-sm"
+                                    >
+                                        View <ExternalLink className="w-3 h-3" />
+                                    </a>
+                                </div>
+                                <code className="text-xs font-mono text-slate-700 break-all block">
+                                    {successTxHash}
+                                </code>
+                            </div>
+
+                            <button
+                                onClick={handleReset}
+                                className="w-full py-3 bg-green-500 text-white rounded-xl font-bold hover:bg-green-600 transition-colors"
+                            >
+                                Done
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };

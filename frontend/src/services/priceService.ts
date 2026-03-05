@@ -29,37 +29,26 @@ export class PriceService {
 
       const data = await response.json();
       
-      // If error with fallback, use fallback
-      if (data.error && data.fallback) {
-        console.warn('Using fallback prices:', data.error);
-        this.cache = data.fallback;
-      } else {
-        this.cache = data;
+      // If backend returns an error, throw it
+      if (data.error) {
+        throw new Error(data.error);
       }
       
+      this.cache = data;
       this.cacheTimestamp = now;
-      return this.cache;
+      return this.cache as PriceData;
 
     } catch (error) {
       console.error('Failed to fetch prices from backend:', error);
       
-      // Return cached data if available, otherwise use hardcoded fallback
+      // Return cached data if available, otherwise throw error
       if (this.cache) {
         console.warn('Using cached prices due to fetch error');
-        return this.cache;
+        return this.cache as PriceData;
       }
 
-      // Hardcoded fallback as last resort
-      const fallback: PriceData = {
-        BNB: 600,
-        ETH: 3000,
-        TRX: 0.12,
-        NILA: 0.08,
-        timestamp: now
-      };
-      
-      console.warn('Using hardcoded fallback prices');
-      return fallback;
+      // Throw error instead of using hardcoded fallback
+      throw new Error('Failed to fetch prices. Please check your connection and try again.');
     }
   }
 

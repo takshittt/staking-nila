@@ -6,7 +6,7 @@ import { useAccount } from 'wagmi';
 import toast from 'react-hot-toast';
 import { handleError } from '../utils/errorHandler';
 import { formatUnits } from 'ethers';
-import { stakingApi, type LockConfig, type AmountConfig } from '../services/stakingApi';
+import { stakingApi, type LockConfig } from '../services/stakingApi';
 import { transactionApi } from '../services/transactionApi';
 
 const StakeNila = () => {
@@ -133,7 +133,7 @@ const StakeNila = () => {
             }
 
             setStatusMessage('Preparing stake transaction...');
-            const txHash = await ContractService.stake({
+            const result = await ContractService.stake({
                 amount: stakeAmount,
                 lockConfigId: selectedPlanId
             });
@@ -149,12 +149,13 @@ const StakeNila = () => {
                     apy: selectedPlan?.apr || 0,
                     lockDays: selectedPlan?.lockDuration || 0,
                     instantRewardPercent: 0, // Direct staking has no instant rewards
-                    txHash
+                    txHash: result.txHash,
+                    onChainStakeId: result.stakeIndex ?? undefined
                 });
 
                 // Record transaction
                 await transactionApi.createTransaction({
-                    txHash,
+                    txHash: result.txHash,
                     walletAddress: address,
                     type: 'STAKE',
                     amount: amountNum,

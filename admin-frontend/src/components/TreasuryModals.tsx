@@ -8,11 +8,23 @@ interface ModalProps {
     isProcessing?: boolean;
 }
 
+interface DepositModalProps extends ModalProps {
+    recommendedAmount?: number;
+    currentHealth?: 'healthy' | 'low' | 'critical';
+}
+
 interface WithdrawModalProps extends ModalProps {
     maxAmount?: number;
 }
 
-export const DepositModal = ({ isOpen, onClose, onConfirm, isProcessing = false }: ModalProps) => {
+export const DepositModal = ({ 
+    isOpen, 
+    onClose, 
+    onConfirm, 
+    isProcessing = false,
+    recommendedAmount = 0,
+    currentHealth = 'healthy'
+}: DepositModalProps) => {
     const [amount, setAmount] = useState<string>('');
     const [error, setError] = useState<string>('');
 
@@ -26,7 +38,13 @@ export const DepositModal = ({ isOpen, onClose, onConfirm, isProcessing = false 
         onConfirm(value);
         setAmount('');
         setError('');
-        onClose();
+    };
+
+    const handleUseRecommended = () => {
+        if (recommendedAmount > 0) {
+            setAmount(recommendedAmount.toFixed(2));
+            setError('');
+        }
     };
 
     if (!isOpen) return null;
@@ -43,12 +61,48 @@ export const DepositModal = ({ isOpen, onClose, onConfirm, isProcessing = false 
                         </button>
                     </div>
                     <form onSubmit={handleSubmit} className="p-6 space-y-4">
+                        {recommendedAmount > 0 && currentHealth !== 'healthy' && (
+                            <div className={`${
+                                currentHealth === 'critical' ? 'bg-red-50 border-red-200' : 'bg-amber-50 border-amber-200'
+                            } border rounded-lg p-4`}>
+                                <p className={`text-sm font-medium ${
+                                    currentHealth === 'critical' ? 'text-red-900' : 'text-amber-900'
+                                } mb-2`}>
+                                    Recommended Deposit
+                                </p>
+                                <div className="flex items-center justify-between">
+                                    <p className={`text-2xl font-bold ${
+                                        currentHealth === 'critical' ? 'text-red-600' : 'text-amber-600'
+                                    }`}>
+                                        {recommendedAmount.toLocaleString(undefined, { maximumFractionDigits: 2 })} NILA
+                                    </p>
+                                    <button
+                                        type="button"
+                                        onClick={handleUseRecommended}
+                                        className={`px-3 py-1 text-sm font-medium rounded-lg ${
+                                            currentHealth === 'critical' 
+                                                ? 'bg-red-600 hover:bg-red-700 text-white' 
+                                                : 'bg-amber-600 hover:bg-amber-700 text-white'
+                                        }`}
+                                    >
+                                        Use This
+                                    </button>
+                                </div>
+                                <p className={`text-xs ${
+                                    currentHealth === 'critical' ? 'text-red-700' : 'text-amber-700'
+                                } mt-2`}>
+                                    This will bring treasury to healthy status (120% coverage)
+                                </p>
+                            </div>
+                        )}
+                        
                         <div>
                             <label className="block text-sm font-medium text-slate-900 mb-2">
                                 Amount (NILA)
                             </label>
                             <input
                                 type="number"
+                                step="0.01"
                                 value={amount}
                                 onChange={(e) => {
                                     setAmount(e.target.value);
@@ -119,9 +173,22 @@ export const WithdrawModal = ({ isOpen, onClose, onConfirm, isProcessing = false
 
                     <div className="p-6 space-y-4">
                         <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 flex gap-3">
-                            <AlertTriangle className="w-5 h-5 text-amber-600 flex-shrink-0" />
-                            <p className="text-sm text-amber-800">
-                                Withdrawing tokens from the contract may affect the ability to pay out rewards. Proceed with caution.
+                            <AlertTriangle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+                            <div className="text-sm text-amber-800 space-y-2">
+                                <p className="font-medium">Important Requirements:</p>
+                                <ul className="list-disc list-inside space-y-1 text-xs">
+                                    <li>Contract must be paused before withdrawal</li>
+                                    <li>Withdrawing reduces available reward pool</li>
+                                    <li>May affect ability to pay out rewards</li>
+                                    <li>Contract must be unpaused after withdrawal</li>
+                                </ul>
+                            </div>
+                        </div>
+
+                        <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                            <p className="text-xs text-blue-800">
+                                <strong>Note:</strong> If you get an error about the contract not being paused, 
+                                you need to pause the contract first from the contract management section.
                             </p>
                         </div>
 
@@ -132,6 +199,7 @@ export const WithdrawModal = ({ isOpen, onClose, onConfirm, isProcessing = false
                                 </label>
                                 <input
                                     type="number"
+                                    step="0.01"
                                     value={amount}
                                     onChange={(e) => {
                                         setAmount(e.target.value);
@@ -140,6 +208,11 @@ export const WithdrawModal = ({ isOpen, onClose, onConfirm, isProcessing = false
                                     className="w-full px-4 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500"
                                     placeholder="Enter amount..."
                                 />
+                                {maxAmount !== undefined && (
+                                    <p className="text-xs text-slate-500 mt-1">
+                                        Available: {maxAmount.toLocaleString()} NILA
+                                    </p>
+                                )}
                                 {error && <p className="text-xs text-red-600 mt-1">{error}</p>}
                             </div>
                             <div className="flex gap-3 pt-2">

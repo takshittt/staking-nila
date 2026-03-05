@@ -1,9 +1,0 @@
-{
-  "network": "bscTestnet",
-  "chainId": "97",
-  "contractAddress": "0x1ac15bC1741f64221E22059C9f3B3A6ef8705E1c",
-  "deployerAddress": "0x0b23Ad9a0F1Da9b04D43de60a0371501991e33ef",
-  "deploymentTime": "2026-03-02T09:02:00.445Z",
-  "transactionHash": "0x06224a139b936de0fcdf222512131e2608324e04901b73989cca919a39e44943",
-  "blockNumber": null
-}

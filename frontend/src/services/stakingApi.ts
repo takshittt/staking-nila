@@ -23,6 +23,7 @@ export interface CreateStakeDto {
   lockDays: number;
   instantRewardPercent?: number;
   txHash?: string;
+  onChainStakeId?: number; // Blockchain array index
 }
 
 export const stakingApi = {

@@ -272,62 +272,89 @@ export class BlockchainService {
   }
 
   // Treasury Management Methods
+  static async getContractBalance(): Promise<string> {
+      try {
+        const provider = this.getProvider();
+
+        // Use NILA token address from environment
+        const nilaTokenAddress = process.env.NILA_TOKEN_ADDRESS;
+        if (!nilaTokenAddress) {
+          throw new Error('NILA_TOKEN_ADDRESS not configured');
+        }
+
+        // Verify the token address has code (is a contract)
+        const code = await provider.getCode(nilaTokenAddress);
+        if (code === '0x') {
+          console.error(`NILA token address ${nilaTokenAddress} is not a contract on this network`);
+          // Return 0 instead of failing
+          return '0';
+        }
+
+        const nilaToken = new ethers.Contract(
+          nilaTokenAddress,
+          ['function balanceOf(address) view returns (uint256)'],
+          provider
+        );
+
+        const contractBalance = await nilaToken.balanceOf(process.env.CONTRACT_ADDRESS);
+        return contractBalance.toString();
+      } catch (error: any) {
+        console.error('Error getting contract balance:', error.message);
+        // Return 0 instead of throwing to prevent blocking the entire stats call
+        return '0';
+      }
+    }
+
   static async getTreasuryStats() {
     const contract = this.getContract();
-    const provider = this.getProvider();
 
-    const [totalStaked, availableRewards] = await Promise.all([
+    const [totalStaked, availableRewards, contractBalance] = await Promise.all([
       contract.totalStaked(),
-      contract.availableRewards()
+      contract.availableRewards(),
+      this.getContractBalance()
     ]);
 
-    // Get contract balance
-    const nilaTokenAddress = await contract.nila();
-    const nilaToken = new ethers.Contract(
-      nilaTokenAddress,
-      ['function balanceOf(address) view returns (uint256)'],
-      provider
-    );
-    const contractBalance = await nilaToken.balanceOf(process.env.CONTRACT_ADDRESS);
-
     return {
-      contractBalance: contractBalance.toString(),
+      contractBalance: contractBalance,
       totalStaked: totalStaked.toString(),
       availableRewards: availableRewards.toString()
     };
   }
 
   static async depositRewards(amount: string) {
-    const contract = this.getContract();
-    const wallet = this.wallet;
+      const wallet = this.wallet;
 
-    // Get NILA token contract
-    const nilaTokenAddress = await contract.nila();
-    const nilaToken = new ethers.Contract(
-      nilaTokenAddress,
-      [
-        'function approve(address spender, uint256 amount) returns (bool)',
-        'function transfer(address to, uint256 amount) returns (bool)',
-        'function balanceOf(address) view returns (uint256)'
-      ],
-      wallet
-    );
+      // Use NILA token address from environment
+      const nilaTokenAddress = process.env.NILA_TOKEN_ADDRESS;
+      if (!nilaTokenAddress) {
+        throw new Error('NILA_TOKEN_ADDRESS not configured');
+      }
 
-    // Check admin balance
-    const adminBalance = await nilaToken.balanceOf(wallet.address);
-    if (adminBalance < BigInt(amount)) {
-      throw new Error('Insufficient admin balance');
+      const nilaToken = new ethers.Contract(
+        nilaTokenAddress,
+        [
+          'function approve(address spender, uint256 amount) returns (bool)',
+          'function transfer(address to, uint256 amount) returns (bool)',
+          'function balanceOf(address) view returns (uint256)'
+        ],
+        wallet
+      );
+
+      // Check admin balance
+      const adminBalance = await nilaToken.balanceOf(wallet.address);
+      if (adminBalance < BigInt(amount)) {
+        throw new Error('Insufficient admin balance');
+      }
+
+      // Transfer tokens to contract
+      const transferTx = await nilaToken.transfer(process.env.CONTRACT_ADDRESS, amount);
+      const receipt = await transferTx.wait();
+
+      return {
+        txHash: receipt.hash,
+        blockNumber: receipt.blockNumber
+      };
     }
-
-    // Transfer tokens to contract
-    const transferTx = await nilaToken.transfer(process.env.CONTRACT_ADDRESS, amount);
-    const receipt = await transferTx.wait();
-
-    return {
-      txHash: receipt.hash,
-      blockNumber: receipt.blockNumber
-    };
-  }
 
   static async withdrawRewards(amount: string) {
     const contract = this.getContract();
@@ -413,36 +440,38 @@ export class BlockchainService {
 
   // Transfer rewards from treasury to user wallet
   static async transferRewards(toAddress: string, amount: number) {
-    const contract = this.getContract();
+      // Convert amount to wei (18 decimals)
+      const amountWei = ethers.parseUnits(amount.toString(), 18);
 
-    // Convert amount to wei (18 decimals)
-    const amountWei = ethers.parseUnits(amount.toString(), 18);
+      // Use NILA token address from environment
+      const nilaTokenAddress = process.env.NILA_TOKEN_ADDRESS;
+      if (!nilaTokenAddress) {
+        throw new Error('NILA_TOKEN_ADDRESS not configured');
+      }
 
-    // Get NILA token contract
-    const nilaTokenAddress = await contract.nila();
-    const nilaToken = new ethers.Contract(
-      nilaTokenAddress,
-      [
-        'function transfer(address to, uint256 amount) returns (bool)',
-        'function balanceOf(address) view returns (uint256)'
-      ],
-      this.wallet
-    );
+      const nilaToken = new ethers.Contract(
+        nilaTokenAddress,
+        [
+          'function transfer(address to, uint256 amount) returns (bool)',
+          'function balanceOf(address) view returns (uint256)'
+        ],
+        this.wallet
+      );
 
-    // Check contract balance
-    const contractBalance = await nilaToken.balanceOf(process.env.CONTRACT_ADDRESS);
-    if (contractBalance < amountWei) {
-      throw new Error('Insufficient contract balance for reward transfer');
+      // Check contract balance
+      const contractBalance = await nilaToken.balanceOf(process.env.CONTRACT_ADDRESS);
+      if (contractBalance < amountWei) {
+        throw new Error('Insufficient contract balance for reward transfer');
+      }
+
+      // Transfer tokens from contract to user
+      // Note: This uses the admin wallet to transfer from contract
+      // In production, you might want to use the contract's claim functions instead
+      const tx = await nilaToken.transfer(toAddress, amountWei);
+      const receipt = await tx.wait();
+
+      return receipt.hash;
     }
-
-    // Transfer tokens from contract to user
-    // Note: This uses the admin wallet to transfer from contract
-    // In production, you might want to use the contract's claim functions instead
-    const tx = await nilaToken.transfer(toAddress, amountWei);
-    const receipt = await tx.wait();
-
-    return receipt.hash;
-  }
 
   // Get claimable rewards from contract
   static async getClaimableRewards(walletAddress: string) {
@@ -589,9 +618,12 @@ export class BlockchainService {
   }
 
   // ============================================
-  // USDT MANAGEMENT
+  // USDT MANAGEMENT (DEPRECATED - NOT IN CONTRACT)
   // ============================================
-
+  // These methods are commented out because the contract doesn't have these functions
+  // The contract was never upgraded to include USDT balance tracking
+  
+  /*
   // Get USDT balance in contract
   static async getUSDTBalance() {
     const contract = this.getContract();
@@ -627,7 +659,7 @@ export class BlockchainService {
   }
 
   // ============================================
-  // NILA LIABILITY MANAGEMENT
+  // NILA LIABILITY MANAGEMENT (DEPRECATED - NOT IN CONTRACT)
   // ============================================
 
   // Get NILA liability status
@@ -695,5 +727,5 @@ export class BlockchainService {
       throw new Error(`Failed to deposit NILA for liabilities: ${error.message}`);
     }
   }
+  */
 }
-

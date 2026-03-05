@@ -32,6 +32,8 @@ const STAKING_ABI = [
   // USDT staking functions
   'function buyAndStakeWithUSDT(uint256 usdtAmount, uint256 lockId)',
   'function buyAndStakeWithUSDTAndReferral(uint256 usdtAmount, uint256 lockId, address referrer)',
+  // Unstaking functions
+  'function unstake(uint256 index)',
   // Claiming functions
   'function claimInstantRewards()',
   'function claimReferralRewards()',
@@ -47,6 +49,7 @@ const STAKING_ABI = [
   'function getUserStakes(address user) view returns (tuple(uint256 amount, uint256 usdtPaid, uint256 startTime, uint256 lastClaimTime, uint256 unlockTime, uint256 aprSnapshot, uint256 instantRewardSnapshot, bool unstaked, bool isUsdtStake)[])',
   'function getNILALiabilityStatus() view returns (uint256 totalLiabilities, uint256 nilaBalance, uint256 deficitOrSurplus, bool hasSurplus)',
   'function getUSDTBalance() view returns (uint256)',
+  'function pendingReward(address user, uint256 index) view returns (uint256)',
 ];
 
 const ERC20_ABI = [
@@ -233,7 +236,7 @@ export class ContractService {
   }
 
   // Stake tokens with flexible amount (direct staking - no instant rewards)
-  static async stake(params: StakeParams): Promise<string> {
+  static async stake(params: StakeParams): Promise<{ txHash: string; stakeIndex: number | null }> {
     try {
       const stakingContract = await this.getStakingContract();
       const amountWei = parseUnits(params.amount, 18);
@@ -266,9 +269,27 @@ export class ContractService {
       console.log('Transaction sent:', tx.hash);
 
       // Wait for confirmation
-      await tx.wait();
+      const receipt = await tx.wait();
 
-      return tx.hash;
+      // Extract stake index from Staked event
+      let stakeIndex: number | null = null;
+      for (const log of receipt.logs) {
+        try {
+          const parsed = stakingContract.interface.parseLog({
+            topics: [...log.topics],
+            data: log.data
+          });
+          if (parsed && parsed.name === 'Staked') {
+            stakeIndex = Number(parsed.args[1]); // stakeId is second argument
+            console.log('Extracted stake index from event:', stakeIndex);
+            break;
+          }
+        } catch (e) {
+          // Not the event we're looking for
+        }
+      }
+
+      return { txHash: tx.hash, stakeIndex };
     } catch (error: any) {
       console.error('Stake error:', error);
 
@@ -292,7 +313,7 @@ export class ContractService {
   }
 
   // Stake tokens with amount config (Buy & Stake - includes instant rewards)
-  static async stakeWithAmountConfig(params: BuyAndStakeParams): Promise<string> {
+  static async stakeWithAmountConfig(params: BuyAndStakeParams): Promise<{ txHash: string; stakeIndex: number | null }> {
     try {
       const stakingContract = await this.getStakingContract();
 
@@ -313,9 +334,27 @@ export class ContractService {
       }
 
       // Wait for confirmation
-      await tx.wait();
+      const receipt = await tx.wait();
 
-      return tx.hash;
+      // Extract stake index from Staked event
+      let stakeIndex: number | null = null;
+      for (const log of receipt.logs) {
+        try {
+          const parsed = stakingContract.interface.parseLog({
+            topics: [...log.topics],
+            data: log.data
+          });
+          if (parsed && parsed.name === 'Staked') {
+            stakeIndex = Number(parsed.args[1]); // stakeId is second argument
+            console.log('Extracted stake index from event:', stakeIndex);
+            break;
+          }
+        } catch (e) {
+          // Not the event we're looking for
+        }
+      }
+
+      return { txHash: tx.hash, stakeIndex };
     } catch (error: any) {
 
       // Parse common errors
@@ -334,7 +373,7 @@ export class ContractService {
   }
 
   // Buy NILA with USDT and stake (with instant rewards in USDT)
-  static async buyAndStakeWithUSDT(params: BuyAndStakeWithUSDTParams): Promise<string> {
+  static async buyAndStakeWithUSDT(params: BuyAndStakeWithUSDTParams): Promise<{ txHash: string; stakeIndex: number | null }> {
     try {
       const stakingContract = await this.getStakingContract();
       const usdtAmountWei = parseUnits(params.usdtAmount, 18);
@@ -368,9 +407,27 @@ export class ContractService {
       console.log('Transaction sent:', tx.hash);
 
       // Wait for confirmation
-      await tx.wait();
+      const receipt = await tx.wait();
 
-      return tx.hash;
+      // Extract stake index from Staked event
+      let stakeIndex: number | null = null;
+      for (const log of receipt.logs) {
+        try {
+          const parsed = stakingContract.interface.parseLog({
+            topics: [...log.topics],
+            data: log.data
+          });
+          if (parsed && parsed.name === 'Staked') {
+            stakeIndex = Number(parsed.args[1]); // stakeId is second argument
+            console.log('Extracted stake index from event:', stakeIndex);
+            break;
+          }
+        } catch (e) {
+          // Not the event we're looking for
+        }
+      }
+
+      return { txHash: tx.hash, stakeIndex };
     } catch (error: any) {
       console.error('Buy and stake error:', error);
 
@@ -500,6 +557,30 @@ export class ContractService {
       }
 
       throw new Error(error.message || 'Failed to claim APY rewards');
+    }
+  }
+
+  // Unstake tokens (automatically claims pending APY rewards)
+  static async unstake(stakeIndex: number): Promise<string> {
+    try {
+      const stakingContract = await this.getStakingContract();
+      const tx = await stakingContract.unstake(stakeIndex);
+
+      await tx.wait();
+
+      return tx.hash;
+    } catch (error: any) {
+      if (error.message?.includes('user rejected')) {
+        throw new Error('Transaction rejected by user');
+      } else if (error.message?.includes('Already unstaked')) {
+        throw new Error('This stake has already been unstaked');
+      } else if (error.message?.includes('Lock active')) {
+        throw new Error('Cannot unstake yet. The lock period is still active.');
+      } else if (error.message?.includes('Insufficient reward pool')) {
+        throw new Error('Insufficient reward pool to pay out your rewards. Please contact support.');
+      }
+
+      throw new Error(error.message || 'Failed to unstake');
     }
   }
 

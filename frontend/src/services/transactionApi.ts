@@ -4,7 +4,7 @@ export interface Transaction {
   id: string;
   txHash: string;
   walletAddress?: string;
-  type: 'STAKE' | 'UNSTAKE' | 'CLAIM_REWARD' | 'DEPOSIT' | 'WITHDRAW' | 'REFERRAL_REWARD' | 'CONFIG_UPDATE';
+  type: 'STAKE' | 'UNSTAKE' | 'CLAIM_REWARD' | 'DEPOSIT' | 'WITHDRAW' | 'REFERRAL_REWARD' | 'CONFIG_UPDATE' | 'PAYMENT';
   amount?: number;
   status: 'pending' | 'confirmed' | 'failed';
   createdAt: string;

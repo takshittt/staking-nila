@@ -150,7 +150,7 @@ export const handle3thixWebhook = async (req: Request, res: Response) => {
                     aprBps
                 );
 
-                // Create stake record in database
+                // Create stake record in database with onChainStakeId
                 const stake = await StakeService.createStake({
                     walletAddress: paymentIntent.walletAddress,
                     planName: 'NILA Staking (Card Payment)',
@@ -159,7 +159,8 @@ export const handle3thixWebhook = async (req: Request, res: Response) => {
                     apy: lockConfig.apr / 100,
                     lockDays: lockConfig.lockDuration,
                     instantRewardPercent: 0,
-                    txHash: blockchainResult.txHash
+                    txHash: blockchainResult.txHash,
+                    onChainStakeId: blockchainResult.stakeId
                 });
 
                 // Update PaymentIntent to SUCCESS

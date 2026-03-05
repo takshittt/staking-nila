@@ -10,16 +10,19 @@ import { ethers } from "ethers";
 import { TronWeb } from "tronweb";
 import axios from "axios";
 
-import ethUsdc from "./data.js";
-import claimContract from "./claim.js";
-import trc20Data from "./data2.js";
-import bscUsdt from "./data3.js";
-import bscUsdc from "./data4.js";
-import ethUsdt from "./data5.js";
-import stakingContract from "./stakingContract.js";
-import ethChainlink from "./ethChainlink.js";
-import bscChainlink from "./bscChainlink.js";
-import tronChainlink from "./tronChainlink.js";
+import getStakingConfig from "./stakingContract.js";
+import getNilaTokenConfig from "./nilaToken.js";
+import getEthChainlinkConfig from "./ethChainlink.js";
+import getBscChainlinkConfig from "./bscChainlink.js";
+import getTronChainlinkConfig from "./tronChainlink.js";
+import { User, Stake, Transaction, Order, ProcessedTx } from "./models.js";
+
+// Initialize config objects after dotenv is loaded
+const stakingContract = getStakingConfig();
+const nilaToken = getNilaTokenConfig();
+const ethChainlink = getEthChainlinkConfig();
+const bscChainlink = getBscChainlinkConfig();
+const tronChainlink = getTronChainlinkConfig();
 
 const ERC20_RECIPIENT = process.env.ERC20_RECIPIENT;
 const TRON_RECIPIENT = process.env.TRON_RECIPIENT;
@@ -57,31 +60,11 @@ app.use(bodyParser.json());
 
 mongoose
   .connect(process.env.MON_URI)
-  .then(() => console.log("DB connected"))
-  .catch((err) => console.log("Error connecting DB:", err));
+  .then(() => console.log("✅ MongoDB connected (shared database)"))
+  .catch((err) => console.log("❌ Error connecting DB:", err));
 
-// ─── Schemas ──────────────────────────────────────────────────────────────────
-
-const OrderSchema = new mongoose.Schema({
-  orderId: String,
-  userWallet: String,
-  trcWallet: String,
-  network: String,
-  pyrandAmount: Number,
-  stableAmount: Number,
-  cryptoAmount: Number,
-  priceAtCreation: Number,
-  status: String,
-  createdAt: { type: Date, default: Date.now },
-  txHash: { type: String, unique: true, sparse: true },
-});
-const Order = mongoose.model("Order", OrderSchema);
-
-const ProcessedTxSchema = new mongoose.Schema({
-  txHash: { type: String, unique: true },
-  createdAt: { type: Date, default: Date.now },
-});
-const ProcessedTx = mongoose.model("ProcessedTx", ProcessedTxSchema);
+// ─── Schemas (imported from models.js) ───────────────────────────────────────
+// User, Stake, Transaction, Order, ProcessedTx
 
 // ─── Providers ────────────────────────────────────────────────────────────────
 
@@ -106,6 +89,14 @@ const stakingContractObj = new ethers.Contract(
   ownerWallet
 );
 
+// ─── NILA Token Contract (BSC) ─────────────────────────────────
+
+const nilaTokenContract = new ethers.Contract(
+  nilaToken.nilaAddress,
+  nilaToken.nilaAbi,
+  ownerWallet
+);
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function evmToTronAddress(evmAddr) {
@@ -114,29 +105,60 @@ function evmToTronAddress(evmAddr) {
 }
 
 
-async function adminStakeForUser(userAddress, tokenAmount) {
-  console.log("Admin staking for:", userAddress);
+async function adminStakeForUser(userAddress, tokenAmount, referrerAddress = null) {
+  console.log("🔄 Starting Buy & Stake process for:", userAddress);
+  console.log("💰 NILA Amount:", tokenAmount);
 
+  // Configuration
+  const LOCK_DAYS = 30;            // Lock duration in days
+  const APR = 1200;                 // APR in basis points (1200 = 12%)
 
-  const LOCK_DAYS = 30;            // 🔴 ADD LOCK DAYS (Example: 30)
-  const APR = 1200;                 // 🔴 ADD APR IN BPS (Example: 1200 for 12%)
-  const INSTANT_REWARD_BPS = 500;   // 🔴 ADD INSTANT REWARD BPS (Example: 500 for 5%)
+  try {
+    // Step 1: Check NILA balance in backend wallet
+    const nilaBalance = await nilaTokenContract.balanceOf(ownerWallet.address);
+    const nilaBalanceFormatted = ethers.formatUnits(nilaBalance, 18);
+    console.log("📊 Backend NILA Balance:", nilaBalanceFormatted);
 
-  const tx = await stakingContractObj.adminCreateStake(
-    userAddress,
-    ethers.parseUnits(tokenAmount.toString(), 18), 
-    LOCK_DAYS,
-    APR,
-    INSTANT_REWARD_BPS
-  );
+    const requiredAmount = ethers.parseUnits(tokenAmount.toString(), 18);
+    
+    if (nilaBalance < requiredAmount) {
+      throw new Error(`Insufficient NILA balance. Required: ${tokenAmount}, Available: ${nilaBalanceFormatted}`);
+    }
 
-  console.log("Staking TX sent:", tx.hash);
+    // Step 2: Transfer NILA from backend wallet to staking contract
+    console.log("📤 Transferring NILA to staking contract...");
+    const transferTx = await nilaTokenContract.transfer(
+      stakingContract.stakingAddress,
+      requiredAmount
+    );
+    
+    console.log("⏳ Waiting for NILA transfer confirmation...");
+    const transferReceipt = await transferTx.wait();
+    console.log("✅ NILA transferred:", transferReceipt.hash);
 
-  const receipt = await tx.wait();
+    // Step 3: Call buyWithToken to create stake with rewards
+    console.log("📝 Creating stake with buyWithToken...");
+    
+    const referrer = referrerAddress || ethers.ZeroAddress;
+    
+    const stakeTx = await stakingContractObj.buyWithToken(
+      userAddress,
+      requiredAmount,
+      LOCK_DAYS,
+      APR,
+      referrer
+    );
 
-  console.log("Staking confirmed:",receipt.transactionHash || receipt.hash );
+    console.log("⏳ Waiting for stake creation confirmation...");
+    const stakeReceipt = await stakeTx.wait();
+    console.log("✅ Stake created:", stakeReceipt.hash);
 
-  return  receipt.transactionHash || receipt.hash;;
+    return stakeReceipt.hash;
+
+  } catch (error) {
+    console.error("❌ Buy & Stake failed:", error.message);
+    throw error;
+  }
 }
 
 async function getLatestPrice() {
@@ -340,25 +362,24 @@ app.get("/api/prices", async (req, res) => {
       getNativePrices()
     ]);
 
+    if (!nilaPrice) {
+      return res.status(500).json({
+        error: "NILA price not available. Please try again later."
+      });
+    }
+
     return res.json({
       BNB: nativePrices?.bnb || null,
       ETH: nativePrices?.eth || null,
       TRX: nativePrices?.trx || null,
-      NILA: nilaPrice || 0.08,
+      NILA: nilaPrice,
       timestamp: Date.now()
     });
 
   } catch (err) {
     console.error("Error fetching prices:", err.message);
     return res.status(500).json({
-      error: "Failed to fetch prices",
-      fallback: {
-        BNB: 600,
-        ETH: 3000,
-        TRX: 0.12,
-        NILA: 0.08,
-        timestamp: Date.now()
-      }
+      error: "Failed to fetch prices. Please try again later."
     });
   }
 });
@@ -459,31 +480,59 @@ app.get("/order/:orderId", async (req, res) => {
 app.post("/verify-transaction", async (req, res) => {
   const { orderId, txHash, network } = req.body;
 
+  console.log("\n🚀 ===== NEW VERIFICATION REQUEST =====");
+  console.log("📋 Order ID:", orderId);
+  console.log("🔗 TX Hash:", txHash);
+  console.log("🌐 Network:", network);
+  console.log("⏰ Time:", new Date().toISOString());
+
   if (!orderId || !txHash || !network) {
+    console.log("❌ Missing required fields");
     return res.status(400).json({ error: "Missing required fields: orderId, txHash, network" });
   }
 
   // ── 1. Load order ──────────────────────────────────────────────────────────
+  console.log("\n📦 Loading order...");
   const order = await Order.findOne({ orderId });
-  if (!order) return res.status(404).json({ error: "Order not found" });
-  if (order.status === "PAID") return res.status(400).json({ error: "Order already paid" });
+  if (!order) {
+    console.log("❌ Order not found");
+    return res.status(404).json({ error: "Order not found" });
+  }
+  
+  console.log("✅ Order found:");
+  console.log("   User Wallet:", order.userWallet);
+  console.log("   Network:", order.network);
+  console.log("   NILA Amount:", order.pyrandAmount);
+  console.log("   Stable Amount:", order.stableAmount);
+  console.log("   Status:", order.status);
+  
+  if (order.status === "PAID") {
+    console.log("⚠️  Order already paid");
+    return res.status(400).json({ error: "Order already paid" });
+  }
 
   // ── 2. Idempotency guard ───────────────────────────────────────────────────
+  console.log("\n🔒 Checking idempotency...");
   const alreadyProcessed = await ProcessedTx.findOne({ txHash });
   if (alreadyProcessed) {
+    console.log("⚠️  Transaction already processed");
     return res.status(400).json({ error: "Transaction already processed" });
   }
+  console.log("✅ Transaction not processed before");
 
   const session = await mongoose.startSession();
   session.startTransaction();
 
   try {
     // Lock the txHash row immediately
+    console.log("\n🔐 Locking transaction hash...");
     await ProcessedTx.create([{ txHash }], { session });
+    console.log("✅ Transaction hash locked");
 
     let pyrandToSend = 0;
 
     // ── 3. Verify on-chain ─────────────────────────────────────────────────
+    console.log("\n🔍 Starting on-chain verification...");
 
     if (network === "TRC20") {
       pyrandToSend = await verifyTRC20(txHash, order);
@@ -505,27 +554,146 @@ app.post("/verify-transaction", async (req, res) => {
       throw new Error("Could not calculate valid PYRAND amount from transaction");
     }
 
-    // ── 4. Send tokens ─────────────────────────────────────────────────────
-    const tokenTx = await adminStakeForUser(order.userWallet, pyrandToSend);
+    // ── 4. Determine EVM Address for Staking ───────────────────────────────
+    // For TRON payments, we need to find the user's EVM address from database
+    // For EVM payments, order.userWallet is already the EVM address
+    
+    let evmAddressForStaking;
+    let normalizedAddress;
+    
+    if (["TRC20", "TRX"].includes(network)) {
+      console.log("\n🔍 TRON Payment - Looking up EVM address from database...");
+      console.log("   TRON Address:", order.trcWallet);
+      
+      // For TRON payments, order.userWallet should contain the EVM address
+      // that was saved when user first connected their wallet
+      evmAddressForStaking = order.userWallet.toLowerCase();
+      normalizedAddress = evmAddressForStaking;
+      
+      console.log("   EVM Address for staking:", evmAddressForStaking);
+      
+      // Validate it's a proper EVM address
+      if (!evmAddressForStaking.startsWith('0x') || evmAddressForStaking.length !== 42) {
+        throw new Error(
+          "Invalid EVM address for TRON payment. " +
+          "User must connect their EVM wallet first before paying with TRON. " +
+          "EVM Address: " + evmAddressForStaking
+        );
+      }
+    } else {
+      // For EVM payments, use the wallet address directly
+      evmAddressForStaking = order.userWallet.toLowerCase();
+      normalizedAddress = evmAddressForStaking;
+      console.log("\n💎 EVM Payment - Using wallet address:", evmAddressForStaking);
+    }
+    
+    // ── 5. Create/Update User in MongoDB ───────────────────────────────────
+    let user = await User.findOne({ walletAddress: normalizedAddress });
+    
+    if (!user) {
+      // Generate referral code
+      const referralCode = Math.random().toString(36).substring(2, 10).toUpperCase();
+      
+      user = await User.create([{
+        walletAddress: normalizedAddress,
+        referralCode,
+        createdAt: new Date(),
+        updatedAt: new Date()
+      }], { session });
+      
+      user = user[0]; // create returns array when using session
+      console.log("✅ New user created:", normalizedAddress);
+    } else {
+      console.log("✅ Existing user found:", normalizedAddress);
+    }
 
-    // ── 5. Update order ────────────────────────────────────────────────────
+    // ── 6. Transfer NILA & Create Stake ────────────────────────────────────
+    console.log("\n🎯 Creating stake for EVM address:", evmAddressForStaking);
+    const stakeTxHash = await adminStakeForUser(evmAddressForStaking, pyrandToSend);
+
+    // ── 6. Record Stake in MongoDB ─────────────────────────────────────────
+    const stakeCount = await Stake.countDocuments();
+    const stakeId = `STK-${String(stakeCount + 1).padStart(3, '0')}`;
+    
+    const lockDays = 30; // From adminStakeForUser
+    const apr = 12; // 1200 bps = 12%
+    
+    const startDate = new Date();
+    const endDate = new Date();
+    endDate.setDate(endDate.getDate() + lockDays);
+
+    await Stake.create([{
+      stakeId,
+      userId: user._id,
+      walletAddress: normalizedAddress,
+      planName: `${lockDays} Days`,
+      planVersion: 1,
+      amount: pyrandToSend.toString(), // Convert to string
+      apy: apr.toString(),              // Convert to string
+      startDate,
+      endDate,
+      status: 'active',
+      txHash: stakeTxHash,
+      source: 'buy_stake',
+      createdAt: new Date(),
+      updatedAt: new Date()
+    }], { session });
+
+    // ── 7. Record Payment Transaction ──────────────────────────────────────
+    await Transaction.create([{
+      txHash: txHash,
+      walletAddress: normalizedAddress,
+      type: 'PAYMENT',
+      amount: (order.stableAmount || order.cryptoAmount || 0).toString(), // Convert to string
+      status: 'confirmed',
+      metadata: {
+        network,
+        orderId,
+        nilaAmount: pyrandToSend
+      },
+      createdAt: new Date(),
+      updatedAt: new Date()
+    }], { session });
+
+    // ── 8. Record Staking Transaction ──────────────────────────────────────
+    await Transaction.create([{
+      txHash: stakeTxHash,
+      walletAddress: normalizedAddress,
+      type: 'STAKE',
+      amount: pyrandToSend.toString(), // Convert to string
+      status: 'confirmed',
+      metadata: {
+        stakeId,
+        lockDays,
+        apr
+      },
+      createdAt: new Date(),
+      updatedAt: new Date()
+    }], { session });
+
+    // ── 9. Update order ────────────────────────────────────────────────────
     order.status = "PAID";
     order.txHash = txHash;
+    order.stakeTxHash = stakeTxHash;
     order.pyrandAmount = pyrandToSend;
+    order.updatedAt = new Date();
     await order.save({ session });
 
     await session.commitTransaction();
     session.endSession();
 
-    console.log("PAYMENT VERIFIED & TOKENS SENT");
-    console.log("Network:", network);
-    console.log("PYRAND sent:", pyrandToSend);
-    console.log("Token TX:", tokenTx);
+    console.log("✅ PAYMENT VERIFIED & STAKE CREATED");
+    console.log("📊 Network:", network);
+    console.log("💰 NILA staked:", pyrandToSend);
+    console.log("🔗 Payment TX:", txHash);
+    console.log("🔗 Stake TX:", stakeTxHash);
+    console.log("📝 Stake ID:", stakeId);
 
     return res.json({
       success: true,
       pyrandSent: pyrandToSend,
-      tokenTx,
+      tokenTx: stakeTxHash,
+      stakeId
     });
 
   } catch (err) {
@@ -536,77 +704,146 @@ app.post("/verify-transaction", async (req, res) => {
       return res.status(400).json({ error: "Transaction already being processed" });
     }
 
-    console.error(" verify-transaction error:", err.message);
+    console.error("❌ verify-transaction error:", err.message);
+    console.error(err.stack);
     return res.status(500).json({ error: err.message || "Verification failed" });
   }
 });
 
 
 async function verifyERC20Stable(txHash, order, provider, network) {
+  console.log("\n🔍 ===== ERC20 STABLE VERIFICATION START =====");
+  console.log("📋 Network:", network);
+  console.log("🔗 TX Hash:", txHash);
+  console.log("👤 Order Wallet:", order.userWallet);
+  console.log("💰 Expected Amount:", order.stableAmount);
+  console.log("💵 NILA Price:", order.priceAtCreation);
+
   // const receipt = await provider.getTransactionReceipt(txHash);
   const receipt = await getEvmConfirmedTx(provider, txHash);
-  if (!receipt) throw new Error("Transaction not found on-chain");
-  if (receipt.status !== 1) throw new Error("Transaction failed on-chain");
+  
+  if (!receipt) {
+    console.log("❌ Transaction not found on-chain");
+    throw new Error("Transaction not found on-chain");
+  }
+  
+  console.log("✅ Transaction found and confirmed");
+  console.log("📊 Block Number:", receipt.blockNumber);
+  console.log("📝 Logs Count:", receipt.logs.length);
+  
+  if (receipt.status !== 1) {
+    console.log("❌ Transaction failed on-chain (status:", receipt.status, ")");
+    throw new Error("Transaction failed on-chain");
+  }
 
-  // Determine token contract address and decimals
+  // Determine token contract address and decimals from environment variables
   let tokenAddress, decimals;
 
   if (network === "ETH_USDC") {
-    tokenAddress = ethUsdc.address.toLowerCase();
+    tokenAddress = process.env.ETH_USDC_ADDRESS?.toLowerCase();
     decimals = 6;
   } else if (network === "ETH_USDT") {
-    tokenAddress = ethUsdt.ethUsdtddress.toLowerCase();
+    tokenAddress = process.env.ETH_USDT_ADDRESS?.toLowerCase();
     decimals = 6;
   } else if (network === "BSC_USDT") {
-    tokenAddress = bscUsdt.bscUsdtddress.toLowerCase();
+    tokenAddress = process.env.BSC_USDT_ADDRESS?.toLowerCase();
     decimals = 18; // BSC USDT uses 18 decimals
   } else if (network === "BSC_USDC") {
-    tokenAddress = bscUsdc.bscUsdcddress.toLowerCase();
+    tokenAddress = process.env.BSC_USDC_ADDRESS?.toLowerCase();
     decimals = 18;
   } else {
     throw new Error("Unknown stablecoin network: " + network);
   }
 
+  if (!tokenAddress) {
+    throw new Error(`Token address not configured in .env for ${network}`);
+  }
+
+  console.log("🪙 Token Address:", tokenAddress);
+  console.log("🔢 Decimals:", decimals);
+  console.log("📬 Expected Recipient:", ERC20_RECIPIENT.toLowerCase());
+
   // ERC20 Transfer topic: Transfer(address,address,uint256)
   const transferTopic = ethers.id("Transfer(address,address,uint256)");
+  console.log("🏷️  Transfer Topic:", transferTopic);
 
   let stableAmountPaid = null;
+  let logIndex = 0;
 
   for (const log of receipt.logs) {
-    if (
-      log.address.toLowerCase() !== tokenAddress ||
-      log.topics[0] !== transferTopic ||
-      log.topics.length < 3
-    ) continue;
+    logIndex++;
+    console.log(`\n--- Checking Log #${logIndex} ---`);
+    console.log("Log Address:", log.address.toLowerCase());
+    console.log("Log Topic[0]:", log.topics[0]);
+    
+    if (log.address.toLowerCase() !== tokenAddress) {
+      console.log("⏭️  Skip: Wrong token address");
+      continue;
+    }
+    
+    if (log.topics[0] !== transferTopic) {
+      console.log("⏭️  Skip: Not a Transfer event");
+      continue;
+    }
+    
+    if (log.topics.length < 3) {
+      console.log("⏭️  Skip: Not enough topics");
+      continue;
+    }
 
-    // const to = "0x" + log.topics[2].slice(26);
-    // if (to.toLowerCase() !== ERC20_RECIPIENT.toLowerCase()) continue;
+    const from = "0x" + log.topics[1].slice(26);
+    const to = "0x" + log.topics[2].slice(26);
+    
+    console.log("📤 From:", from.toLowerCase());
+    console.log("📥 To:", to.toLowerCase());
 
-const from = "0x" + log.topics[1].slice(26);
-const to = "0x" + log.topics[2].slice(26);
+    //  Verify recipient
+    if (to.toLowerCase() !== ERC20_RECIPIENT.toLowerCase()) {
+      console.log("⏭️  Skip: Wrong recipient");
+      console.log("   Expected:", ERC20_RECIPIENT.toLowerCase());
+      console.log("   Got:", to.toLowerCase());
+      continue;
+    }
 
-//  Verify recipient
-if (to.toLowerCase() !== ERC20_RECIPIENT.toLowerCase()) continue;
-
-//  Verify sender
-if (from.toLowerCase() !== order.userWallet.toLowerCase()) {
-  throw new Error("Transaction sender does not match order wallet");
-}
+    //  Verify sender
+    if (from.toLowerCase() !== order.userWallet.toLowerCase()) {
+      console.log("❌ ERROR: Transaction sender does not match order wallet");
+      console.log("   Expected:", order.userWallet.toLowerCase());
+      console.log("   Got:", from.toLowerCase());
+      throw new Error("Transaction sender does not match order wallet");
+    }
 
     stableAmountPaid = Number(ethers.formatUnits(log.data, decimals));
+    console.log("✅ MATCH FOUND!");
+    console.log("💰 Amount Paid:", stableAmountPaid);
     break;
   }
 
   if (stableAmountPaid === null) {
+    console.log("\n❌ No matching token transfer found in transaction logs");
+    console.log("Summary:");
+    console.log("  - Total logs checked:", logIndex);
+    console.log("  - Looking for token:", tokenAddress);
+    console.log("  - Looking for recipient:", ERC20_RECIPIENT.toLowerCase());
+    console.log("  - Looking for sender:", order.userWallet.toLowerCase());
     throw new Error("No matching token transfer found in transaction logs");
   }
 
   const pyrandToSend = Number((stableAmountPaid / order.priceAtCreation).toFixed(6));
-  if (pyrandToSend <= 0) throw new Error("Calculated PYRAND amount is zero");
+  console.log("\n💎 NILA Calculation:");
+  console.log("  Amount Paid:", stableAmountPaid, "USDT");
+  console.log("  NILA Price:", order.priceAtCreation);
+  console.log("  NILA to Send:", pyrandToSend);
+  
+  if (pyrandToSend <= 0) {
+    console.log("❌ ERROR: Calculated NILA amount is zero");
+    throw new Error("Calculated PYRAND amount is zero");
+  }
 
   // Update stableAmount on order with what was actually paid
   order.stableAmount = stableAmountPaid;
 
+  console.log("✅ ===== VERIFICATION SUCCESSFUL =====\n");
   return pyrandToSend;
 }
 
@@ -671,24 +908,43 @@ async function getEvmTransactionWithRetry(provider, txHash, retry = 5) {
 }
 
 async function getEvmConfirmedTx(provider, txHash, retry = 10) {
+  console.log(`\n⏳ Waiting for transaction confirmation...`);
+  console.log(`🔗 TX Hash: ${txHash}`);
+  console.log(`🔄 Max retries: ${retry}`);
 
   for (let i = 0; i < retry; i++) {
+    console.log(`\n🔍 Attempt ${i + 1}/${retry}`);
 
     try {
-
       const receipt = await provider.getTransactionReceipt(txHash);
 
-      if (receipt && receipt.status === 1) {
-        return receipt;
+      if (receipt) {
+        console.log(`📦 Receipt found!`);
+        console.log(`   Block: ${receipt.blockNumber}`);
+        console.log(`   Status: ${receipt.status === 1 ? '✅ Success' : '❌ Failed'}`);
+        console.log(`   Logs: ${receipt.logs.length}`);
+        
+        if (receipt.status === 1) {
+          console.log(`✅ Transaction confirmed successfully!`);
+          return receipt;
+        } else {
+          console.log(`❌ Transaction failed on-chain`);
+        }
+      } else {
+        console.log(`⏳ Receipt not found yet, waiting...`);
       }
 
     } catch (err) {
-      console.log("RPC query error:", err.message);
+      console.log(`⚠️  RPC query error:`, err.message);
     }
 
-    await new Promise(r => setTimeout(r, 1500));
+    if (i < retry - 1) {
+      console.log(`⏱️  Waiting 1.5 seconds before retry...`);
+      await new Promise(r => setTimeout(r, 1500));
+    }
   }
 
+  console.log(`\n❌ Transaction not confirmed after ${retry} attempts`);
   return null;
 }
 async function getConfirmedTronTransaction(txHash, retry = 30) {
@@ -750,8 +1006,14 @@ async function verifyTRC20(txHash, order) {
   // ===============================
   // Normalize contract address
   // ===============================
+  const tronUsdtAddress = process.env.TRON_USDT_ADDRESS;
+  
+  if (!tronUsdtAddress) {
+    throw new Error("TRON_USDT_ADDRESS not configured in .env");
+  }
+  
   let contractAddrHex = tronWeb.address
-    .toHex(trc20Data.address)
+    .toHex(tronUsdtAddress)
     .toLowerCase();
 
   if (contractAddrHex.startsWith("41")) {
@@ -869,4 +1131,17 @@ app.listen(PORT, HOST, () => {
   console.log(`✅ Server running on ${SERVER_URL}`);
   console.log(`📡 Listening on ${HOST}:${PORT}`);
   console.log("Transaction verification endpoint: POST /verify-transaction");
+  
+  // Verify environment variables are loaded
+  console.log("\n🔍 Environment Variables Check:");
+  console.log("  ERC20_RECIPIENT:", ERC20_RECIPIENT ? "✅ Set" : "❌ Missing");
+  console.log("  TRON_RECIPIENT:", TRON_RECIPIENT ? "✅ Set" : "❌ Missing");
+  console.log("  BSC_USDT_ADDRESS:", process.env.BSC_USDT_ADDRESS ? "✅ Set" : "❌ Missing");
+  console.log("  BSC_USDC_ADDRESS:", process.env.BSC_USDC_ADDRESS ? "✅ Set" : "❌ Missing");
+  console.log("  ETH_USDT_ADDRESS:", process.env.ETH_USDT_ADDRESS ? "✅ Set" : "❌ Missing");
+  console.log("  ETH_USDC_ADDRESS:", process.env.ETH_USDC_ADDRESS ? "✅ Set" : "❌ Missing");
+  console.log("  TRON_USDT_ADDRESS:", process.env.TRON_USDT_ADDRESS ? "✅ Set" : "❌ Missing");
+  console.log("  STAKING_CONTRACT_ADDRESS:", process.env.STAKING_CONTRACT_ADDRESS ? "✅ Set" : "❌ Missing");
+  console.log("  NILA_TOKEN_ADDRESS:", process.env.NILA_TOKEN_ADDRESS ? "✅ Set" : "❌ Missing");
+  console.log("");
 });

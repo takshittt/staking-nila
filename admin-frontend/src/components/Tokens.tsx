@@ -1,9 +1,8 @@
 import { useState, useEffect } from 'react';
-import { ShieldCheck, AlertTriangle, AlertOctagon, Wallet, ArrowDownCircle, ArrowUpCircle, DollarSign, TrendingDown, TrendingUp } from 'lucide-react';
+import { ShieldCheck, AlertTriangle, AlertOctagon, Wallet, ArrowDownCircle, ArrowUpCircle, TrendingUp, Clock, Zap, Users, Pause, Play } from 'lucide-react';
 import { DepositModal, WithdrawModal } from './TreasuryModals';
-import { USDTWithdrawModal, NILALiabilityDepositModal } from './USDTModals';
 import { treasuryApi } from '../api/treasuryApi';
-import type { TreasuryStats, NILALiabilityStatus, USDTBalance } from '../api/treasuryApi';
+import type { TreasuryStats } from '../api/treasuryApi';
 import toast from 'react-hot-toast';
 
 const Tokens = () => {
@@ -13,14 +12,8 @@ const Tokens = () => {
     const [isDepositOpen, setIsDepositOpen] = useState(false);
     const [isWithdrawOpen, setIsWithdrawOpen] = useState(false);
     const [isProcessing, setIsProcessing] = useState(false);
-    
-    // USDT states
-    const [usdtBalance, setUsdtBalance] = useState<USDTBalance | null>(null);
-    const [isUSDTWithdrawOpen, setIsUSDTWithdrawOpen] = useState(false);
-    
-    // NILA Liability states
-    const [nilaLiabilityStatus, setNilaLiabilityStatus] = useState<NILALiabilityStatus | null>(null);
-    const [isNILALiabilityDepositOpen, setIsNILALiabilityDepositOpen] = useState(false);
+    const [isPaused, setIsPaused] = useState(false);
+    const [isLoadingPauseStatus, setIsLoadingPauseStatus] = useState(false);
 
     // Fetch treasury stats
     const fetchStats = async () => {
@@ -32,26 +25,40 @@ const Tokens = () => {
             const data = await treasuryApi.getStats();
             setStats(data);
             
-            // Fetch USDT balance
-            try {
-                const usdtData = await treasuryApi.getUSDTBalance();
-                setUsdtBalance(usdtData);
-            } catch (err) {
-                console.error('Failed to fetch USDT balance:', err);
-            }
-            
-            // Fetch NILA liability status
-            try {
-                const liabilityData = await treasuryApi.getNILALiabilityStatus();
-                setNilaLiabilityStatus(liabilityData);
-            } catch (err) {
-                console.error('Failed to fetch NILA liability status:', err);
-            }
+            // Fetch contract pause status
+            await fetchPauseStatus();
             
         } catch (err: any) {
             setError(err.response?.data?.error || 'Failed to fetch treasury stats');
         } finally {
             setLoading(false);
+        }
+    };
+
+    const fetchPauseStatus = async () => {
+        try {
+            const status = await treasuryApi.getStatus();
+            setIsPaused(status.isPaused);
+        } catch (err) {
+            console.error('Failed to fetch pause status:', err);
+        }
+    };
+
+    const handlePauseToggle = async () => {
+        try {
+            setIsLoadingPauseStatus(true);
+            if (isPaused) {
+                await treasuryApi.unpause();
+                toast.success('Contract unpaused successfully');
+            } else {
+                await treasuryApi.pause();
+                toast.success('Contract paused successfully');
+            }
+            await fetchPauseStatus();
+        } catch (err: any) {
+            toast.error(err.response?.data?.error || 'Failed to toggle pause status');
+        } finally {
+            setIsLoadingPauseStatus(false);
         }
     };
 
@@ -67,6 +74,7 @@ const Tokens = () => {
             setIsProcessing(true);
             await treasuryApi.deposit(amount);
             setIsDepositOpen(false);
+            toast.success(`Successfully deposited ${amount} NILA`);
             // Refresh stats after deposit
             await fetchStats();
         } catch (err: any) {
@@ -85,37 +93,9 @@ const Tokens = () => {
             // Refresh stats after withdrawal
             await fetchStats();
         } catch (err: any) {
-            toast.error(err.response?.data?.error || 'Failed to withdraw tokens');
-        } finally {
-            setIsProcessing(false);
-        }
-    };
-
-    const handleUSDTWithdraw = async (amount: number) => {
-        try {
-            setIsProcessing(true);
-            await treasuryApi.withdrawUSDT(amount);
-            setIsUSDTWithdrawOpen(false);
-            toast.success(`Successfully withdrew ${amount} USDT`);
-            // Refresh stats after withdrawal
-            await fetchStats();
-        } catch (err: any) {
-            toast.error(err.response?.data?.error || 'Failed to withdraw USDT');
-        } finally {
-            setIsProcessing(false);
-        }
-    };
-
-    const handleNILALiabilityDeposit = async (amount: number) => {
-        try {
-            setIsProcessing(true);
-            await treasuryApi.depositNILAForLiabilities(amount);
-            setIsNILALiabilityDepositOpen(false);
-            toast.success(`Successfully deposited ${amount} NILA for liabilities`);
-            // Refresh stats after deposit
-            await fetchStats();
-        } catch (err: any) {
-            toast.error(err.response?.data?.error || 'Failed to deposit NILA for liabilities');
+            const errorMessage = err.response?.data?.error || err.message || 'Failed to withdraw tokens';
+            toast.error(errorMessage);
+            // Keep modal open so user can see the error and try again
         } finally {
             setIsProcessing(false);
         }
@@ -141,14 +121,30 @@ const Tokens = () => {
 
     // Convert wei to tokens (18 decimals)
     const contractBalance = Number(stats.contractBalance || 0) / 1e18;
-    const pendingRewards = Number(stats.pendingRewards || 0) / 1e18;
+    const totalStaked = Number(stats.totalStaked || 0) / 1e18;
+    const availableForRewards = Number(stats.availableForRewards || 0) / 1e18;
+    const claimableInstant = Number(stats.claimableInstantRewards || 0) / 1e18;
+    const claimableReferral = Number(stats.claimableReferralRewards || 0) / 1e18;
+    const totalClaimableNow = Number(stats.totalClaimableNow || 0) / 1e18;
+    const currentAPY = Number(stats.currentAPYRewards || 0) / 1e18;
+    const projectedDaily = Number(stats.projectedAPYDaily || 0) / 1e18;
+    const projectedMonthly = Number(stats.projectedAPYMonthly || 0) / 1e18;
+    const totalObligations = Number(stats.totalObligations || 0) / 1e18;
+    const netPosition = Number(stats.netPosition || 0) / 1e18;
+    const recommendedDeposit = Number(stats.recommendedDeposit || 0) / 1e18;
+    const bufferForNewStakes = Number(stats.bufferForNewStakes || 0) / 1e18;
+    
     const healthStatus = stats.healthStatus;
-    const tokensNeeded = Math.max(0, pendingRewards - contractBalance);
+    const coverageRatio = stats.coverageRatio;
+    const daysUntilCritical = stats.daysUntilCritical;
 
     // Helper function to safely format numbers
-    const formatNumber = (value: number) => {
+    const formatNumber = (value: number, decimals: number = 2) => {
         if (isNaN(value) || !isFinite(value)) return '0';
-        return value.toLocaleString(undefined, { maximumFractionDigits: 2 });
+        return value.toLocaleString(undefined, { 
+            minimumFractionDigits: decimals,
+            maximumFractionDigits: decimals 
+        });
     };
 
     const renderHealthBanner = () => {
@@ -159,9 +155,13 @@ const Tokens = () => {
                         <div className="p-2 bg-green-100 rounded-full">
                             <ShieldCheck className="w-6 h-6 text-green-600" />
                         </div>
-                        <div>
+                        <div className="flex-1">
                             <h3 className="font-semibold text-green-900">Treasury is Healthy</h3>
-                            <p className="text-sm text-green-700">Contract balance is sufficient to cover all pending rewards.</p>
+                            <p className="text-sm text-green-700">
+                                Coverage ratio: {formatNumber(coverageRatio * 100, 0)}% • 
+                                Surplus: {formatNumber(netPosition)} NILA • 
+                                Safe for ~{daysUntilCritical} days
+                            </p>
                         </div>
                     </div>
                 );
@@ -171,10 +171,19 @@ const Tokens = () => {
                         <div className="p-2 bg-amber-100 rounded-full">
                             <AlertTriangle className="w-6 h-6 text-amber-600" />
                         </div>
-                        <div>
+                        <div className="flex-1">
                             <h3 className="font-semibold text-amber-900">Treasury Needs Attention</h3>
-                            <p className="text-sm text-amber-700">Balance is low relative to pending obligations. Consider depositing more tokens.</p>
+                            <p className="text-sm text-amber-700">
+                                Coverage ratio: {formatNumber(coverageRatio * 100, 0)}% (below 120% threshold) • 
+                                Recommend depositing {formatNumber(recommendedDeposit)} NILA
+                            </p>
                         </div>
+                        <button
+                            onClick={() => setIsDepositOpen(true)}
+                            className="px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 transition-colors font-medium text-sm"
+                        >
+                            Deposit Now
+                        </button>
                     </div>
                 );
             case 'critical':
@@ -183,12 +192,19 @@ const Tokens = () => {
                         <div className="p-2 bg-red-100 rounded-full">
                             <AlertOctagon className="w-6 h-6 text-red-600" />
                         </div>
-                        <div>
-                            <h3 className="font-semibold text-red-900">Treasury Critical</h3>
+                        <div className="flex-1">
+                            <h3 className="font-semibold text-red-900">Treasury Critical - Immediate Action Required</h3>
                             <p className="text-sm text-red-700">
-                                <strong>{formatNumber(tokensNeeded)} NILA</strong> deficit. Immediate deposit required to ensure solvency.
+                                <strong>Deficit: {formatNumber(Math.abs(netPosition))} NILA</strong> • 
+                                Deposit {formatNumber(recommendedDeposit)} NILA immediately to ensure solvency
                             </p>
                         </div>
+                        <button
+                            onClick={() => setIsDepositOpen(true)}
+                            className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-medium text-sm animate-pulse"
+                        >
+                            Deposit Now
+                        </button>
                     </div>
                 );
         }
@@ -199,7 +215,7 @@ const Tokens = () => {
             <div className="flex items-center justify-between">
                 <div>
                     <h1 className="text-3xl font-bold text-slate-900">Token Treasury</h1>
-                    <p className="text-slate-600 mt-1">Monitor contract liquidity and manage funds</p>
+                    <p className="text-slate-600 mt-1">Monitor reward pool and manage liquidity</p>
                 </div>
                 <div className="flex gap-3">
                     <button
@@ -221,181 +237,293 @@ const Tokens = () => {
 
             {renderHealthBanner()}
 
-            {/* NILA Liability Status Section */}
-            {nilaLiabilityStatus && (
-                <div className="bg-gradient-to-br from-red-50 to-orange-50 rounded-2xl p-6 border border-red-100 shadow-sm">
-                    <div className="flex items-center justify-between mb-4">
-                        <div className="flex items-center gap-3">
-                            <div className="p-2 bg-red-100 rounded-lg">
-                                <TrendingDown className="w-5 h-5 text-red-600" />
-                            </div>
-                            <div>
-                                <h3 className="text-lg font-bold text-slate-900">NILA Liabilities (USDT Purchases)</h3>
-                                <p className="text-sm text-slate-600">NILA recorded from USDT purchases - must be covered</p>
-                            </div>
+            {/* Contract Overview */}
+            <div>
+                <h2 className="text-lg font-semibold text-slate-900 mb-3">Contract Overview</h2>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="bg-white p-5 rounded-xl border border-slate-100 shadow-sm">
+                        <div className="flex items-center gap-2 mb-2">
+                            <Wallet className="w-5 h-5 text-blue-600" />
+                            <p className="text-sm text-slate-600 font-medium">Contract Balance</p>
                         </div>
-                        <button
-                            onClick={() => setIsNILALiabilityDepositOpen(true)}
-                            className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-medium shadow-sm"
-                        >
-                            <ArrowDownCircle className="w-5 h-5" />
-                            Deposit NILA
-                        </button>
+                        <p className="text-3xl font-bold text-slate-900">
+                            {formatNumber(contractBalance)}
+                        </p>
+                        <p className="text-xs text-slate-500 mt-1">Total NILA in contract</p>
                     </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                        <div className="bg-white/80 backdrop-blur-sm p-4 rounded-xl border border-red-100">
-                            <p className="text-sm text-slate-600 mb-1">Total Liabilities</p>
-                            <p className="text-2xl font-bold text-slate-900">
-                                {(Number(nilaLiabilityStatus.totalLiabilities) / 1e18).toLocaleString()}
-                            </p>
-                            <p className="text-xs text-slate-500 mt-1">NILA recorded</p>
+                    <div className="bg-white p-5 rounded-xl border border-slate-100 shadow-sm">
+                        <div className="flex items-center gap-2 mb-2">
+                            <Users className="w-5 h-5 text-purple-600" />
+                            <p className="text-sm text-slate-600 font-medium">User Staked</p>
                         </div>
-
-                        <div className="bg-white/80 backdrop-blur-sm p-4 rounded-xl border border-red-100">
-                            <p className="text-sm text-slate-600 mb-1">NILA Balance</p>
-                            <p className="text-2xl font-bold text-slate-900">
-                                {(Number(nilaLiabilityStatus.nilaBalance) / 1e18).toLocaleString()}
-                            </p>
-                            <p className="text-xs text-slate-500 mt-1">Available to pay</p>
-                        </div>
-
-                        <div className="bg-white/80 backdrop-blur-sm p-4 rounded-xl border border-red-100">
-                            <p className="text-sm text-slate-600 mb-1">
-                                {nilaLiabilityStatus.hasSurplus ? 'Surplus' : 'Deficit'}
-                            </p>
-                            <p className={`text-2xl font-bold ${nilaLiabilityStatus.hasSurplus ? 'text-green-600' : 'text-red-600'}`}>
-                                {nilaLiabilityStatus.hasSurplus ? '+' : '-'}
-                                {(Math.abs(Number(nilaLiabilityStatus.deficitOrSurplus)) / 1e18).toLocaleString()}
-                            </p>
-                            <p className="text-xs text-slate-500 mt-1">
-                                {nilaLiabilityStatus.hasSurplus ? 'Extra buffer' : 'Need to deposit'}
-                            </p>
-                        </div>
-
-                        <div className="bg-white/80 backdrop-blur-sm p-4 rounded-xl border border-red-100 flex items-center justify-center">
-                            {nilaLiabilityStatus.hasSurplus ? (
-                                <div className="text-center">
-                                    <ShieldCheck className="w-8 h-8 text-green-600 mx-auto mb-2" />
-                                    <p className="text-sm font-bold text-green-700">Covered</p>
-                                </div>
-                            ) : (
-                                <div className="text-center">
-                                    <AlertOctagon className="w-8 h-8 text-red-600 mx-auto mb-2" />
-                                    <p className="text-sm font-bold text-red-700">Action Needed</p>
-                                </div>
-                            )}
-                        </div>
-                    </div>
-                </div>
-            )}
-
-            {/* USDT Treasury Section */}
-            {usdtBalance && (
-                <div className="bg-gradient-to-br from-blue-50 to-cyan-50 rounded-2xl p-6 border border-blue-100 shadow-sm">
-                    <div className="flex items-center justify-between mb-4">
-                        <div className="flex items-center gap-3">
-                            <div className="p-2 bg-blue-100 rounded-lg">
-                                <DollarSign className="w-5 h-5 text-blue-600" />
-                            </div>
-                            <div>
-                                <h3 className="text-lg font-bold text-slate-900">USDT Treasury</h3>
-                                <p className="text-sm text-slate-600">Collected from USDT purchases</p>
-                            </div>
-                        </div>
-                        <button
-                            onClick={() => setIsUSDTWithdrawOpen(true)}
-                            disabled={Number(usdtBalance.balance) === 0}
-                            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
-                        >
-                            <ArrowUpCircle className="w-5 h-5" />
-                            Withdraw USDT
-                        </button>
+                        <p className="text-3xl font-bold text-slate-900">
+                            {formatNumber(totalStaked)}
+                        </p>
+                        <p className="text-xs text-slate-500 mt-1">Locked by users (not for rewards)</p>
                     </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div className="bg-white/80 backdrop-blur-sm p-4 rounded-xl border border-blue-100">
-                            <p className="text-sm text-slate-600 mb-1">Current Balance</p>
-                            <p className="text-3xl font-bold text-slate-900">
-                                {(Number(usdtBalance.balance) / 1e18).toLocaleString()}
-                            </p>
-                            <p className="text-xs text-slate-500 mt-1">USDT available to withdraw</p>
+                    <div className="bg-white p-5 rounded-xl border border-slate-100 shadow-sm">
+                        <div className="flex items-center gap-2 mb-2">
+                            <TrendingUp className="w-5 h-5 text-green-600" />
+                            <p className="text-sm text-slate-600 font-medium">Available for Rewards</p>
                         </div>
-
-                        <div className="bg-white/80 backdrop-blur-sm p-4 rounded-xl border border-blue-100">
-                            <p className="text-sm text-slate-600 mb-1">Total Collected</p>
-                            <p className="text-3xl font-bold text-slate-900">
-                                {(Number(usdtBalance.totalCollected) / 1e18).toLocaleString()}
-                            </p>
-                            <p className="text-xs text-slate-500 mt-1">USDT from all purchases</p>
-                        </div>
+                        <p className="text-3xl font-bold text-green-600">
+                            {formatNumber(availableForRewards)}
+                        </p>
+                        <p className="text-xs text-slate-500 mt-1">Admin deposited reward pool</p>
                     </div>
-                </div>
-            )}
-
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                {/* Contract Balance (Treasury Assets) */}
-                <div className="bg-white p-6 rounded-xl border border-slate-100 shadow-sm relative overflow-hidden">
-                    <div className="absolute top-0 right-0 p-4 opacity-10">
-                        <Wallet className="w-24 h-24 text-blue-600" />
-                    </div>
-                    <p className="text-slate-500 font-medium mb-1">Total Assets</p>
-                    <h2 className="text-4xl font-bold text-slate-900 mb-2">
-                        {(contractBalance - (Number(stats.totalStaked) / 1e18)).toLocaleString()}
-                        <span className="text-lg text-slate-500 font-normal ml-2">NILA</span>
-                    </h2>
-                    <p className="text-sm text-slate-400">Excludes user staked tokens</p>
-                </div>
-
-                {/* Pending Rewards (Liabilities) */}
-                <div className="bg-white p-6 rounded-xl border border-slate-100 shadow-sm">
-                    <p className="text-slate-500 font-medium mb-1">Liabilities</p>
-                    <h2 className="text-4xl font-bold text-slate-900 mb-2">
-                        {pendingRewards.toLocaleString()}
-                        <span className="text-lg text-slate-500 font-normal ml-2">NILA</span>
-                    </h2>
-                    <p className="text-sm text-slate-400">Pending rewards (APY + Instant + Ref)</p>
-                </div>
-
-                {/* Net Position */}
-                <div className="bg-white p-6 rounded-xl border border-slate-100 shadow-sm">
-                    <p className="text-slate-500 font-medium mb-1">Net Position</p>
-                    <h2 className={`text-4xl font-bold mb-2 ${(contractBalance - (Number(stats.totalStaked) / 1e18)) >= pendingRewards ? 'text-green-600' : 'text-red-600'}`}>
-                        {((contractBalance - (Number(stats.totalStaked) / 1e18)) - pendingRewards).toLocaleString()}
-                        <span className="text-lg text-slate-500 font-normal ml-2">NILA</span>
-                    </h2>
-                    <p className="text-sm text-slate-400">
-                        {(contractBalance - (Number(stats.totalStaked) / 1e18)) >= pendingRewards ? 'Surplus available' : 'Deficit - Action needed'}
-                    </p>
                 </div>
             </div>
-            {/* Quick Actions / Explainer */}
+
+            {/* Immediate Obligations */}
+            <div>
+                <h2 className="text-lg font-semibold text-slate-900 mb-3">Immediate Obligations (Claimable Now)</h2>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="bg-gradient-to-br from-orange-50 to-red-50 p-5 rounded-xl border border-orange-100 shadow-sm">
+                        <div className="flex items-center gap-2 mb-2">
+                            <Zap className="w-5 h-5 text-orange-600" />
+                            <p className="text-sm text-slate-700 font-medium">Instant Cashback</p>
+                        </div>
+                        <p className="text-3xl font-bold text-slate-900">
+                            {formatNumber(claimableInstant)}
+                        </p>
+                        <p className="text-xs text-slate-600 mt-1">From Buy & Stake purchases</p>
+                    </div>
+
+                    <div className="bg-gradient-to-br from-blue-50 to-cyan-50 p-5 rounded-xl border border-blue-100 shadow-sm">
+                        <div className="flex items-center gap-2 mb-2">
+                            <Users className="w-5 h-5 text-blue-600" />
+                            <p className="text-sm text-slate-700 font-medium">Referral Rewards</p>
+                        </div>
+                        <p className="text-3xl font-bold text-slate-900">
+                            {formatNumber(claimableReferral)}
+                        </p>
+                        <p className="text-xs text-slate-600 mt-1">Referrer + referral bonuses</p>
+                    </div>
+
+                    <div className="bg-gradient-to-br from-purple-50 to-pink-50 p-5 rounded-xl border border-purple-100 shadow-sm">
+                        <div className="flex items-center gap-2 mb-2">
+                            <AlertTriangle className="w-5 h-5 text-purple-600" />
+                            <p className="text-sm text-slate-700 font-medium">Total Claimable</p>
+                        </div>
+                        <p className="text-3xl font-bold text-purple-600">
+                            {formatNumber(totalClaimableNow)}
+                        </p>
+                        <p className="text-xs text-slate-600 mt-1">Can be claimed immediately</p>
+                    </div>
+                </div>
+            </div>
+
+            {/* APY Rewards */}
+            <div>
+                <h2 className="text-lg font-semibold text-slate-900 mb-3">APY Rewards (Time-based, Accruing)</h2>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="bg-white p-5 rounded-xl border border-slate-100 shadow-sm">
+                        <div className="flex items-center gap-2 mb-2">
+                            <Clock className="w-5 h-5 text-indigo-600" />
+                            <p className="text-sm text-slate-600 font-medium">Current APY Pending</p>
+                        </div>
+                        <p className="text-3xl font-bold text-slate-900">
+                            {formatNumber(currentAPY)}
+                        </p>
+                        <p className="text-xs text-slate-500 mt-1">Accrued since last claim</p>
+                    </div>
+
+                    <div className="bg-white p-5 rounded-xl border border-slate-100 shadow-sm">
+                        <div className="flex items-center gap-2 mb-2">
+                            <TrendingUp className="w-5 h-5 text-emerald-600" />
+                            <p className="text-sm text-slate-600 font-medium">Daily Accrual</p>
+                        </div>
+                        <p className="text-3xl font-bold text-emerald-600">
+                            +{formatNumber(projectedDaily)}
+                        </p>
+                        <p className="text-xs text-slate-500 mt-1">NILA per day</p>
+                    </div>
+
+                    <div className="bg-white p-5 rounded-xl border border-slate-100 shadow-sm">
+                        <div className="flex items-center gap-2 mb-2">
+                            <TrendingUp className="w-5 h-5 text-teal-600" />
+                            <p className="text-sm text-slate-600 font-medium">Monthly Projection</p>
+                        </div>
+                        <p className="text-3xl font-bold text-teal-600">
+                            +{formatNumber(projectedMonthly)}
+                        </p>
+                        <p className="text-xs text-slate-500 mt-1">NILA per month</p>
+                    </div>
+                </div>
+            </div>
+
+            {/* Financial Summary */}
+            <div>
+                <h2 className="text-lg font-semibold text-slate-900 mb-3">Financial Summary</h2>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="bg-white p-5 rounded-xl border border-slate-100 shadow-sm">
+                        <p className="text-sm text-slate-600 font-medium mb-2">Total Obligations</p>
+                        <p className="text-3xl font-bold text-slate-900">
+                            {formatNumber(totalObligations)}
+                        </p>
+                        <p className="text-xs text-slate-500 mt-1">Claimable + APY pending</p>
+                    </div>
+
+                    <div className="bg-white p-5 rounded-xl border border-slate-100 shadow-sm">
+                        <p className="text-sm text-slate-600 font-medium mb-2">Net Position</p>
+                        <p className={`text-3xl font-bold ${netPosition >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                            {netPosition >= 0 ? '+' : ''}{formatNumber(netPosition)}
+                        </p>
+                        <p className="text-xs text-slate-500 mt-1">
+                            {netPosition >= 0 ? 'Surplus available' : 'Deficit - deposit needed'}
+                        </p>
+                    </div>
+
+                    <div className="bg-white p-5 rounded-xl border border-slate-100 shadow-sm">
+                        <p className="text-sm text-slate-600 font-medium mb-2">Recommended Deposit</p>
+                        <p className={`text-3xl font-bold ${recommendedDeposit > 0 ? 'text-amber-600' : 'text-green-600'}`}>
+                            {formatNumber(recommendedDeposit)}
+                        </p>
+                        <p className="text-xs text-slate-500 mt-1">
+                            {recommendedDeposit > 0 ? 'To reach healthy status' : 'Already healthy'}
+                        </p>
+                    </div>
+                </div>
+            </div>
+
+            {/* Insights */}
+            <div className="bg-slate-50 rounded-xl p-6 border border-slate-200">
+                <h3 className="font-semibold text-slate-900 mb-4">Treasury Insights</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="flex items-start gap-3">
+                        <div className="p-2 bg-blue-100 rounded-lg">
+                            <ShieldCheck className="w-5 h-5 text-blue-600" />
+                        </div>
+                        <div>
+                            <p className="text-sm font-medium text-slate-900">Coverage Ratio</p>
+                            <p className="text-2xl font-bold text-blue-600">{formatNumber(coverageRatio * 100, 0)}%</p>
+                            <p className="text-xs text-slate-600 mt-1">
+                                {coverageRatio >= 1.2 ? 'Healthy (above 120% threshold)' : 
+                                 coverageRatio >= 1.0 ? 'Low (below 120% threshold)' : 
+                                 'Critical (below 100%)'}
+                            </p>
+                        </div>
+                    </div>
+
+                    <div className="flex items-start gap-3">
+                        <div className="p-2 bg-amber-100 rounded-lg">
+                            <Clock className="w-5 h-5 text-amber-600" />
+                        </div>
+                        <div>
+                            <p className="text-sm font-medium text-slate-900">Days Until Critical</p>
+                            <p className="text-2xl font-bold text-amber-600">
+                                {daysUntilCritical > 0 ? daysUntilCritical : 'N/A'}
+                            </p>
+                            <p className="text-xs text-slate-600 mt-1">
+                                {daysUntilCritical > 0 ? 'At current APY accrual rate' : 'Already critical or no accrual'}
+                            </p>
+                        </div>
+                    </div>
+
+                    <div className="flex items-start gap-3">
+                        <div className="p-2 bg-green-100 rounded-lg">
+                            <Wallet className="w-5 h-5 text-green-600" />
+                        </div>
+                        <div>
+                            <p className="text-sm font-medium text-slate-900">Buffer for New Stakes</p>
+                            <p className="text-2xl font-bold text-green-600">{formatNumber(bufferForNewStakes)}</p>
+                            <p className="text-xs text-slate-600 mt-1">
+                                Available for instant + referral rewards (~12% of stake amount)
+                            </p>
+                        </div>
+                    </div>
+
+                    <div className="flex items-start gap-3">
+                        <div className="p-2 bg-purple-100 rounded-lg">
+                            <TrendingUp className="w-5 h-5 text-purple-600" />
+                        </div>
+                        <div>
+                            <p className="text-sm font-medium text-slate-900">Max New Stakes Supported</p>
+                            <p className="text-2xl font-bold text-purple-600">
+                                {formatNumber(bufferForNewStakes / 0.12, 0)}
+                            </p>
+                            <p className="text-xs text-slate-600 mt-1">
+                                Approximate NILA worth of new stakes before deposit needed
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            {/* Health Guide */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* Contract Control */}
+                <div className="bg-white rounded-xl p-6 border border-slate-200 shadow-sm">
+                    <h3 className="font-semibold text-slate-900 mb-3">Contract Control</h3>
+                    <div className="space-y-4">
+                        <div className="flex items-center justify-between p-4 bg-slate-50 rounded-lg">
+                            <div className="flex items-center gap-3">
+                                {isPaused ? (
+                                    <div className="p-2 bg-red-100 rounded-lg">
+                                        <Pause className="w-5 h-5 text-red-600" />
+                                    </div>
+                                ) : (
+                                    <div className="p-2 bg-green-100 rounded-lg">
+                                        <Play className="w-5 h-5 text-green-600" />
+                                    </div>
+                                )}
+                                <div>
+                                    <p className="text-sm font-medium text-slate-900">Contract Status</p>
+                                    <p className="text-xs text-slate-600">
+                                        {isPaused ? 'Paused - Withdrawals enabled' : 'Active - Normal operations'}
+                                    </p>
+                                </div>
+                            </div>
+                            <button
+                                onClick={handlePauseToggle}
+                                disabled={isLoadingPauseStatus}
+                                className={`px-4 py-2 rounded-lg font-medium text-sm transition-colors ${
+                                    isPaused
+                                        ? 'bg-green-600 hover:bg-green-700 text-white'
+                                        : 'bg-red-600 hover:bg-red-700 text-white'
+                                } disabled:opacity-50 disabled:cursor-not-allowed`}
+                            >
+                                {isLoadingPauseStatus ? 'Processing...' : isPaused ? 'Unpause' : 'Pause'}
+                            </button>
+                        </div>
+                        <div className="text-xs text-slate-600 space-y-1">
+                            <p>• Pause contract before withdrawing tokens</p>
+                            <p>• Unpause after withdrawal to resume operations</p>
+                            <p>• Users cannot stake or claim while paused</p>
+                        </div>
+                    </div>
+                </div>
+
                 <div className="bg-slate-50 rounded-xl p-6 border border-slate-200">
                     <h3 className="font-semibold text-slate-900 mb-3">About Treasury Health</h3>
                     <ul className="space-y-2 text-sm text-slate-600">
                         <li className="flex gap-2">
                             <div className="w-1.5 h-1.5 rounded-full bg-green-500 mt-1.5" />
                             <span>
-                                <strong>Healthy:</strong> Assets cover at least 120% of liabilities. Safe buffer.
+                                <strong>Healthy:</strong> Coverage ratio ≥ 120%. Safe buffer for operations.
                             </span>
                         </li>
                         <li className="flex gap-2">
                             <div className="w-1.5 h-1.5 rounded-full bg-amber-500 mt-1.5" />
                             <span>
-                                <strong>Low:</strong> Assets cover 100-120% of liabilities. Monitor closely.
+                                <strong>Low:</strong> Coverage ratio 100-120%. Monitor closely and consider depositing.
                             </span>
                         </li>
                         <li className="flex gap-2">
                             <div className="w-1.5 h-1.5 rounded-full bg-red-500 mt-1.5" />
                             <span>
-                                <strong>Critical:</strong> Assets are less than liabilities.
-                                <span className="text-red-600 font-medium"> Deposits may fail.</span>
+                                <strong>Critical:</strong> Coverage ratio &lt; 100%. 
+                                <span className="text-red-600 font-medium"> Immediate deposit required.</span>
                             </span>
                         </li>
                     </ul>
                 </div>
+            </div>
 
+            {/* Contract Info */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="bg-slate-50 rounded-xl p-6 border border-slate-200">
                     <h3 className="font-semibold text-slate-900 mb-3">Contract Info</h3>
                     <div className="space-y-3">
@@ -405,7 +533,13 @@ const Tokens = () => {
                                 <code className="bg-white px-2 py-1 rounded border border-slate-200 text-sm font-mono text-slate-700">
                                     {stats.contractAddress ? `${stats.contractAddress.slice(0, 6)}...${stats.contractAddress.slice(-4)}` : 'N/A'}
                                 </code>
-                                <span className="text-xs text-green-600 bg-green-100 px-2 py-0.5 rounded-full font-medium">Active</span>
+                                <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+                                    isPaused 
+                                        ? 'text-red-600 bg-red-100' 
+                                        : 'text-green-600 bg-green-100'
+                                }`}>
+                                    {isPaused ? 'Paused' : 'Active'}
+                                </span>
                             </div>
                         </div>
                         <div>
@@ -414,6 +548,16 @@ const Tokens = () => {
                         </div>
                     </div>
                 </div>
+
+                <div className="bg-slate-50 rounded-xl p-6 border border-slate-200">
+                    <h3 className="font-semibold text-slate-900 mb-3">Withdrawal Instructions</h3>
+                    <ol className="space-y-2 text-sm text-slate-600 list-decimal list-inside">
+                        <li>Pause the contract using the control panel</li>
+                        <li>Click "Withdraw" and enter the amount</li>
+                        <li>Confirm the transaction in your wallet</li>
+                        <li>Unpause the contract to resume operations</li>
+                    </ol>
+                </div>
             </div>
 
             <DepositModal
@@ -421,6 +565,8 @@ const Tokens = () => {
                 onClose={() => setIsDepositOpen(false)}
                 onConfirm={handleDeposit}
                 isProcessing={isProcessing}
+                recommendedAmount={recommendedDeposit}
+                currentHealth={healthStatus}
             />
 
             <WithdrawModal
@@ -428,29 +574,9 @@ const Tokens = () => {
                 onClose={() => setIsWithdrawOpen(false)}
                 onConfirm={handleWithdraw}
                 isProcessing={isProcessing}
-                maxAmount={contractBalance}
+                maxAmount={availableForRewards}
             />
-
-            <USDTWithdrawModal
-                isOpen={isUSDTWithdrawOpen}
-                onClose={() => setIsUSDTWithdrawOpen(false)}
-                onConfirm={handleUSDTWithdraw}
-                isProcessing={isProcessing}
-                currentBalance={usdtBalance ? Number(usdtBalance.balance) / 1e18 : 0}
-                totalCollected={usdtBalance ? Number(usdtBalance.totalCollected) / 1e18 : 0}
-            />
-
-            <NILALiabilityDepositModal
-                isOpen={isNILALiabilityDepositOpen}
-                onClose={() => setIsNILALiabilityDepositOpen(false)}
-                onConfirm={handleNILALiabilityDeposit}
-                isProcessing={isProcessing}
-                totalLiabilities={nilaLiabilityStatus ? Number(nilaLiabilityStatus.totalLiabilities) / 1e18 : 0}
-                nilaBalance={nilaLiabilityStatus ? Number(nilaLiabilityStatus.nilaBalance) / 1e18 : 0}
-                deficit={nilaLiabilityStatus ? Math.abs(Number(nilaLiabilityStatus.deficitOrSurplus)) / 1e18 : 0}
-                hasSurplus={nilaLiabilityStatus?.hasSurplus || false}
-            />
-        </div >
+        </div>
     );
 };
 

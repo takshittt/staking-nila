@@ -11,7 +11,7 @@ const Transactions = () => {
     const [page, setPage] = useState(1);
     const [totalPages, setTotalPages] = useState(1);
 
-    const filters = ['All', 'Stake', 'Claim', 'Referral'];
+    const filters = ['All', 'Stake', 'Claim', 'Referral', 'Payment'];
 
     useEffect(() => {
         if (address) {
@@ -44,6 +44,8 @@ const Transactions = () => {
                 return { icon: Gift, bg: 'bg-purple-50', color: 'text-purple-600' };
             case 'REFERRAL_REWARD':
                 return { icon: UserPlus, bg: 'bg-green-50', color: 'text-green-600' };
+            case 'PAYMENT':
+                return { icon: ArrowDownLeft, bg: 'bg-emerald-50', color: 'text-emerald-600' };
             default:
                 return { icon: CheckCircle2, bg: 'bg-slate-50', color: 'text-slate-600' };
         }
@@ -90,6 +92,7 @@ const Transactions = () => {
         if (type === 'STAKE' || type === 'UNSTAKE') return 'Stake';
         if (type === 'CLAIM_REWARD') return 'Claim';
         if (type === 'REFERRAL_REWARD') return 'Referral';
+        if (type === 'PAYMENT') return 'Payment';
         return 'All';
     };
 

@@ -24,8 +24,18 @@ export interface TransactionFilters {
 }
 
 export class TransactionService {
-  // Create a new transaction record
+  // Create a new transaction record (idempotent - skips if already exists)
   static async createTransaction(data: CreateTransactionDto) {
+    // Check if transaction already exists
+    const existing = await prisma.transaction.findUnique({
+      where: { txHash: data.txHash }
+    });
+
+    if (existing) {
+      console.log(`Transaction ${data.txHash} already exists, skipping creation`);
+      return existing;
+    }
+
     return await prisma.transaction.create({
       data: {
         txHash: data.txHash,

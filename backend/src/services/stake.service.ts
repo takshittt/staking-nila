@@ -14,7 +14,7 @@ export class StakeService {
     return `STK-${String(count + 1).padStart(3, '0')}`;
   }
 
-  // Create stake record
+  // Create stake record (idempotent - skips if stake with same txHash exists)
   static async createStake(data: {
     walletAddress: string;
     planName: string;
@@ -24,8 +24,21 @@ export class StakeService {
     lockDays: number;
     instantRewardPercent?: number;
     txHash?: string;
+    onChainStakeId?: number;  // Add blockchain stake index
   }) {
     const normalizedAddress = data.walletAddress.toLowerCase();
+
+    // If txHash is provided, check if stake already exists
+    if (data.txHash) {
+      const existingStake = await prisma.stake.findFirst({
+        where: { txHash: data.txHash }
+      });
+
+      if (existingStake) {
+        console.log(`Stake with txHash ${data.txHash} already exists, skipping creation`);
+        return existingStake;
+      }
+    }
 
     // Find or create user
     let user = await prisma.user.findUnique({
@@ -55,6 +68,7 @@ export class StakeService {
     const stake = await prisma.stake.create({
       data: {
         stakeId,
+        onChainStakeId: data.onChainStakeId,  // Store blockchain index
         userId: user.id,
         planName: data.planName,
         planVersion: data.planVersion,
@@ -186,7 +200,7 @@ export class StakeService {
       aprBps
     );
 
-    // Create database record (no instant rewards for admin-created stakes)
+    // Create database record with onChainStakeId
     const stake = await this.createStake({
       walletAddress: normalizedAddress,
       planName: 'Manual Assignment',
@@ -195,7 +209,8 @@ export class StakeService {
       apy: data.apy,
       lockDays: data.lockDays,
       instantRewardPercent: 0, // No instant rewards for admin stakes
-      txHash: result.txHash
+      txHash: result.txHash,
+      onChainStakeId: result.stakeId // Pass the blockchain stake index
     });
 
     return {
@@ -222,6 +237,7 @@ export class StakeService {
       return {
         id: stake.id,
         stakeId: stake.stakeId,
+        onChainStakeId: stake.onChainStakeId,
         wallet: stake.user.walletAddress,
         planName: stake.planName,
         planVersion: stake.planVersion,
@@ -255,6 +271,7 @@ export class StakeService {
       return {
         id: stake.id,
         stakeId: stake.stakeId,
+        onChainStakeId: stake.onChainStakeId,
         walletAddress: stake.user.walletAddress,
         planName: stake.planName,
         planVersion: stake.planVersion,

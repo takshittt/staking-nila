@@ -5,26 +5,47 @@
  *  STAKING CONTRACT CONFIGURATION
  * ============================================
  *
- * Client must:
- * 1. Add deployed staking contract address
- * 2. Add full contract ABI array
- *
  * IMPORTANT:
  * - Contract owner MUST be the same wallet as OWNER_PRIVATE_KEY in .env
- * - Contract must include adminCreateStake() function
+ * - Contract must include buyWithToken() function for Buy & Stake flow
+ * - This is NilaStakingUpgradeable contract
  *
  */
 
-export default {
-  
-  //  ADD YOUR DEPLOYED STAKING CONTRACT ADDRESS BELOW
-  // Example: "0x1234...."
-  stakingAddress: "0x1ac15bC1741f64221E22059C9f3B3A6ef8705E1c",
+export default function getStakingConfig() {
+  return {
+    
+    // Deployed staking contract address (from .env)
+    stakingAddress: process.env.STAKING_CONTRACT_ADDRESS,
 
-  // ADD FULL CONTRACT ABI ARRAY BELOW
-  // Paste full ABI JSON array here
-  stakingAbi: [
+    // Contract ABI - Only functions we need
+    stakingAbi: [
+      {
+        "inputs": [
+          {"internalType": "address", "name": "user", "type": "address"},
+          {"internalType": "uint256", "name": "nilaAmount", "type": "uint256"},
+          {"internalType": "uint256", "name": "lockDays", "type": "uint256"},
+          {"internalType": "uint256", "name": "apr", "type": "uint256"},
+          {"internalType": "address", "name": "referrer", "type": "address"}
+        ],
+        "name": "buyWithToken",
+        "outputs": [],
+        "stateMutability": "nonpayable",
+        "type": "function"
+      },
+      {
+        "inputs": [
+          {"internalType": "address", "name": "user", "type": "address"},
+          {"internalType": "uint256", "name": "amount", "type": "uint256"},
+          {"internalType": "uint256", "name": "lockDays", "type": "uint256"},
+          {"internalType": "uint256", "name": "apr", "type": "uint256"}
+        ],
+        "name": "adminCreateStake",
+        "outputs": [],
+        "stateMutability": "nonpayable",
+        "type": "function"
+      }
+    ]
 
-  ]
-
-};
+  };
+}

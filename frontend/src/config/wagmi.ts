@@ -1,6 +1,6 @@
 import { createAppKit } from '@reown/appkit/react'
 import { WagmiAdapter } from '@reown/appkit-adapter-wagmi'
-import { bsc, bscTestnet } from '@reown/appkit/networks'
+import { bsc, bscTestnet, mainnet, sepolia } from '@reown/appkit/networks'
 import { QueryClient } from '@tanstack/react-query'
 import type { AppKitNetwork } from '@reown/appkit/networks'
 
@@ -15,8 +15,8 @@ if (!projectId) {
 // Create query client
 export const queryClient = new QueryClient()
 
-// Define networks
-const networks = [bsc, bscTestnet] as [AppKitNetwork, ...AppKitNetwork[]]
+// Define networks - Added Ethereum mainnet and Sepolia testnet
+const networks = [bsc, bscTestnet, mainnet, sepolia] as [AppKitNetwork, ...AppKitNetwork[]]
 
 // Create Wagmi Adapter
 export const wagmiAdapter = new WagmiAdapter({

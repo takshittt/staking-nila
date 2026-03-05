@@ -3,6 +3,7 @@ const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
 export interface UserStake {
   id: string;
   stakeId: string | number;
+  onChainStakeId?: number | null; // Blockchain array index
   walletAddress: string;
   planName: string;
   planVersion: number;
@@ -148,6 +149,8 @@ export const dashboardApi = {
 
         return {
           ...stake,
+          // Use onChainStakeId for unstaking if available, otherwise fall back to stakeId
+          stakeId: stake.onChainStakeId ?? stake.stakeId,
           rewards: expectedRewards.toFixed(2),
           progress: Math.round(progress),
           cashback: cashbackAmount.toFixed(2),

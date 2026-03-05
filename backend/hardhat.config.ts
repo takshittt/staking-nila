@@ -21,6 +21,11 @@ const config: HardhatUserConfig = {
       accounts: process.env.PRIVATE_KEY ? [process.env.PRIVATE_KEY] : [],
       chainId: 97,
     },
+    bscMainnet: {
+      url: process.env.BSC_MAINNET_RPC || "",
+      accounts: process.env.PRIVATE_KEY ? [process.env.PRIVATE_KEY] : [],
+      chainId: 56,
+    },
   },
   etherscan: {
     apiKey: process.env.BSCSCAN_API_KEY || "",

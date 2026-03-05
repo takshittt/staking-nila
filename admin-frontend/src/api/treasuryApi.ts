@@ -1,33 +1,35 @@
 import api from './axiosConfig';
 
 export interface TreasuryStats {
+  // Contract state
   contractAddress: string;
-  contractBalance: string;
-  totalStaked: string;
-  availableRewards: string;
-  pendingRewards: string;
-  surplus: string;
-  coverageRatio: number;
+  contractBalance: string;           // Total NILA in contract
+  totalStaked: string;                // User staked tokens (locked)
+  availableForRewards: string;        // contractBalance - totalStaked (reward pool)
+  
+  // Immediate obligations (already calculated, claimable now)
+  claimableInstantRewards: string;    // Sum of all claimableInstantRewards[user]
+  claimableReferralRewards: string;   // Sum of all claimableReferralRewards[user]
+  totalClaimableNow: string;          // instant + referral
+  
+  // Future obligations (APY accruing over time)
+  currentAPYRewards: string;          // All pending APY rewards right now
+  projectedAPYDaily: string;          // Estimated APY rewards per day
+  projectedAPYWeekly: string;         // Estimated APY rewards per week
+  projectedAPYMonthly: string;        // Estimated APY rewards per month
+  
+  // Total obligations
+  totalObligations: string;           // claimableNow + currentAPY
+  
+  // Financial health
+  netPosition: string;                // availableForRewards - totalObligations
+  coverageRatio: number;              // availableForRewards / totalObligations
   healthStatus: 'healthy' | 'low' | 'critical';
-  // USDT fields
-  usdtBalance?: string;
-  totalUsdtCollected?: string;
-  // NILA liability fields
-  nilaLiabilities?: string;
-  nilaDeficitOrSurplus?: string;
-  nilaHasSurplus?: boolean;
-}
-
-export interface NILALiabilityStatus {
-  totalLiabilities: string;
-  nilaBalance: string;
-  deficitOrSurplus: string;
-  hasSurplus: boolean;
-}
-
-export interface USDTBalance {
-  balance: string;
-  totalCollected: string;
+  
+  // Actionable insights
+  recommendedDeposit: string;         // To reach 120% coverage
+  daysUntilCritical: number;          // Based on APY accrual rate
+  bufferForNewStakes: string;         // How much available for new instant/referral rewards
 }
 
 export interface ContractStatus {
@@ -104,30 +106,6 @@ export const treasuryApi = {
   // Get detailed liability breakdown
   getLiabilitiesBreakdown: async () => {
     const response = await api.get('/treasury/liabilities/breakdown');
-    return response.data;
-  },
-
-  // Get USDT balance in contract
-  getUSDTBalance: async (): Promise<USDTBalance> => {
-    const response = await api.get('/treasury/usdt-balance');
-    return response.data;
-  },
-
-  // Withdraw USDT from contract
-  withdrawUSDT: async (amount: number): Promise<TransactionResult> => {
-    const response = await api.post('/treasury/withdraw-usdt', { amount });
-    return response.data;
-  },
-
-  // Get NILA liability status
-  getNILALiabilityStatus: async (): Promise<NILALiabilityStatus> => {
-    const response = await api.get('/treasury/nila-liability-status');
-    return response.data;
-  },
-
-  // Deposit NILA for liabilities
-  depositNILAForLiabilities: async (amount: number): Promise<TransactionResult> => {
-    const response = await api.post('/treasury/deposit-nila-liabilities', { amount });
     return response.data;
   },
 };

@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
-import { X, Zap, TrendingUp, CheckCircle } from 'lucide-react';
+import { X, Zap, TrendingUp, CheckCircle, LogOut } from 'lucide-react';
 import { useAccount } from 'wagmi';
 import { ContractService } from '../services/contractService';
 import { rewardApi } from '../services/rewardApi';
 import { transactionApi } from '../services/transactionApi';
+import toast from 'react-hot-toast';
 
 interface StakeData {
     id: string;
@@ -31,7 +32,9 @@ interface StakeDetailsModalProps {
 const StakeDetailsModal: React.FC<StakeDetailsModalProps> = ({ stake, onClose, onClaimSuccess }) => {
     const { address } = useAccount();
     const [claiming, setClaiming] = useState(false);
+    const [unstaking, setUnstaking] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    
     const formatTokenAmount = (amount: string): string => {
         const num = parseFloat(amount);
         if (isNaN(num)) return '0';
@@ -41,6 +44,82 @@ const StakeDetailsModal: React.FC<StakeDetailsModalProps> = ({ stake, onClose, o
     const formatAPY = (apy: number | string): string => {
         if (typeof apy === 'string') return apy;
         return `${(apy / 100).toFixed(1)}%`;
+    };
+
+    // Check if stake can be unstaked
+    const canUnstake = () => {
+        if (!stake.endDate) return false;
+        const endTime = new Date(stake.endDate).getTime();
+        const now = Date.now();
+        return now >= endTime && stake.status === 'active';
+    };
+
+    const handleUnstake = async () => {
+        if (!address || unstaking) return;
+
+        try {
+            setUnstaking(true);
+            setError(null);
+
+            // Since the database stakeId doesn't match blockchain index,
+            // we need to find the correct stake by matching amount and dates
+            // This is a workaround until onChainStakeId is added to the database
+            
+            // For now, try to use the stakeId if it's a valid number
+            let stakeIndex: number | null = null;
+            
+            if (stake.stakeId !== undefined && stake.stakeId !== null) {
+                if (typeof stake.stakeId === 'number') {
+                    stakeIndex = stake.stakeId;
+                } else if (typeof stake.stakeId === 'string') {
+                    // Try to parse as number
+                    const parsed = parseInt(stake.stakeId, 10);
+                    if (!isNaN(parsed) && parsed >= 0) {
+                        stakeIndex = parsed;
+                    }
+                }
+            }
+
+            if (stakeIndex === null || stakeIndex < 0) {
+                throw new Error(
+                    'Unable to determine blockchain stake index. ' +
+                    'Please contact support with your stake details.'
+                );
+            }
+
+            console.log('Unstaking with index:', stakeIndex);
+
+            // Unstake via contract (automatically claims APY rewards + returns principal)
+            const txHash = await ContractService.unstake(stakeIndex);
+
+            // Record transaction
+            try {
+                const totalAmount = parseFloat(stake.amount) + parseFloat(stake.rewards);
+                await transactionApi.createTransaction({
+                    txHash,
+                    walletAddress: address,
+                    type: 'UNSTAKE',
+                    amount: totalAmount,
+                    status: 'confirmed'
+                });
+            } catch (backendError) {
+                console.error('Backend recording failed:', backendError);
+                // Don't fail if backend recording fails
+            }
+
+            toast.success(`Successfully unstaked ${stake.amount} NILA + ${stake.rewards} NILA rewards!`);
+
+            if (onClaimSuccess) onClaimSuccess();
+            setTimeout(() => onClose(), 1500);
+
+        } catch (err: any) {
+            console.error('Unstake error:', err);
+            const errorMessage = err.message || 'Failed to unstake';
+            setError(errorMessage);
+            toast.error(errorMessage);
+        } finally {
+            setUnstaking(false);
+        }
     };
 
 
@@ -146,8 +225,8 @@ const StakeDetailsModal: React.FC<StakeDetailsModalProps> = ({ stake, onClose, o
     const isCashbackClaimable = cashbackAmount > 0 && !stake.cashbackClaimed;
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm">
-            <div className="bg-white rounded-2xl w-full max-w-lg shadow-xl overflow-hidden animate-in fade-in zoom-in duration-200">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm overflow-y-auto">
+            <div className="bg-white rounded-2xl w-full max-w-lg shadow-xl overflow-hidden animate-in fade-in zoom-in duration-200 my-8">
                 {/* Header */}
                 <div className="flex items-center justify-between p-6 border-b border-slate-100 bg-slate-50/50">
                     <div>
@@ -167,11 +246,15 @@ const StakeDetailsModal: React.FC<StakeDetailsModalProps> = ({ stake, onClose, o
                     </button>
                 </div>
 
-                <div className="p-6 space-y-6">
+                <div className="p-6 space-y-6 max-h-[calc(100vh-200px)] overflow-y-auto">
                     {/* Error Message */}
                     {error && (
                         <div className="bg-red-50 border border-red-200 rounded-lg p-3">
-                            <p className="text-red-800 text-sm">{error}</p>
+                            <p className="text-red-800 text-sm font-medium mb-1">Error</p>
+                            <p className="text-red-700 text-xs">{error}</p>
+                            <p className="text-red-600 text-xs mt-2">
+                                Stake ID: {JSON.stringify(stake.stakeId)} (Type: {typeof stake.stakeId})
+                            </p>
                         </div>
                     )}
 
@@ -213,7 +296,13 @@ const StakeDetailsModal: React.FC<StakeDetailsModalProps> = ({ stake, onClose, o
                                 </div>
                             </div>
 
-                            {isRewardClaimable ? (
+                            {canUnstake() ? (
+                                // If stake can be unstaked, show info that rewards will be claimed on unstake
+                                <div className="text-right">
+                                    <div className="text-xs text-blue-600 font-medium mb-1">Auto-claimed on unstake</div>
+                                    <div className="text-xs text-slate-500">Unstake to receive</div>
+                                </div>
+                            ) : isRewardClaimable ? (
                                 <button
                                     onClick={handleClaimRewards}
                                     disabled={claiming}
@@ -271,6 +360,79 @@ const StakeDetailsModal: React.FC<StakeDetailsModalProps> = ({ stake, onClose, o
                             )}
                         </div>
                     </div>
+
+                    {/* Unstake Section */}
+                    {canUnstake() && (
+                        <div className="pt-4 border-t border-slate-200">
+                            <div className="bg-gradient-to-br from-green-50 to-emerald-50 border border-green-200 rounded-xl p-5">
+                                <div className="flex items-start gap-3 mb-4">
+                                    <div className="w-10 h-10 rounded-full bg-green-100 flex items-center justify-center text-green-600 shrink-0">
+                                        <LogOut size={20} />
+                                    </div>
+                                    <div className="flex-1">
+                                        <h4 className="font-bold text-green-900 mb-1">Ready to Unstake</h4>
+                                        <p className="text-sm text-green-700 leading-relaxed">
+                                            Your lock period has ended. Unstaking will automatically claim all pending APY rewards 
+                                            and return your principal amount.
+                                        </p>
+                                    </div>
+                                </div>
+
+                                <div className="bg-white/60 rounded-lg p-3 mb-4 space-y-2 text-sm">
+                                    <div className="flex justify-between">
+                                        <span className="text-slate-600">Principal Amount:</span>
+                                        <span className="font-bold text-slate-900">{formatTokenAmount(stake.amount)} NILA</span>
+                                    </div>
+                                    <div className="flex justify-between">
+                                        <span className="text-slate-600">Pending APY Rewards:</span>
+                                        <span className="font-bold text-green-600">+{formatTokenAmount(stake.rewards)} NILA</span>
+                                    </div>
+                                    <div className="flex justify-between pt-2 border-t border-slate-200">
+                                        <span className="font-bold text-slate-900">Total You'll Receive:</span>
+                                        <span className="font-bold text-green-600 text-lg">
+                                            {formatTokenAmount((parseFloat(stake.amount) + parseFloat(stake.rewards)).toString())} NILA
+                                        </span>
+                                    </div>
+                                </div>
+
+                                <button
+                                    onClick={handleUnstake}
+                                    disabled={unstaking}
+                                    className="w-full py-3 bg-gradient-to-r from-green-600 to-emerald-600 text-white font-bold rounded-lg hover:from-green-700 hover:to-emerald-700 transition-all shadow-lg shadow-green-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                                >
+                                    {unstaking ? (
+                                        <>
+                                            <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                                            <span>Unstaking...</span>
+                                        </>
+                                    ) : (
+                                        <>
+                                            <LogOut size={20} />
+                                            <span>Unstake & Claim All Rewards</span>
+                                        </>
+                                    )}
+                                </button>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Lock Period Active Message */}
+                    {!canUnstake() && stake.status === 'active' && (
+                        <div className="pt-4 border-t border-slate-200">
+                            <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 flex items-start gap-3">
+                                <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 shrink-0">
+                                    <TrendingUp size={16} />
+                                </div>
+                                <div>
+                                    <p className="text-sm font-medium text-blue-900 mb-1">Lock Period Active</p>
+                                    <p className="text-xs text-blue-700 leading-relaxed">
+                                        You can unstake after {stake.endDate ? new Date(stake.endDate).toLocaleDateString() : 'the lock period ends'}. 
+                                        Unstaking will automatically claim all your APY rewards along with your principal.
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                    )}
                 </div>
             </div>
         </div>
