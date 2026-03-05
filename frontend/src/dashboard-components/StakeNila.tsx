@@ -7,6 +7,7 @@ import toast from 'react-hot-toast';
 import { handleError } from '../utils/errorHandler';
 import { formatUnits } from 'ethers';
 import { stakingApi, type LockConfig, type AmountConfig } from '../services/stakingApi';
+import { transactionApi } from '../services/transactionApi';
 
 const StakeNila = () => {
     const [plans, setPlans] = useState<LockConfig[]>([]);
@@ -136,6 +137,34 @@ const StakeNila = () => {
                 amount: stakeAmount,
                 lockConfigId: selectedPlanId
             });
+
+            setStatusMessage('Recording stake...');
+            // Record stake in backend database
+            try {
+                await stakingApi.recordStake({
+                    walletAddress: address,
+                    planName: `${selectedPlan?.lockDuration} Days`,
+                    planVersion: 1,
+                    amount: amountNum,
+                    apy: selectedPlan?.apr || 0,
+                    lockDays: selectedPlan?.lockDuration || 0,
+                    instantRewardPercent: 0, // Direct staking has no instant rewards
+                    txHash
+                });
+
+                // Record transaction
+                await transactionApi.createTransaction({
+                    txHash,
+                    walletAddress: address,
+                    type: 'STAKE',
+                    amount: amountNum,
+                    status: 'confirmed'
+                });
+            } catch (backendError: any) {
+                console.error('Failed to record stake in backend:', backendError);
+                // Don't fail the whole operation if backend recording fails
+                // The stake already succeeded on-chain
+            }
 
             setStatusMessage('Stake successful!');
             toast.success(`Successfully staked ${amountNum.toLocaleString()} NILA for ${selectedPlan?.lockDuration || 0} days!`);

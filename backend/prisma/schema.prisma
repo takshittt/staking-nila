@@ -159,3 +159,14 @@ model SyncState {
 
   @@map("sync_state")
 }
+
+model AmountConfig {
+  id                 Int      @id @map("_id") // We'll manually manage a numeric ID to keep compatibility with existing frontend types
+  amount             String
+  instantRewardBps   Int
+  active             Boolean  @default(true)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  @@map("amount_configs")
+}

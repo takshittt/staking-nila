@@ -8,7 +8,7 @@ export class StakingService {
   // Amount Config Methods
   static async getAllAmountConfigs() {
     try {
-      const configs = await BlockchainService.getAllAmountConfigs();
+      const configs = await prisma.amountConfig.findMany();
       return configs;
     } catch (error: any) {
       throw new Error(`Failed to fetch amount configs: ${error.message}`);
@@ -17,7 +17,7 @@ export class StakingService {
 
   static async getAmountConfig(id: number) {
     try {
-      const config = await BlockchainService.getAmountConfig(id);
+      const config = await prisma.amountConfig.findUnique({ where: { id } });
       if (!config) {
         throw new Error(`Amount config with id ${id} not found`);
       }
@@ -43,28 +43,35 @@ export class StakingService {
     const amountWei = (BigInt(amount) * BigInt(10 ** 18)).toString();
 
     try {
-      // Create audit log
-      const auditLog = await prisma.auditLog.create({
+      // Find max ID manually to simulate auto-increment
+      const lastConfig = await prisma.amountConfig.findFirst({
+        orderBy: { id: 'desc' }
+      });
+      const nextId = lastConfig ? lastConfig.id + 1 : 0;
+
+      // Create in DB
+      const result = await prisma.amountConfig.create({
         data: {
-          adminId,
-          action: 'CREATE_AMOUNT_CONFIG',
-          txHash: null
+          id: nextId,
+          amount: amountWei,
+          instantRewardBps,
+          active: true
         }
       });
 
-      // Call blockchain
-      const result = await BlockchainService.addAmountConfig(amountWei, instantRewardBps);
-
-      // Update audit log with tx hash
-      await prisma.auditLog.update({
-        where: { id: auditLog.id },
-        data: { txHash: result.txHash }
+      // Create audit log
+      await prisma.auditLog.create({
+        data: {
+          adminId: adminId.toString(), // assuming adminId is string in DB, or wait, auditLogs use string Admin ID from req.adminId, let's just make sure
+          action: 'CREATE_AMOUNT_CONFIG',
+          txHash: null // no txHash since it's DB only
+        }
       });
 
       return {
         ...result,
-        amount,
-        instantRewardBps
+        txHash: null,
+        configId: result.id
       };
     } catch (error: any) {
       throw new Error(`Failed to create amount config: ${error.message}`);
@@ -84,25 +91,28 @@ export class StakingService {
     }
 
     try {
-      // Create audit log
-      const auditLog = await prisma.auditLog.create({
+      // Update in DB
+      const result = await prisma.amountConfig.update({
+        where: { id },
         data: {
-          adminId,
+          instantRewardBps,
+          active
+        }
+      });
+
+      // Create audit log
+      await prisma.auditLog.create({
+        data: {
+          adminId: adminId.toString(),
           action: 'UPDATE_AMOUNT_CONFIG',
           txHash: null
         }
       });
 
-      // Call blockchain
-      const result = await BlockchainService.updateAmountConfig(id, instantRewardBps, active);
-
-      // Update audit log
-      await prisma.auditLog.update({
-        where: { id: auditLog.id },
-        data: { txHash: result.txHash }
-      });
-
-      return result;
+      return {
+        ...result,
+        txHash: null
+      };
     } catch (error: any) {
       throw new Error(`Failed to update amount config: ${error.message}`);
     }
@@ -129,8 +139,10 @@ export class StakingService {
 
   static async getActiveAmountConfigs() {
     try {
-      const allConfigs = await BlockchainService.getAllAmountConfigs();
-      return allConfigs.filter(config => config.active);
+      const allConfigs = await prisma.amountConfig.findMany({
+        where: { active: true }
+      });
+      return allConfigs;
     } catch (error: any) {
       throw new Error(`Failed to fetch active amount configs: ${error.message}`);
     }
@@ -164,7 +176,7 @@ export class StakingService {
       // Create audit log
       const auditLog = await prisma.auditLog.create({
         data: {
-          adminId,
+          adminId: adminId.toString(),
           action: 'CREATE_LOCK_CONFIG',
           txHash: null
         }
@@ -200,7 +212,7 @@ export class StakingService {
       // Create audit log
       const auditLog = await prisma.auditLog.create({
         data: {
-          adminId,
+          adminId: adminId.toString(),
           action: 'UPDATE_LOCK_CONFIG',
           txHash: null
         }
@@ -283,7 +295,7 @@ export class StakingService {
       // Create audit log
       const auditLog = await prisma.auditLog.create({
         data: {
-          adminId,
+          adminId: adminId.toString(),
           action: 'CREATE_REWARD_TIER',
           txHash: null
         }
@@ -345,7 +357,7 @@ export class StakingService {
       // Create audit log
       const auditLog = await prisma.auditLog.create({
         data: {
-          adminId,
+          adminId: adminId.toString(),
           action: 'UPDATE_REWARD_TIER',
           txHash: null
         }

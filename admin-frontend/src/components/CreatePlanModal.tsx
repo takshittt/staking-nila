@@ -1,4 +1,4 @@
-import { X } from 'lucide-react';
+import { X, Loader2 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 
 export interface AmountConfigFormData {
@@ -23,6 +23,7 @@ interface CreateAmountConfigModalProps {
     onSubmit: (configData: AmountConfigFormData) => void;
     initialData?: AmountConfigFormData;
     isEditing?: boolean;
+    isLoading?: boolean;
 }
 
 interface CreateLockConfigModalProps {
@@ -31,6 +32,7 @@ interface CreateLockConfigModalProps {
     onSubmit: (configData: LockConfigFormData) => void;
     initialData?: LockConfigFormData;
     isEditing?: boolean;
+    isLoading?: boolean;
 }
 
 export const CreateAmountConfigModal = ({
@@ -38,11 +40,12 @@ export const CreateAmountConfigModal = ({
     onClose,
     onSubmit,
     initialData,
-    isEditing = false
+    isEditing = false,
+    isLoading = false
 }: CreateAmountConfigModalProps) => {
-    const [formData, setFormData] = useState<AmountConfigFormData>({
-        amount: 100,
-        instantRewardPercent: 5,
+    const [formData, setFormData] = useState<any>({
+        amount: '',
+        instantRewardPercent: '',
     });
 
     // Initialize form data when modal opens or initialData changes
@@ -63,8 +66,8 @@ export const CreateAmountConfigModal = ({
             setFormData(initialData);
         } else if (isOpen && !isEditing) {
             setFormData({
-                amount: 100,
-                instantRewardPercent: 5,
+                amount: '',
+                instantRewardPercent: '',
             });
         }
     }, [isOpen, initialData, isEditing]);
@@ -74,7 +77,7 @@ export const CreateAmountConfigModal = ({
     const validateForm = () => {
         const newErrors: Partial<Record<keyof AmountConfigFormData, string>> = {};
 
-        if (formData.amount <= 0) {
+        if (formData.amount === '' || formData.amount <= 0) {
             newErrors.amount = 'Amount must be greater than 0';
         }
 
@@ -85,14 +88,17 @@ export const CreateAmountConfigModal = ({
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
         if (validateForm()) {
-            onSubmit(formData);
+            onSubmit({
+                ...formData,
+                instantRewardPercent: formData.instantRewardPercent || 0
+            } as AmountConfigFormData);
             setErrors({});
             // Don't close immediately, let parent handle it or close here? Parent handles it usually.
             // But we need to reset if closing.
             if (!isEditing) {
                 setFormData({
-                    amount: 100,
-                    instantRewardPercent: 5,
+                    amount: '',
+                    instantRewardPercent: '',
                 });
             }
         }
@@ -100,9 +106,9 @@ export const CreateAmountConfigModal = ({
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const { name, value } = e.target;
-        setFormData((prev) => ({
+        setFormData((prev: any) => ({
             ...prev,
-            [name]: parseFloat(value) || 0,
+            [name]: value === '' ? '' : parseFloat(value),
         }));
         if (errors[name as keyof AmountConfigFormData]) {
             setErrors((prev) => ({
@@ -160,7 +166,7 @@ export const CreateAmountConfigModal = ({
                                 value={formData.amount}
                                 onChange={handleChange}
                                 min="1"
-                                placeholder="e.g., 100"
+                                placeholder="Enter amount"
                                 disabled={isEditing}
                                 className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 transition-colors ${errors.amount ? 'border-red-500' : 'border-slate-200'
                                     } ${isEditing ? 'bg-slate-100 cursor-not-allowed' : ''}`}
@@ -183,9 +189,17 @@ export const CreateAmountConfigModal = ({
                             </button>
                             <button
                                 type="submit"
-                                className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-medium"
+                                disabled={isLoading}
+                                className="flex-1 px-4 py-2 flex items-center justify-center bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
                             >
-                                {isEditing ? 'Update Config' : 'Create Config'}
+                                {isLoading ? (
+                                    <span className="flex items-center gap-2">
+                                        <Loader2 className="w-4 h-4 animate-spin" />
+                                        {isEditing ? 'Updating...' : 'Creating...'}
+                                    </span>
+                                ) : (
+                                    isEditing ? 'Update Config' : 'Create Config'
+                                )}
                             </button>
                         </div>
                     </form>
@@ -200,11 +214,12 @@ export const CreateLockConfigModal = ({
     onClose,
     onSubmit,
     initialData,
-    isEditing = false
+    isEditing = false,
+    isLoading = false
 }: CreateLockConfigModalProps) => {
-    const [formData, setFormData] = useState<LockConfigFormData>({
-        lockDays: 180,
-        aprPercent: 8,
+    const [formData, setFormData] = useState<any>({
+        lockDays: '',
+        aprPercent: '',
     });
 
     const [errors, setErrors] = useState<Partial<Record<keyof LockConfigFormData, string>>>({});
@@ -214,8 +229,8 @@ export const CreateLockConfigModal = ({
             setFormData(initialData);
         } else if (isOpen && !isEditing) {
             setFormData({
-                lockDays: 180,
-                aprPercent: 8,
+                lockDays: '',
+                aprPercent: '',
             });
         }
     }, [isOpen, initialData, isEditing]);
@@ -223,10 +238,10 @@ export const CreateLockConfigModal = ({
     const validateForm = () => {
         const newErrors: Partial<Record<keyof LockConfigFormData, string>> = {};
 
-        if (formData.lockDays <= 0) {
+        if (formData.lockDays === '' || formData.lockDays <= 0) {
             newErrors.lockDays = 'Lock duration must be greater than 0';
         }
-        if (formData.aprPercent < 0 || formData.aprPercent > 500) {
+        if (formData.aprPercent === '' || formData.aprPercent < 0 || formData.aprPercent > 500) {
             newErrors.aprPercent = 'APR must be between 0 and 500%';
         }
 
@@ -237,12 +252,12 @@ export const CreateLockConfigModal = ({
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
         if (validateForm()) {
-            onSubmit(formData);
+            onSubmit(formData as LockConfigFormData);
             setErrors({});
             if (!isEditing) {
                 setFormData({
-                    lockDays: 180,
-                    aprPercent: 8,
+                    lockDays: '',
+                    aprPercent: '',
                 });
             }
         }
@@ -250,9 +265,9 @@ export const CreateLockConfigModal = ({
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const { name, value } = e.target;
-        setFormData((prev) => ({
+        setFormData((prev: any) => ({
             ...prev,
-            [name]: parseFloat(value) || 0,
+            [name]: value === '' ? '' : parseFloat(value),
         }));
         if (errors[name as keyof LockConfigFormData]) {
             setErrors((prev) => ({
@@ -301,7 +316,7 @@ export const CreateLockConfigModal = ({
                                 value={formData.lockDays}
                                 onChange={handleChange}
                                 min="1"
-                                placeholder="e.g., 180"
+                                placeholder="Enter lock duration in days"
                                 disabled={isEditing}
                                 className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 transition-colors ${errors.lockDays ? 'border-red-500' : 'border-slate-200'
                                     } ${isEditing ? 'bg-slate-100 cursor-not-allowed' : ''}`}
@@ -323,7 +338,7 @@ export const CreateLockConfigModal = ({
                                 min="0"
                                 max="500"
                                 step="0.1"
-                                placeholder="e.g., 8"
+                                placeholder="Enter APR"
                                 className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 transition-colors ${errors.aprPercent ? 'border-red-500' : 'border-slate-200'
                                     }`}
                             />
@@ -345,9 +360,17 @@ export const CreateLockConfigModal = ({
                             </button>
                             <button
                                 type="submit"
-                                className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-medium"
+                                disabled={isLoading}
+                                className="flex-1 px-4 py-2 flex items-center justify-center bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
                             >
-                                {isEditing ? 'Update Config' : 'Create Config'}
+                                {isLoading ? (
+                                    <span className="flex items-center gap-2">
+                                        <Loader2 className="w-4 h-4 animate-spin" />
+                                        {isEditing ? 'Updating...' : 'Creating...'}
+                                    </span>
+                                ) : (
+                                    isEditing ? 'Update Config' : 'Create Config'
+                                )}
                             </button>
                         </div>
                     </form>
@@ -363,6 +386,7 @@ interface CreateRewardTierModalProps {
     onSubmit: (tierData: RewardTierFormData) => void;
     initialData?: RewardTierFormData;
     isEditing?: boolean;
+    isLoading?: boolean;
 }
 
 export const CreateRewardTierModal = ({
@@ -370,12 +394,13 @@ export const CreateRewardTierModal = ({
     onClose,
     onSubmit,
     initialData,
-    isEditing = false
+    isEditing = false,
+    isLoading = false
 }: CreateRewardTierModalProps) => {
-    const [formData, setFormData] = useState<RewardTierFormData>({
-        minNilaAmount: 0,
-        maxNilaAmount: 1000,
-        instantRewardPercent: 3,
+    const [formData, setFormData] = useState<any>({
+        minNilaAmount: '',
+        maxNilaAmount: '',
+        instantRewardPercent: '',
     });
 
     const [errors, setErrors] = useState<Partial<Record<keyof RewardTierFormData, string>>>({});
@@ -385,9 +410,9 @@ export const CreateRewardTierModal = ({
             setFormData(initialData);
         } else if (isOpen && !isEditing) {
             setFormData({
-                minNilaAmount: 0,
-                maxNilaAmount: 1000,
-                instantRewardPercent: 3,
+                minNilaAmount: '',
+                maxNilaAmount: '',
+                instantRewardPercent: '',
             });
         }
     }, [isOpen, initialData, isEditing]);
@@ -395,16 +420,16 @@ export const CreateRewardTierModal = ({
     const validateForm = () => {
         const newErrors: Partial<Record<keyof RewardTierFormData, string>> = {};
 
-        if (formData.minNilaAmount < 0) {
-            newErrors.minNilaAmount = 'Minimum amount cannot be negative';
+        if (formData.minNilaAmount === '' || formData.minNilaAmount < 0) {
+            newErrors.minNilaAmount = 'Minimum amount cannot be negative or empty';
         }
-        if (formData.maxNilaAmount < 0) {
-            newErrors.maxNilaAmount = 'Maximum amount cannot be negative';
+        if (formData.maxNilaAmount === '' || formData.maxNilaAmount < 0) {
+            newErrors.maxNilaAmount = 'Maximum amount cannot be negative or empty';
         }
-        if (formData.maxNilaAmount > 0 && formData.maxNilaAmount <= formData.minNilaAmount) {
+        if (formData.maxNilaAmount !== '' && formData.minNilaAmount !== '' && formData.maxNilaAmount > 0 && formData.maxNilaAmount <= formData.minNilaAmount) {
             newErrors.maxNilaAmount = 'Maximum must be greater than minimum (or 0 for unlimited)';
         }
-        if (formData.instantRewardPercent < 0 || formData.instantRewardPercent > 100) {
+        if (formData.instantRewardPercent === '' || formData.instantRewardPercent < 0 || formData.instantRewardPercent > 100) {
             newErrors.instantRewardPercent = 'Instant reward must be between 0 and 100%';
         }
 
@@ -415,13 +440,13 @@ export const CreateRewardTierModal = ({
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
         if (validateForm()) {
-            onSubmit(formData);
+            onSubmit(formData as RewardTierFormData);
             setErrors({});
             if (!isEditing) {
                 setFormData({
-                    minNilaAmount: 0,
-                    maxNilaAmount: 1000,
-                    instantRewardPercent: 3,
+                    minNilaAmount: '',
+                    maxNilaAmount: '',
+                    instantRewardPercent: '',
                 });
             }
         }
@@ -429,9 +454,9 @@ export const CreateRewardTierModal = ({
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const { name, value } = e.target;
-        setFormData((prev) => ({
+        setFormData((prev: any) => ({
             ...prev,
-            [name]: parseFloat(value) || 0,
+            [name]: value === '' ? '' : parseFloat(value),
         }));
         if (errors[name as keyof RewardTierFormData]) {
             setErrors((prev) => ({
@@ -487,7 +512,7 @@ export const CreateRewardTierModal = ({
                                 onChange={handleChange}
                                 min="0"
                                 step="1"
-                                placeholder="e.g., 0"
+                                placeholder="Enter NILA amount"
                                 className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 transition-colors ${errors.minNilaAmount ? 'border-red-500' : 'border-slate-200'
                                     }`}
                             />
@@ -510,7 +535,7 @@ export const CreateRewardTierModal = ({
                                 onChange={handleChange}
                                 min="0"
                                 step="1"
-                                placeholder="e.g., 1000 (or 0 for unlimited)"
+                                placeholder="Enter NILA amount"
                                 className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 transition-colors ${errors.maxNilaAmount ? 'border-red-500' : 'border-slate-200'
                                     }`}
                             />
@@ -534,7 +559,7 @@ export const CreateRewardTierModal = ({
                                 min="0"
                                 max="100"
                                 step="0.1"
-                                placeholder="e.g., 3"
+                                placeholder="Enter instant reward %"
                                 className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 transition-colors ${errors.instantRewardPercent ? 'border-red-500' : 'border-slate-200'
                                     }`}
                             />
@@ -549,7 +574,7 @@ export const CreateRewardTierModal = ({
                         <div className="bg-slate-50 border border-slate-200 rounded-lg p-3">
                             <p className="text-xs font-medium text-slate-700 mb-1">Example:</p>
                             <p className="text-xs text-slate-600">
-                                {formData.minNilaAmount.toLocaleString()} - {formData.maxNilaAmount === 0 ? 'Unlimited' : formData.maxNilaAmount.toLocaleString()} NILA = {formData.instantRewardPercent}% instant reward
+                                {Number(formData.minNilaAmount || 0).toLocaleString()} - {formData.maxNilaAmount === 0 || formData.maxNilaAmount === '' ? 'Unlimited' : Number(formData.maxNilaAmount).toLocaleString()} NILA = {Number(formData.instantRewardPercent || 0)}% instant reward
                             </p>
                         </div>
 
@@ -563,9 +588,17 @@ export const CreateRewardTierModal = ({
                             </button>
                             <button
                                 type="submit"
-                                className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-medium"
+                                disabled={isLoading}
+                                className="flex-1 px-4 py-2 flex items-center justify-center bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
                             >
-                                {isEditing ? 'Update Tier' : 'Create Tier'}
+                                {isLoading ? (
+                                    <span className="flex items-center gap-2">
+                                        <Loader2 className="w-4 h-4 animate-spin" />
+                                        {isEditing ? 'Updating...' : 'Creating...'}
+                                    </span>
+                                ) : (
+                                    isEditing ? 'Update Tier' : 'Create Tier'
+                                )}
                             </button>
                         </div>
                     </form>

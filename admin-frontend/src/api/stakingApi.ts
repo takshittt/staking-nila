@@ -79,12 +79,12 @@ export const stakingApi = {
     return response.data;
   },
 
-  async createAmountConfig(data: CreateAmountConfigDto): Promise<TransactionResult> {
+  async createAmountConfig(data: CreateAmountConfigDto): Promise<any> {
     const response = await api.post('/staking/amount-configs', data);
     return response.data;
   },
 
-  async updateAmountConfig(id: number, data: UpdateAmountConfigDto): Promise<TransactionResult> {
+  async updateAmountConfig(id: number, data: UpdateAmountConfigDto): Promise<any> {
     const response = await api.put(`/staking/amount-configs/${id}`, data);
     return response.data;
   },

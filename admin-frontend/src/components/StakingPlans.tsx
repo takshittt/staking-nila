@@ -1,7 +1,7 @@
 import { Plus, Power, PowerOff, Loader2, Pencil } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { CreateAmountConfigModal, CreateLockConfigModal, CreateRewardTierModal } from './CreatePlanModal';
-import type { AmountConfigFormData, LockConfigFormData, RewardTierFormData } from './CreatePlanModal';
+import type { AmountConfigFormData, LockConfigFormData } from './CreatePlanModal';
 import { stakingApi } from '../api/stakingApi';
 import type { AmountConfig, LockConfig, RewardTier } from '../api/stakingApi';
 import toast from 'react-hot-toast';
@@ -95,9 +95,9 @@ const StakingPlans = () => {
     const handleCreateAmountConfig = async (data: AmountConfigFormData) => {
         setTxPending(true);
         try {
-            const result = await stakingApi.createAmountConfig(data);
+            await stakingApi.createAmountConfig(data);
             await fetchConfigs();
-            toast.success(`Amount config created! TX: ${result.txHash.slice(0, 10)}...`);
+            toast.success('Amount config created successfully!');
             handleCloseAmountModal();
         } catch (err: any) {
             toast.error(err.response?.data?.error || 'Failed to create config');
@@ -115,12 +115,12 @@ const StakingPlans = () => {
 
         setTxPending(true);
         try {
-            const result = await stakingApi.updateAmountConfig(editingAmountId, {
+            await stakingApi.updateAmountConfig(editingAmountId, {
                 instantRewardPercent: data.instantRewardPercent,
                 active: config.active // Preserve existing active state
             });
             await fetchConfigs();
-            toast.success(`Amount config updated! TX: ${result.txHash.slice(0, 10)}...`);
+            toast.success('Amount config updated successfully!');
             handleCloseAmountModal();
         } catch (err: any) {
             toast.error(err.response?.data?.error || 'Failed to update config');
@@ -345,6 +345,7 @@ const StakingPlans = () => {
                             }`}
                     >
                         Lock Configs
+                        <span className="ml-2 text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full">Active</span>
                     </button>
                     <button
                         onClick={() => setActiveTab('tiers')}
@@ -676,6 +677,7 @@ const StakingPlans = () => {
                 onSubmit={editingAmountId !== null ? handleUpdateAmountConfig : handleCreateAmountConfig}
                 initialData={amountInitialData}
                 isEditing={editingAmountId !== null}
+                isLoading={txPending}
             />
             <CreateLockConfigModal
                 isOpen={isLockModalOpen}
@@ -683,6 +685,7 @@ const StakingPlans = () => {
                 onSubmit={editingLockId !== null ? handleUpdateLockConfig : handleCreateLockConfig}
                 initialData={lockInitialData}
                 isEditing={editingLockId !== null}
+                isLoading={txPending}
             />
             <CreateRewardTierModal
                 isOpen={isTierModalOpen}
@@ -690,6 +693,7 @@ const StakingPlans = () => {
                 onSubmit={editingTierId !== null ? handleUpdateRewardTier : handleCreateRewardTier}
                 initialData={tierInitialData}
                 isEditing={editingTierId !== null}
+                isLoading={txPending}
             />
         </div>
     );

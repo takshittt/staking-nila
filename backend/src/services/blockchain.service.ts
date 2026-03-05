@@ -46,74 +46,7 @@ export class BlockchainService {
     return this.provider;
   }
 
-  // Amount Config Methods
-  static async getAmountConfigCount(): Promise<number> {
-    const contract = this.getContract();
-    const count = await contract.getAmountConfigCount();
-    return Number(count);
-  }
-
-  static async getAmountConfig(id: number) {
-    const contract = this.getContract();
-    const config = await contract.amountConfigs(id);
-    return {
-      id,
-      amount: config.amount.toString(),
-      instantRewardBps: Number(config.instantRewardBps),
-      active: config.active
-    };
-  }
-
-  static async getAllAmountConfigs() {
-    const count = await this.getAmountConfigCount();
-    const configs = [];
-    
-    for (let i = 0; i < count; i++) {
-      const config = await this.getAmountConfig(i);
-      configs.push(config);
-    }
-    
-    return configs;
-  }
-
-  static async addAmountConfig(amount: string, instantRewardBps: number) {
-    const contract = this.getContract();
-    const tx = await contract.addAmountConfig(amount, instantRewardBps);
-    const receipt = await tx.wait();
-    
-    // Get the new config ID from event
-    const event = receipt.logs.find((log: any) => {
-      try {
-        const parsed = contract.interface.parseLog(log);
-        return parsed?.name === 'AmountConfigAdded';
-      } catch {
-        return false;
-      }
-    });
-    
-    let configId = null;
-    if (event) {
-      const parsed = contract.interface.parseLog(event);
-      configId = Number(parsed?.args[0]);
-    }
-    
-    return {
-      txHash: receipt.hash,
-      blockNumber: receipt.blockNumber,
-      configId
-    };
-  }
-
-  static async updateAmountConfig(id: number, instantRewardBps: number, active: boolean) {
-    const contract = this.getContract();
-    const tx = await contract.updateAmountConfig(id, instantRewardBps, active);
-    const receipt = await tx.wait();
-    
-    return {
-      txHash: receipt.hash,
-      blockNumber: receipt.blockNumber
-    };
-  }
+  // Removed Amount Config Methods (Now handled by DB)
 
   // Lock Config Methods
   static async getLockConfigCount(): Promise<number> {
@@ -125,11 +58,11 @@ export class BlockchainService {
   static async getLockConfig(id: number) {
     const contract = this.getContract();
     const config = await contract.lockConfigs(id);
-    
+
     // Convert lockDuration from seconds to days
     const lockDurationSeconds = Number(config.lockDuration);
     const lockDays = Math.floor(lockDurationSeconds / 86400);
-    
+
     return {
       id,
       lockDuration: lockDays,
@@ -141,12 +74,12 @@ export class BlockchainService {
   static async getAllLockConfigs() {
     const count = await this.getLockConfigCount();
     const configs = [];
-    
+
     for (let i = 0; i < count; i++) {
       const config = await this.getLockConfig(i);
       configs.push(config);
     }
-    
+
     return configs;
   }
 
@@ -154,7 +87,7 @@ export class BlockchainService {
     const contract = this.getContract();
     const tx = await contract.addLockConfig(lockDays, apr);
     const receipt = await tx.wait();
-    
+
     // Get the new config ID from event
     const event = receipt.logs.find((log: any) => {
       try {
@@ -164,13 +97,13 @@ export class BlockchainService {
         return false;
       }
     });
-    
+
     let configId = null;
     if (event) {
       const parsed = contract.interface.parseLog(event);
       configId = Number(parsed?.args[0]);
     }
-    
+
     return {
       txHash: receipt.hash,
       blockNumber: receipt.blockNumber,
@@ -182,7 +115,7 @@ export class BlockchainService {
     const contract = this.getContract();
     const tx = await contract.updateLockConfig(id, apr, active);
     const receipt = await tx.wait();
-    
+
     return {
       txHash: receipt.hash,
       blockNumber: receipt.blockNumber
@@ -207,11 +140,11 @@ export class BlockchainService {
   static async getRewardTier(id: number) {
     const contract = this.getContract();
     const tier = await contract.rewardTiers(id);
-    
+
     // Convert wei to NILA (divide by 10^18)
     const minNilaAmount = Number(ethers.formatUnits(tier.minNilaAmount, 18));
     const maxNilaAmount = Number(ethers.formatUnits(tier.maxNilaAmount, 18));
-    
+
     return {
       id,
       minNilaAmount,
@@ -224,12 +157,12 @@ export class BlockchainService {
   static async getAllRewardTiers() {
     const count = await this.getRewardTierCount();
     const tiers = [];
-    
+
     for (let i = 0; i < count; i++) {
       const tier = await this.getRewardTier(i);
       tiers.push(tier);
     }
-    
+
     return tiers;
   }
 
@@ -237,7 +170,7 @@ export class BlockchainService {
     const contract = this.getContract();
     const tx = await contract.addRewardTier(minNilaAmount, maxNilaAmount, instantRewardBps);
     const receipt = await tx.wait();
-    
+
     // Get the new tier ID from event
     const event = receipt.logs.find((log: any) => {
       try {
@@ -247,13 +180,13 @@ export class BlockchainService {
         return false;
       }
     });
-    
+
     let tierId = null;
     if (event) {
       const parsed = contract.interface.parseLog(event);
       tierId = Number(parsed?.args[0]);
     }
-    
+
     return {
       txHash: receipt.hash,
       blockNumber: receipt.blockNumber,
@@ -271,7 +204,7 @@ export class BlockchainService {
     const contract = this.getContract();
     const tx = await contract.updateRewardTier(id, minNilaAmount, maxNilaAmount, instantRewardBps, active);
     const receipt = await tx.wait();
-    
+
     return {
       txHash: receipt.hash,
       blockNumber: receipt.blockNumber
@@ -281,13 +214,13 @@ export class BlockchainService {
   // Stats Methods
   static async getStakingStats() {
     const contract = this.getContract();
-    
+
     const [totalStaked, uniqueStakers, availableRewards] = await Promise.all([
       contract.totalStaked(),
       contract.getStakerCount(),
       contract.availableRewards()
     ]);
-    
+
     return {
       totalStaked: totalStaked.toString(),
       uniqueStakers: Number(uniqueStakers),
@@ -299,7 +232,7 @@ export class BlockchainService {
   static async getReferralConfig() {
     const contract = this.getContract();
     const config = await contract.getReferralConfig();
-    
+
     return {
       referralPercentage: Number(config.referralPercentageBps) / 100, // BPS to percentage (500 bps = 5%)
       referrerPercentage: Number(config.referrerPercentageBps) / 100,
@@ -313,14 +246,14 @@ export class BlockchainService {
     isPaused: boolean
   ) {
     const contract = this.getContract();
-    
+
     // Convert percentage to basis points
     const referralBps = Math.floor(referralPercentage * 100);
     const referrerBps = Math.floor(referrerPercentage * 100);
-    
+
     const tx = await contract.setReferralConfig(referralBps, referrerBps, isPaused);
     const receipt = await tx.wait();
-    
+
     return {
       txHash: receipt.hash,
       blockNumber: receipt.blockNumber
@@ -330,7 +263,7 @@ export class BlockchainService {
   static async getReferralStats(walletAddress: string) {
     const contract = this.getContract();
     const stats = await contract.getReferralStats(walletAddress);
-    
+
     return {
       referrer: stats.referrer,
       referralsMade: Number(stats.referralsMade),
@@ -342,12 +275,12 @@ export class BlockchainService {
   static async getTreasuryStats() {
     const contract = this.getContract();
     const provider = this.getProvider();
-    
+
     const [totalStaked, availableRewards] = await Promise.all([
       contract.totalStaked(),
       contract.availableRewards()
     ]);
-    
+
     // Get contract balance
     const nilaTokenAddress = await contract.nila();
     const nilaToken = new ethers.Contract(
@@ -356,7 +289,7 @@ export class BlockchainService {
       provider
     );
     const contractBalance = await nilaToken.balanceOf(process.env.CONTRACT_ADDRESS);
-    
+
     return {
       contractBalance: contractBalance.toString(),
       totalStaked: totalStaked.toString(),
@@ -367,7 +300,7 @@ export class BlockchainService {
   static async depositRewards(amount: string) {
     const contract = this.getContract();
     const wallet = this.wallet;
-    
+
     // Get NILA token contract
     const nilaTokenAddress = await contract.nila();
     const nilaToken = new ethers.Contract(
@@ -379,17 +312,17 @@ export class BlockchainService {
       ],
       wallet
     );
-    
+
     // Check admin balance
     const adminBalance = await nilaToken.balanceOf(wallet.address);
     if (adminBalance < BigInt(amount)) {
       throw new Error('Insufficient admin balance');
     }
-    
+
     // Transfer tokens to contract
     const transferTx = await nilaToken.transfer(process.env.CONTRACT_ADDRESS, amount);
     const receipt = await transferTx.wait();
-    
+
     return {
       txHash: receipt.hash,
       blockNumber: receipt.blockNumber
@@ -398,16 +331,16 @@ export class BlockchainService {
 
   static async withdrawRewards(amount: string) {
     const contract = this.getContract();
-    
+
     // Check if contract is paused
     const isPaused = await contract.paused();
     if (!isPaused) {
       throw new Error('Contract must be paused to withdraw rewards');
     }
-    
+
     const tx = await contract.withdrawExcessRewards(amount);
     const receipt = await tx.wait();
-    
+
     return {
       txHash: receipt.hash,
       blockNumber: receipt.blockNumber
@@ -416,20 +349,20 @@ export class BlockchainService {
 
   static async getUserPendingRewards(walletAddress: string) {
     const contract = this.getContract();
-    
+
     try {
       const stakeCount = await contract.getUserStakeCount(walletAddress);
       const count = Number(stakeCount);
-      
+
       let totalPending = BigInt(0);
       const breakdown = [];
-      
+
       for (let i = 0; i < count; i++) {
         const [pending, details] = await Promise.all([
           contract.pendingReward(walletAddress, i),
           contract.getStakeDetails(walletAddress, i)
         ]);
-        
+
         if (!details.unstaked) {
           totalPending += pending;
           breakdown.push({
@@ -440,7 +373,7 @@ export class BlockchainService {
           });
         }
       }
-      
+
       return {
         totalPendingRewards: totalPending.toString(),
         activeStakes: breakdown.length,
@@ -455,7 +388,7 @@ export class BlockchainService {
     const contract = this.getContract();
     const tx = await contract.pause();
     const receipt = await tx.wait();
-    
+
     return {
       txHash: receipt.hash,
       blockNumber: receipt.blockNumber
@@ -466,7 +399,7 @@ export class BlockchainService {
     const contract = this.getContract();
     const tx = await contract.unpause();
     const receipt = await tx.wait();
-    
+
     return {
       txHash: receipt.hash,
       blockNumber: receipt.blockNumber
@@ -481,10 +414,10 @@ export class BlockchainService {
   // Transfer rewards from treasury to user wallet
   static async transferRewards(toAddress: string, amount: number) {
     const contract = this.getContract();
-    
+
     // Convert amount to wei (18 decimals)
     const amountWei = ethers.parseUnits(amount.toString(), 18);
-    
+
     // Get NILA token contract
     const nilaTokenAddress = await contract.nila();
     const nilaToken = new ethers.Contract(
@@ -495,29 +428,29 @@ export class BlockchainService {
       ],
       this.wallet
     );
-    
+
     // Check contract balance
     const contractBalance = await nilaToken.balanceOf(process.env.CONTRACT_ADDRESS);
     if (contractBalance < amountWei) {
       throw new Error('Insufficient contract balance for reward transfer');
     }
-    
+
     // Transfer tokens from contract to user
     // Note: This uses the admin wallet to transfer from contract
     // In production, you might want to use the contract's claim functions instead
     const tx = await nilaToken.transfer(toAddress, amountWei);
     const receipt = await tx.wait();
-    
+
     return receipt.hash;
   }
 
   // Get claimable rewards from contract
   static async getClaimableRewards(walletAddress: string) {
     const contract = this.getContract();
-    
+
     try {
       const rewards = await contract.getClaimableRewards(walletAddress);
-      
+
       return {
         instantRewards: rewards.instantRewards.toString(),
         referralRewards: rewards.referralRewards.toString(),
@@ -531,11 +464,11 @@ export class BlockchainService {
   // Claim instant rewards via contract
   static async claimInstantRewards(walletAddress: string) {
     const contract = this.getContract();
-    
+
     try {
       const tx = await contract.claimInstantRewards();
       const receipt = await tx.wait();
-      
+
       return receipt.hash;
     } catch (error: any) {
       throw new Error(`Failed to claim instant rewards: ${error.message}`);
@@ -545,11 +478,11 @@ export class BlockchainService {
   // Claim referral rewards via contract
   static async claimReferralRewards(walletAddress: string) {
     const contract = this.getContract();
-    
+
     try {
       const tx = await contract.claimReferralRewards();
       const receipt = await tx.wait();
-      
+
       return receipt.hash;
     } catch (error: any) {
       throw new Error(`Failed to claim referral rewards: ${error.message}`);
@@ -559,11 +492,11 @@ export class BlockchainService {
   // Claim all rewards via contract
   static async claimAllRewards(walletAddress: string) {
     const contract = this.getContract();
-    
+
     try {
       const tx = await contract.claimAllRewards();
       const receipt = await tx.wait();
-      
+
       return receipt.hash;
     } catch (error: any) {
       throw new Error(`Failed to claim all rewards: ${error.message}`);
@@ -573,11 +506,11 @@ export class BlockchainService {
   // Claim all APY rewards via contract
   static async claimAllAPYRewards(walletAddress: string) {
     const contract = this.getContract();
-    
+
     try {
       const tx = await contract.claimAllAPYRewards();
       const receipt = await tx.wait();
-      
+
       return receipt.hash;
     } catch (error: any) {
       throw new Error(`Failed to claim APY rewards: ${error.message}`);
@@ -592,7 +525,7 @@ export class BlockchainService {
     apr: number
   ) {
     const contract = this.getContract();
-    
+
     try {
       const tx = await contract.adminCreateStake(
         userAddress,
@@ -601,7 +534,7 @@ export class BlockchainService {
         apr
       );
       const receipt = await tx.wait();
-      
+
       // Get stake ID from event
       const event = receipt.logs.find((log: any) => {
         try {
@@ -611,13 +544,13 @@ export class BlockchainService {
           return false;
         }
       });
-      
+
       let stakeId = null;
       if (event) {
         const parsed = contract.interface.parseLog(event);
         stakeId = Number(parsed?.args[1]); // stakeId is second argument
       }
-      
+
       return {
         txHash: receipt.hash,
         blockNumber: receipt.blockNumber,
@@ -631,7 +564,7 @@ export class BlockchainService {
   // Calculate total liabilities (manual stakes not backed by tokens)
   static async calculateLiabilities() {
     const contract = this.getContract();
-    
+
     try {
       // Get contract balance and total staked
       const [contractBalance, totalStaked, availableRewards] = await Promise.all([
@@ -639,11 +572,11 @@ export class BlockchainService {
         contract.totalStaked(),
         contract.availableRewards()
       ]);
-      
+
       // Liabilities = tokens we owe but don't have
       // This is an approximation - in reality we'd track manual stakes separately
       const liabilities = totalStaked > contractBalance ? totalStaked - contractBalance : BigInt(0);
-      
+
       return {
         totalLiabilities: liabilities.toString(),
         contractBalance: contractBalance.toString(),
@@ -662,11 +595,11 @@ export class BlockchainService {
   // Get USDT balance in contract
   static async getUSDTBalance() {
     const contract = this.getContract();
-    
+
     try {
       const balance = await contract.getUSDTBalance();
       const totalCollected = await contract.totalUsdtCollected();
-      
+
       return {
         balance: balance.toString(),
         totalCollected: totalCollected.toString()
@@ -679,11 +612,11 @@ export class BlockchainService {
   // Withdraw USDT from contract
   static async withdrawUSDT(amount: string) {
     const contract = this.getContract();
-    
+
     try {
       const tx = await contract.withdrawUSDT(amount);
       const receipt = await tx.wait();
-      
+
       return {
         txHash: receipt.hash,
         blockNumber: receipt.blockNumber
@@ -700,10 +633,10 @@ export class BlockchainService {
   // Get NILA liability status
   static async getNILALiabilityStatus() {
     const contract = this.getContract();
-    
+
     try {
       const status = await contract.getNILALiabilityStatus();
-      
+
       return {
         totalLiabilities: status.totalLiabilities.toString(),
         nilaBalance: status.nilaBalance.toString(),
@@ -719,11 +652,11 @@ export class BlockchainService {
   static async depositNILAForLiabilities(amount: string) {
     const contract = this.getContract();
     const wallet = this.wallet;
-    
+
     try {
       // Get NILA token contract address
       const nilaTokenAddress = await contract.nila();
-      
+
       // Create NILA token contract instance
       const nilaToken = new ethers.Contract(
         nilaTokenAddress,
@@ -734,26 +667,26 @@ export class BlockchainService {
         ],
         wallet
       );
-      
+
       // Check wallet balance
       const walletBalance = await nilaToken.balanceOf(wallet.address);
       if (BigInt(walletBalance) < BigInt(amount)) {
         throw new Error('Insufficient NILA balance in admin wallet');
       }
-      
+
       // Check allowance
       const currentAllowance = await nilaToken.allowance(wallet.address, process.env.CONTRACT_ADDRESS);
-      
+
       // Approve if needed
       if (BigInt(currentAllowance) < BigInt(amount)) {
         const approveTx = await nilaToken.approve(process.env.CONTRACT_ADDRESS, amount);
         await approveTx.wait();
       }
-      
+
       // Deposit NILA for liabilities
       const tx = await contract.depositNILAForLiabilities(amount);
       const receipt = await tx.wait();
-      
+
       return {
         txHash: receipt.hash,
         blockNumber: receipt.blockNumber

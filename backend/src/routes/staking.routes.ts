@@ -29,7 +29,7 @@ router.get('/amount-configs', async (req, res) => {
 });
 
 // Get single amount config (PUBLIC)
-router.get('/amount-configs/:id', 
+router.get('/amount-configs/:id',
   param('id').isInt({ min: 0 }),
   validate,
   async (req, res) => {
@@ -57,10 +57,7 @@ router.post('/amount-configs',
         amount,
         instantRewardPercent
       );
-      
-      // Invalidate cache
-      await StakingService.invalidateCache('amount_configs');
-      
+
       res.json(result);
     } catch (error: any) {
       res.status(400).json({ error: error.message });
@@ -79,17 +76,14 @@ router.put('/amount-configs/:id',
     try {
       const id = parseInt(req.params.id as string);
       const { instantRewardPercent, active } = req.body;
-      
+
       const result = await StakingService.updateAmountConfig(
         req.adminId!,
         id,
         instantRewardPercent,
         active
       );
-      
-      // Invalidate cache
-      await StakingService.invalidateCache('amount_configs');
-      
+
       res.json(result);
     } catch (error: any) {
       res.status(400).json({ error: error.message });
@@ -140,10 +134,10 @@ router.post('/lock-configs',
         lockDays,
         aprPercent
       );
-      
+
       // Invalidate cache
       await StakingService.invalidateCache('lock_configs');
-      
+
       res.json(result);
     } catch (error: any) {
       res.status(400).json({ error: error.message });
@@ -162,17 +156,17 @@ router.put('/lock-configs/:id',
     try {
       const id = parseInt(req.params.id as string);
       const { aprPercent, active } = req.body;
-      
+
       const result = await StakingService.updateLockConfig(
         req.adminId!,
         id,
         aprPercent,
         active
       );
-      
+
       // Invalidate cache
       await StakingService.invalidateCache('lock_configs');
-      
+
       res.json(result);
     } catch (error: any) {
       res.status(400).json({ error: error.message });
@@ -229,24 +223,24 @@ router.post('/reward-tiers',
   async (req: AuthRequest, res) => {
     try {
       const { minNilaAmount, maxNilaAmount, instantRewardPercent } = req.body;
-      
+
       // Validate range
       if (maxNilaAmount > 0 && maxNilaAmount <= minNilaAmount) {
-        return res.status(400).json({ 
-          error: 'Maximum amount must be greater than minimum (or 0 for unlimited)' 
+        return res.status(400).json({
+          error: 'Maximum amount must be greater than minimum (or 0 for unlimited)'
         });
       }
-      
+
       const result = await StakingService.createRewardTier(
         req.adminId!,
         minNilaAmount,
         maxNilaAmount,
         instantRewardPercent
       );
-      
+
       // Invalidate cache
       await StakingService.invalidateCache('reward_tiers');
-      
+
       res.json(result);
     } catch (error: any) {
       res.status(400).json({ error: error.message });
@@ -267,14 +261,14 @@ router.put('/reward-tiers/:id',
     try {
       const id = parseInt(req.params.id as string);
       const { minNilaAmount, maxNilaAmount, instantRewardPercent, active } = req.body;
-      
+
       // Validate range
       if (maxNilaAmount > 0 && maxNilaAmount <= minNilaAmount) {
-        return res.status(400).json({ 
-          error: 'Maximum amount must be greater than minimum (or 0 for unlimited)' 
+        return res.status(400).json({
+          error: 'Maximum amount must be greater than minimum (or 0 for unlimited)'
         });
       }
-      
+
       const result = await StakingService.updateRewardTier(
         req.adminId!,
         id,
@@ -283,10 +277,10 @@ router.put('/reward-tiers/:id',
         instantRewardPercent,
         active
       );
-      
+
       // Invalidate cache
       await StakingService.invalidateCache('reward_tiers');
-      
+
       res.json(result);
     } catch (error: any) {
       res.status(400).json({ error: error.message });

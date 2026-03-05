@@ -1,7 +1,7 @@
 import { BrowserProvider, Contract, parseUnits } from 'ethers';
 
 // Contract addresses - these should match your deployed contracts
-const STAKING_CONTRACT_ADDRESS = import.meta.env.VITE_STAKING_CONTRACT_ADDRESS || '0x4b0f512ACE0239A604AA8f8D5C05bD455248D86E';
+const STAKING_CONTRACT_ADDRESS = import.meta.env.VITE_STAKING_CONTRACT_ADDRESS || '0x06a38fb94a1A35dCE9A5f2e6a640B9c559F34333';
 const NILA_TOKEN_ADDRESS = import.meta.env.VITE_NILA_TOKEN_ADDRESS || '0xA31fb7667F80306690F5DF0d9A6ea272aBF97926';
 const USDT_TOKEN_ADDRESS = '0xef4f8bdeDad6829817F802a957b8a5232644e1bC'; // BSC Testnet USDT
 
