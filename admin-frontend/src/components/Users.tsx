@@ -1,4 +1,4 @@
-import { Eye, AlertCircle } from 'lucide-react';
+import { Eye, AlertCircle, Flag, CheckCircle } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import UserProfileModal from './UserProfileModal';
 import { userApi } from '../api/userApi';
@@ -36,6 +36,10 @@ const Users = () => {
     const [isProfileOpen, setIsProfileOpen] = useState(false);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    const [flagModalOpen, setFlagModalOpen] = useState(false);
+    const [flagReason, setFlagReason] = useState('');
+    const [userToFlag, setUserToFlag] = useState<User | null>(null);
+    const [actionLoading, setActionLoading] = useState(false);
 
 
     useEffect(() => {
@@ -58,6 +62,45 @@ const Users = () => {
     const handleViewProfile = (user: User) => {
         setSelectedUser(user);
         setIsProfileOpen(true);
+    };
+
+    const handleFlagClick = (user: User) => {
+        setUserToFlag(user);
+        setFlagReason('');
+        setFlagModalOpen(true);
+    };
+
+    const handleFlagUser = async () => {
+        if (!userToFlag) return;
+
+        try {
+            setActionLoading(true);
+            await userApi.flagUser(userToFlag.walletAddress, flagReason || undefined);
+            setFlagModalOpen(false);
+            setFlagReason('');
+            setUserToFlag(null);
+            await fetchUsers();
+        } catch (err: any) {
+            alert(`Error: ${err.message}`);
+        } finally {
+            setActionLoading(false);
+        }
+    };
+
+    const handleUnflagUser = async (user: User) => {
+        if (!confirm(`Are you sure you want to unflag ${truncateAddress(user.walletAddress)}?`)) {
+            return;
+        }
+
+        try {
+            setActionLoading(true);
+            await userApi.unflagUser(user.walletAddress);
+            await fetchUsers();
+        } catch (err: any) {
+            alert(`Error: ${err.message}`);
+        } finally {
+            setActionLoading(false);
+        }
     };
 
     return (
@@ -158,6 +201,27 @@ const Users = () => {
                                                 <Eye className="w-4 h-4" />
                                                 <span className="text-sm font-medium">View</span>
                                             </button>
+                                            {user.status === 'active' ? (
+                                                <button
+                                                    onClick={() => handleFlagClick(user)}
+                                                    disabled={actionLoading}
+                                                    className="inline-flex items-center gap-2 px-3 py-2 ml-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-50"
+                                                    title="Flag user"
+                                                >
+                                                    <Flag className="w-4 h-4" />
+                                                    <span className="text-sm font-medium">Flag</span>
+                                                </button>
+                                            ) : (
+                                                <button
+                                                    onClick={() => handleUnflagUser(user)}
+                                                    disabled={actionLoading}
+                                                    className="inline-flex items-center gap-2 px-3 py-2 ml-2 text-green-600 hover:bg-green-50 rounded-lg transition-colors disabled:opacity-50"
+                                                    title="Unflag user"
+                                                >
+                                                    <CheckCircle className="w-4 h-4" />
+                                                    <span className="text-sm font-medium">Unflag</span>
+                                                </button>
+                                            )}
                                         </td>
                                     </tr>
                                 ))}
@@ -180,7 +244,76 @@ const Users = () => {
                     isOpen={isProfileOpen}
                     onClose={() => setIsProfileOpen(false)}
                     user={selectedUser}
+                    onUserUpdated={fetchUsers}
                 />
+            )}
+
+            {/* Flag User Modal */}
+            {flagModalOpen && userToFlag && (
+                <>
+                    <div
+                        className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-40"
+                        onClick={() => setFlagModalOpen(false)}
+                    />
+                    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+                        <div className="bg-white rounded-xl shadow-lg max-w-md w-full">
+                            <div className="flex items-center justify-between p-6 border-b border-slate-100">
+                                <h2 className="text-xl font-bold text-slate-900">Flag User</h2>
+                                <button
+                                    onClick={() => setFlagModalOpen(false)}
+                                    className="p-1 hover:bg-slate-100 rounded-lg transition-colors"
+                                >
+                                    <AlertCircle className="w-5 h-5 text-slate-600" />
+                                </button>
+                            </div>
+
+                            <div className="p-6 space-y-4">
+                                <div>
+                                    <p className="text-sm text-slate-600 mb-2">Wallet Address</p>
+                                    <p className="font-mono text-sm text-slate-900 break-all">
+                                        {userToFlag.walletAddress}
+                                    </p>
+                                </div>
+
+                                <div>
+                                    <label className="block text-sm font-medium text-slate-700 mb-2">
+                                        Reason (Optional)
+                                    </label>
+                                    <textarea
+                                        value={flagReason}
+                                        onChange={(e) => setFlagReason(e.target.value)}
+                                        placeholder="Enter reason for flagging this user..."
+                                        className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent"
+                                        rows={3}
+                                    />
+                                </div>
+
+                                <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+                                    <p className="text-sm text-red-800">
+                                        <strong>Warning:</strong> Flagging this user will prevent them from connecting their wallet to the staking platform.
+                                    </p>
+                                </div>
+
+                                <div className="flex gap-3 pt-2">
+                                    <button
+                                        onClick={() => setFlagModalOpen(false)}
+                                        disabled={actionLoading}
+                                        className="flex-1 px-4 py-2 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 transition-colors font-medium disabled:opacity-50"
+                                    >
+                                        Cancel
+                                    </button>
+                                    <button
+                                        onClick={handleFlagUser}
+                                        disabled={actionLoading}
+                                        className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-medium disabled:opacity-50"
+                                    >
+                                        {actionLoading ? 'Flagging...' : 'Flag User'}
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </>
             )}
         </div>
     );

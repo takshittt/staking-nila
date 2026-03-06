@@ -149,4 +149,76 @@ router.patch('/:walletAddress/status', authMiddleware, async (req, res) => {
   }
 });
 
+// Flag user
+router.post('/:walletAddress/flag', authMiddleware, async (req, res) => {
+  try {
+    const walletAddress = Array.isArray(req.params.walletAddress)
+      ? req.params.walletAddress[0]
+      : req.params.walletAddress;
+    const { reason } = req.body;
+
+    const adminId = (req as any).adminId;
+    const user = await UserService.flagUser(walletAddress, reason, adminId);
+
+    res.json({
+      success: true,
+      message: 'User flagged successfully',
+      user: {
+        walletAddress: user.walletAddress,
+        isFlagged: user.isFlagged,
+        flaggedAt: user.flaggedAt,
+        flaggedReason: user.flaggedReason
+      }
+    });
+  } catch (error: any) {
+    console.error('Flag user error:', error);
+    res.status(400).json({ error: error.message });
+  }
+});
+
+// Unflag user
+router.post('/:walletAddress/unflag', authMiddleware, async (req, res) => {
+  try {
+    const walletAddress = Array.isArray(req.params.walletAddress)
+      ? req.params.walletAddress[0]
+      : req.params.walletAddress;
+
+    const user = await UserService.unflagUser(walletAddress);
+
+    res.json({
+      success: true,
+      message: 'User unflagged successfully',
+      user: {
+        walletAddress: user.walletAddress,
+        isFlagged: user.isFlagged,
+        unflaggedAt: user.unflaggedAt
+      }
+    });
+  } catch (error: any) {
+    console.error('Unflag user error:', error);
+    res.status(400).json({ error: error.message });
+  }
+});
+
+// Validate wallet connection (public endpoint)
+router.post('/validate', async (req, res) => {
+  try {
+    const { walletAddress } = req.body;
+
+    if (!walletAddress) {
+      return res.status(400).json({ error: 'Wallet address is required' });
+    }
+
+    const validation = await UserService.validateWalletConnection(walletAddress);
+
+    res.json({
+      success: true,
+      ...validation
+    });
+  } catch (error: any) {
+    console.error('Validate wallet error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 export default router;

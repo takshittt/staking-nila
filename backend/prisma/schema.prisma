@@ -48,6 +48,11 @@ model User {
   referredBy        String?
   isReferralSkipped Boolean         @default(false)
   status            String          @default("active")
+  isFlagged         Boolean         @default(false)
+  flaggedAt         DateTime?
+  flaggedReason     String?
+  flaggedBy         String?
+  unflaggedAt       DateTime?
   firstConnectedAt  DateTime        @default(now())
   lastSeenAt        DateTime        @updatedAt
   lastSyncedBlock   Int?
@@ -113,6 +118,8 @@ model PendingReward {
   txHash        String?
   user          User      @relation(fields: [userId], references: [id])
 
+  @@index([walletAddress, status])
+  @@index([walletAddress, type, status])
   @@map("pending_rewards")
 }
 
@@ -171,4 +178,36 @@ model AmountConfig {
   updatedAt          DateTime @updatedAt
 
   @@map("amount_configs")
+}
+
+model Order {
+  id              String   @id @default(auto()) @map("_id") @db.ObjectId
+  orderId         String   @unique
+  userWallet      String
+  trcWallet       String?
+  network         String
+  pyrandAmount    Float
+  stableAmount    Float?
+  cryptoAmount    Float?
+  priceAtCreation Float?
+  lockDays        Int      @default(30)
+  apr             Int      @default(1200)
+  status          String   @default("PENDING_PAYMENT")
+  txHash          String?
+  stakeTxHash     String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([userWallet])
+  @@index([status])
+  @@index([txHash])
+  @@map("orders")
+}
+
+model ProcessedTx {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  txHash    String   @unique
+  createdAt DateTime @default(now())
+
+  @@map("processedtxes")
 }

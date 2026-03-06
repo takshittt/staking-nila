@@ -85,140 +85,164 @@ export class CryptoStakeService {
     instantRewardBps: number;
     txHash: string;
   }) {
-    const normalizedAddress = data.walletAddress.toLowerCase();
+    // Use transaction with increased timeout (15 seconds) to handle all operations atomically
+    return await prisma.$transaction(async (tx) => {
+      const normalizedAddress = data.walletAddress.toLowerCase();
 
-    // Find user
-    const user = await prisma.user.findUnique({
-      where: { walletAddress: normalizedAddress }
-    });
+      // Find user
+      const user = await tx.user.findUnique({
+        where: { walletAddress: normalizedAddress }
+      });
 
-    if (!user) {
-      throw new Error('User not found');
-    }
-
-    // Calculate dates
-    const startDate = new Date();
-    const endDate = new Date();
-    endDate.setDate(endDate.getDate() + data.lockDays);
-
-    // Generate stake ID
-    const count = await prisma.stake.count();
-    const stakeId = `STK-${String(count + 1).padStart(3, '0')}`;
-
-    // Convert APR from basis points to percentage
-    const apyPercent = data.apr / 100;
-
-    // Create stake record
-    const stake = await prisma.stake.create({
-      data: {
-        stakeId,
-        userId: user.id,
-        planName: 'NILA Staking (Crypto)',
-        planVersion: 1,
-        amount: data.nilaAmount,
-        apy: apyPercent,
-        startDate,
-        endDate,
-        txHash: data.txHash,
-        status: 'active'
+      if (!user) {
+        throw new Error('User not found');
       }
-    });
 
-    // Create instant cashback reward if applicable (crypto only)
-    // Reward is calculated based on USD display amount
-    if (data.instantRewardBps > 0) {
-      const instantRewardPercent = data.instantRewardBps / 100;
-      const instantRewardUsd = data.usdAmount * (instantRewardPercent / 100);
-      // Convert USD reward to NILA
-      const instantRewardNila = this.calculateNilaAmount(instantRewardUsd);
+      // Calculate dates
+      const startDate = new Date();
+      const endDate = new Date();
+      endDate.setDate(endDate.getDate() + data.lockDays);
 
-      await RewardService.createPendingReward({
-        userId: user.id,
-        walletAddress: normalizedAddress,
-        type: 'INSTANT_CASHBACK',
-        amount: instantRewardNila,
-        sourceId: stake.stakeId,
-        metadata: {
-          stakeAmount: data.nilaAmount,
-          usdAmount: data.usdAmount,
-          rewardPercent: instantRewardPercent,
-          paymentMethod: 'CRYPTO'
+      // Generate stake ID
+      const count = await tx.stake.count();
+      const stakeId = `STK-${String(count + 1).padStart(3, '0')}`;
+
+      // Convert APR from basis points to percentage
+      const apyPercent = data.apr / 100;
+
+      // Create stake record
+      const stake = await tx.stake.create({
+        data: {
+          stakeId,
+          userId: user.id,
+          planName: 'NILA Staking (Crypto)',
+          planVersion: 1,
+          amount: data.nilaAmount.toString(),
+          apy: apyPercent.toString(),
+          startDate,
+          endDate,
+          txHash: data.txHash,
+          status: 'active'
         }
       });
-    }
 
-    // Handle referral rewards
-    if (user.referredBy) {
-      const config = await prisma.referralConfig.findUnique({
-        where: { id: REFERRAL_CONFIG_ID }
-      });
+      // Create instant cashback reward if applicable (crypto only)
+      // Reward is calculated based on USD display amount
+      if (data.instantRewardBps > 0) {
+        const instantRewardPercent = data.instantRewardBps / 100;
+        const instantRewardUsd = data.usdAmount * (instantRewardPercent / 100);
+        // Convert USD reward to NILA
+        const instantRewardNila = this.calculateNilaAmount(instantRewardUsd);
 
-      if (config && !config.isPaused) {
-        const referrer = await prisma.user.findUnique({
-          where: { referralCode: user.referredBy }
-        });
-
-        if (referrer) {
-          // Calculate referral rewards based on USD display amount
-          const referrerRewardUsd = data.usdAmount * (Number(config.referrerPercentage) / 100);
-          const referredRewardUsd = data.usdAmount * (Number(config.referralPercentage) / 100);
-          
-          // Convert USD rewards to NILA
-          const referrerRewardNila = this.calculateNilaAmount(referrerRewardUsd);
-          const referredRewardNila = this.calculateNilaAmount(referredRewardUsd);
-
-          // Update referral earnings tracking (in NILA)
-          await prisma.referral.updateMany({
-            where: {
-              referrerWallet: referrer.walletAddress,
-              referredWallet: normalizedAddress
-            },
-            data: {
-              earnings: { increment: referrerRewardNila }
-            }
-          });
-
-          // Create pending reward for referrer (in NILA)
-          await RewardService.createPendingReward({
-            userId: referrer.id,
-            walletAddress: referrer.walletAddress,
-            type: 'REFERRAL_REWARD',
-            amount: referrerRewardNila,
-            sourceId: stake.stakeId,
-            metadata: {
-              referredUser: normalizedAddress,
-              stakeAmount: data.nilaAmount,
-              usdAmount: data.usdAmount,
-              rewardPercent: Number(config.referrerPercentage),
-              paymentMethod: 'CRYPTO'
-            }
-          });
-
-          // Create pending reward for referred user (bonus, in NILA)
-          await RewardService.createPendingReward({
+        await tx.pendingReward.create({
+          data: {
             userId: user.id,
             walletAddress: normalizedAddress,
-            type: 'REFERRAL_REWARD',
-            amount: referredRewardNila,
+            type: 'INSTANT_CASHBACK',
+            amount: instantRewardNila.toString(),
+            status: 'pending',
             sourceId: stake.stakeId,
             metadata: {
-              referrerUser: referrer.walletAddress,
               stakeAmount: data.nilaAmount,
               usdAmount: data.usdAmount,
-              rewardPercent: Number(config.referralPercentage),
-              isBonus: true,
+              rewardPercent: instantRewardPercent,
               paymentMethod: 'CRYPTO'
             }
+          }
+        });
+      }
+
+      // Handle referral rewards
+      if (user.referredBy) {
+        const config = await tx.referralConfig.findUnique({
+          where: { id: REFERRAL_CONFIG_ID }
+        });
+
+        if (config && !config.isPaused) {
+          const referrer = await tx.user.findUnique({
+            where: { referralCode: user.referredBy }
           });
+
+          if (referrer) {
+            // Calculate referral rewards based on USD display amount
+            const referrerRewardUsd = data.usdAmount * (Number(config.referrerPercentage) / 100);
+            const referredRewardUsd = data.usdAmount * (Number(config.referralPercentage) / 100);
+            
+            // Convert USD rewards to NILA
+            const referrerRewardNila = this.calculateNilaAmount(referrerRewardUsd);
+            const referredRewardNila = this.calculateNilaAmount(referredRewardUsd);
+
+            // Update referral earnings tracking (in NILA)
+            const existingReferral = await tx.referral.findFirst({
+              where: {
+                referrerWallet: referrer.walletAddress,
+                referredWallet: normalizedAddress
+              }
+            });
+            
+            if (existingReferral) {
+              const currentEarnings = parseFloat(existingReferral.earnings);
+              await tx.referral.updateMany({
+                where: {
+                  referrerWallet: referrer.walletAddress,
+                  referredWallet: normalizedAddress
+                },
+                data: {
+                  earnings: (currentEarnings + referrerRewardNila).toString()
+                }
+              });
+            }
+
+            // Create pending reward for referrer (in NILA)
+            await tx.pendingReward.create({
+              data: {
+                userId: referrer.id,
+                walletAddress: referrer.walletAddress,
+                type: 'REFERRAL_REWARD',
+                amount: referrerRewardNila.toString(),
+                status: 'pending',
+                sourceId: stake.stakeId,
+                metadata: {
+                  referredUser: normalizedAddress,
+                  stakeAmount: data.nilaAmount,
+                  usdAmount: data.usdAmount,
+                  rewardPercent: Number(config.referrerPercentage),
+                  paymentMethod: 'CRYPTO'
+                }
+              }
+            });
+
+            // Create pending reward for referred user (bonus, in NILA)
+            await tx.pendingReward.create({
+              data: {
+                userId: user.id,
+                walletAddress: normalizedAddress,
+                type: 'REFERRAL_REWARD',
+                amount: referredRewardNila.toString(),
+                status: 'pending',
+                sourceId: stake.stakeId,
+                metadata: {
+                  referrerUser: referrer.walletAddress,
+                  stakeAmount: data.nilaAmount,
+                  usdAmount: data.usdAmount,
+                  rewardPercent: Number(config.referralPercentage),
+                  isBonus: true,
+                  paymentMethod: 'CRYPTO'
+                }
+              }
+            });
+          }
         }
       }
-    }
 
-    return {
-      stake,
-      nilaAmount: data.nilaAmount,
-      usdAmount: data.usdAmount
-    };
+      return {
+        stake,
+        nilaAmount: data.nilaAmount,
+        usdAmount: data.usdAmount
+      };
+    }, {
+      timeout: 15000 // 15 second timeout
+    });
   }
 
   /**

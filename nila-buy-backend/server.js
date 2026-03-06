@@ -2,7 +2,6 @@ import dotenv from "dotenv";
 dotenv.config();
 
 import express from "express";
-import mongoose from "mongoose";
 import cors from "cors";
 import bodyParser from "body-parser";
 
@@ -10,12 +9,12 @@ import { ethers } from "ethers";
 import { TronWeb } from "tronweb";
 import axios from "axios";
 
+import prisma from "./prisma-client.js";
 import getStakingConfig from "./stakingContract.js";
 import getNilaTokenConfig from "./nilaToken.js";
 import getEthChainlinkConfig from "./ethChainlink.js";
 import getBscChainlinkConfig from "./bscChainlink.js";
 import getTronChainlinkConfig from "./tronChainlink.js";
-import { User, Stake, Transaction, Order, ProcessedTx } from "./models.js";
 
 // Initialize config objects after dotenv is loaded
 const stakingContract = getStakingConfig();
@@ -58,13 +57,10 @@ app.use(cors({
 
 app.use(bodyParser.json());
 
-mongoose
-  .connect(process.env.MON_URI)
-  .then(() => {})
-  .catch((err) => {});
-
-// ─── Schemas (imported from models.js) ───────────────────────────────────────
-// User, Stake, Transaction, Order, ProcessedTx
+// Test database connection on startup
+prisma.$connect()
+  .then(() => console.log('✅ Connected to MongoDB via Prisma'))
+  .catch((err) => console.error('❌ Database connection error:', err));
 
 // ─── Providers ────────────────────────────────────────────────────────────────
 
@@ -331,21 +327,22 @@ app.post("/create-order", async (req, res) => {
     cryptoAmount = Number(((pyrand * livePrice) / cryptoRate).toFixed(6));
   }
 
-  const order = await Order.create({
-    orderId,
-    userWallet: wallet.toLowerCase(),
-    network,
-    trcWallet: isTRON
-      ? (trcWallet?.toLowerCase() || wallet.toLowerCase())
-      : undefined,
-    pyrandAmount: pyrand,
-    stableAmount,
-    cryptoAmount,
-    cryptoRate,
-    priceAtCreation: livePrice,
-    lockDays: validLockDays,
-    apr: validApr,
-    status: "PENDING_PAYMENT",
+  const order = await prisma.order.create({
+    data: {
+      orderId,
+      userWallet: wallet.toLowerCase(),
+      network,
+      trcWallet: isTRON
+        ? (trcWallet?.toLowerCase() || wallet.toLowerCase())
+        : undefined,
+      pyrandAmount: pyrand,
+      stableAmount,
+      cryptoAmount,
+      priceAtCreation: livePrice,
+      lockDays: validLockDays,
+      apr: validApr,
+      status: "PENDING_PAYMENT",
+    }
   });
 
   return res.json({ orderId, network, recipient, stableAmount, cryptoAmount });
@@ -354,7 +351,10 @@ app.post("/create-order", async (req, res) => {
 // ─── Get Order ────────────────────────────────────────────────────────────────
 
 app.get("/order/:orderId", async (req, res) => {
-  const order = await Order.findOne({ orderId: req.params.orderId }).lean().exec();
+  const order = await prisma.order.findUnique({
+    where: { orderId: req.params.orderId }
+  });
+  
   if (!order) return res.status(404).json({ error: "Not found" });
 
   const recipient = ["TRC20", "TRX"].includes(order.network)
@@ -390,7 +390,10 @@ app.post("/verify-transaction", async (req, res) => {
 
   // ── 1. Load order ──────────────────────────────────────────────────────────
   console.log("\n📦 Loading order...");
-  const order = await Order.findOne({ orderId });
+  const order = await prisma.order.findUnique({
+    where: { orderId }
+  });
+  
   if (!order) {
     console.log("❌ Order not found");
     return res.status(404).json({ error: "Order not found" });
@@ -410,21 +413,25 @@ app.post("/verify-transaction", async (req, res) => {
 
   // ── 2. Idempotency guard ───────────────────────────────────────────────────
   console.log("\n🔒 Checking idempotency...");
-  const alreadyProcessed = await ProcessedTx.findOne({ txHash });
+  const alreadyProcessed = await prisma.processedTx.findUnique({
+    where: { txHash }
+  });
+  
   if (alreadyProcessed) {
     console.log("⚠️  Transaction already processed");
     return res.status(400).json({ error: "Transaction already processed" });
   }
   console.log("✅ Transaction not processed before");
 
-  const session = await mongoose.startSession();
-  session.startTransaction();
-
   try {
-    // Lock the txHash row immediately
-    console.log("\n🔐 Locking transaction hash...");
-    await ProcessedTx.create([{ txHash }], { session });
-    console.log("✅ Transaction hash locked");
+    // Use Prisma transaction instead of Mongoose session
+    const result = await prisma.$transaction(async (tx) => {
+      // Lock the txHash row immediately
+      console.log("\n🔐 Locking transaction hash...");
+      await tx.processedTx.create({
+        data: { txHash }
+      });
+      console.log("✅ Transaction hash locked");
 
     let pyrandToSend = 0;
 
@@ -485,144 +492,143 @@ app.post("/verify-transaction", async (req, res) => {
     }
     
     // ── 5. Create/Update User in MongoDB ───────────────────────────────────
-    let user = await User.findOne({ walletAddress: normalizedAddress });
-    
-    if (!user) {
-      // Generate referral code
-      const referralCode = Math.random().toString(36).substring(2, 10).toUpperCase();
+      let user = await tx.user.findUnique({
+        where: { walletAddress: normalizedAddress }
+      });
       
-      user = await User.create([{
-        walletAddress: normalizedAddress,
-        referralCode,
-        createdAt: new Date(),
-        updatedAt: new Date()
-      }], { session });
+      if (!user) {
+        // Generate referral code
+        const referralCode = Math.random().toString(36).substring(2, 10).toUpperCase();
+        
+        user = await tx.user.create({
+          data: {
+            walletAddress: normalizedAddress,
+            referralCode
+          }
+        });
+        
+        console.log("✅ New user created:", normalizedAddress);
+      } else {
+        console.log("✅ Existing user found:", normalizedAddress);
+      }
+
+      // ── 6. Transfer NILA & Create Stake ────────────────────────────────────
+      console.log("\n🎯 Creating stake for EVM address:", evmAddressForStaking);
+      console.log("📅 Lock Days:", order.lockDays);
+      console.log("📈 APR:", order.apr, "bps");
+      const stakeTxHash = await adminStakeForUser(evmAddressForStaking, pyrandToSend, order.lockDays, order.apr);
+
+      // ── 7. Record Stake in MongoDB ─────────────────────────────────────────
+      const stakeCount = await tx.stake.count();
+      const stakeId = `STK-${String(stakeCount + 1).padStart(3, '0')}`;
       
-      user = user[0]; // create returns array when using session
-      console.log("✅ New user created:", normalizedAddress);
-    } else {
-      console.log("✅ Existing user found:", normalizedAddress);
-    }
+      const lockDays = order.lockDays;
+      const apr = order.apr; // Keep in basis points (e.g., 1000 = 10%)
+      
+      const startDate = new Date();
+      const endDate = new Date();
+      endDate.setDate(endDate.getDate() + lockDays);
 
-    // ── 6. Transfer NILA & Create Stake ────────────────────────────────────
-    console.log("\n🎯 Creating stake for EVM address:", evmAddressForStaking);
-    console.log("📅 Lock Days:", order.lockDays);
-    console.log("📈 APR:", order.apr, "bps");
-    const stakeTxHash = await adminStakeForUser(evmAddressForStaking, pyrandToSend, order.lockDays, order.apr);
+      await tx.stake.create({
+        data: {
+          stakeId,
+          userId: user.id,
+          planName: `${lockDays} Days`,
+          planVersion: 1,
+          amount: pyrandToSend.toString(),
+          apy: apr.toString(),
+          startDate,
+          endDate,
+          status: 'active',
+          txHash: stakeTxHash
+        }
+      });
 
-    // ── 6. Record Stake in MongoDB ─────────────────────────────────────────
-    const stakeCount = await Stake.countDocuments();
-    const stakeId = `STK-${String(stakeCount + 1).padStart(3, '0')}`;
-    
-    const lockDays = order.lockDays;
-    const apr = order.apr; // Keep in basis points (e.g., 1000 = 10%)
-    
-    const startDate = new Date();
-    const endDate = new Date();
-    endDate.setDate(endDate.getDate() + lockDays);
+      // ── 8. Record Payment Transaction ──────────────────────────────────────
+      // Determine the payment token/currency
+      let paymentToken = 'USDT'; // default
+      let paymentAmount = order.stableAmount || order.cryptoAmount || 0;
+      
+      if (network === 'BSC_USDT' || network === 'ETH_USDT' || network === 'TRC20') {
+        paymentToken = 'USDT';
+        paymentAmount = order.stableAmount || 0;
+      } else if (network === 'BSC_USDC' || network === 'ETH_USDC') {
+        paymentToken = 'USDC';
+        paymentAmount = order.stableAmount || 0;
+      } else if (network === 'BSC') {
+        paymentToken = 'BNB';
+        paymentAmount = order.cryptoAmount || 0;
+      } else if (network === 'ETH') {
+        paymentToken = 'ETH';
+        paymentAmount = order.cryptoAmount || 0;
+      } else if (network === 'TRX') {
+        paymentToken = 'TRX';
+        paymentAmount = order.cryptoAmount || 0;
+      }
+      
+      await tx.transaction.create({
+        data: {
+          txHash: txHash,
+          walletAddress: normalizedAddress,
+          type: 'PAYMENT',
+          amount: paymentAmount.toString(),
+          status: 'confirmed',
+          metadata: {
+            network,
+            orderId,
+            nilaAmount: pyrandToSend,
+            paymentToken,
+            paymentAmount
+          }
+        }
+      });
 
-    await Stake.create([{
-      stakeId,
-      userId: user._id,
-      walletAddress: normalizedAddress,
-      planName: `${lockDays} Days`,
-      planVersion: 1,
-      amount: pyrandToSend.toString(), // Convert to string
-      apy: apr.toString(),              // Store in basis points
-      startDate,
-      endDate,
-      status: 'active',
-      txHash: stakeTxHash,
-      source: 'buy_stake',
-      createdAt: new Date(),
-      updatedAt: new Date()
-    }], { session });
+      // ── 9. Record Staking Transaction ──────────────────────────────────────
+      await tx.transaction.create({
+        data: {
+          txHash: stakeTxHash,
+          walletAddress: normalizedAddress,
+          type: 'STAKE',
+          amount: pyrandToSend.toString(),
+          status: 'confirmed',
+          metadata: {
+            stakeId,
+            lockDays,
+            apr
+          }
+        }
+      });
 
-    // ── 7. Record Payment Transaction ──────────────────────────────────────
-    // Determine the payment token/currency
-    let paymentToken = 'USDT'; // default
-    let paymentAmount = order.stableAmount || order.cryptoAmount || 0;
-    
-    if (network === 'BSC_USDT' || network === 'ETH_USDT' || network === 'TRC20') {
-      paymentToken = 'USDT';
-      paymentAmount = order.stableAmount || 0;
-    } else if (network === 'BSC_USDC' || network === 'ETH_USDC') {
-      paymentToken = 'USDC';
-      paymentAmount = order.stableAmount || 0;
-    } else if (network === 'BSC') {
-      paymentToken = 'BNB';
-      paymentAmount = order.cryptoAmount || 0;
-    } else if (network === 'ETH') {
-      paymentToken = 'ETH';
-      paymentAmount = order.cryptoAmount || 0;
-    } else if (network === 'TRX') {
-      paymentToken = 'TRX';
-      paymentAmount = order.cryptoAmount || 0;
-    }
-    
-    await Transaction.create([{
-      txHash: txHash,
-      walletAddress: normalizedAddress,
-      type: 'PAYMENT',
-      amount: paymentAmount.toString(), // Payment amount in the actual currency used
-      status: 'confirmed',
-      metadata: {
-        network,
-        orderId,
-        nilaAmount: pyrandToSend,
-        paymentToken, // Store which token was used for payment
-        paymentAmount // Store the payment amount
-      },
-      createdAt: new Date(),
-      updatedAt: new Date()
-    }], { session });
+      // ── 10. Update order ────────────────────────────────────────────────────
+      await tx.order.update({
+        where: { orderId },
+        data: {
+          status: "PAID",
+          txHash: txHash,
+          stakeTxHash: stakeTxHash,
+          pyrandAmount: pyrandToSend
+        }
+      });
 
-    // ── 8. Record Staking Transaction ──────────────────────────────────────
-    await Transaction.create([{
-      txHash: stakeTxHash,
-      walletAddress: normalizedAddress,
-      type: 'STAKE',
-      amount: pyrandToSend.toString(), // Convert to string
-      status: 'confirmed',
-      metadata: {
-        stakeId,
-        lockDays,
-        apr
-      },
-      createdAt: new Date(),
-      updatedAt: new Date()
-    }], { session });
-
-    // ── 9. Update order ────────────────────────────────────────────────────
-    order.status = "PAID";
-    order.txHash = txHash;
-    order.stakeTxHash = stakeTxHash;
-    order.pyrandAmount = pyrandToSend;
-    order.updatedAt = new Date();
-    await order.save({ session });
-
-    await session.commitTransaction();
-    session.endSession();
+      return { stakeTxHash, stakeId, pyrandToSend };
+    });
 
     console.log("✅ PAYMENT VERIFIED & STAKE CREATED");
     console.log("📊 Network:", network);
-    console.log("💰 NILA staked:", pyrandToSend);
+    console.log("💰 NILA staked:", result.pyrandToSend);
     console.log("🔗 Payment TX:", txHash);
-    console.log("🔗 Stake TX:", stakeTxHash);
-    console.log("📝 Stake ID:", stakeId);
+    console.log("🔗 Stake TX:", result.stakeTxHash);
+    console.log("📝 Stake ID:", result.stakeId);
 
     return res.json({
       success: true,
-      pyrandSent: pyrandToSend,
-      tokenTx: stakeTxHash,
-      stakeId
+      pyrandSent: result.pyrandToSend,
+      tokenTx: result.stakeTxHash,
+      stakeId: result.stakeId
     });
 
   } catch (err) {
-    await session.abortTransaction();
-    session.endSession();
-
-    if (err.code === 11000) {
+    if (err.code === 'P2002') {
       return res.status(400).json({ error: "Transaction already being processed" });
     }
 

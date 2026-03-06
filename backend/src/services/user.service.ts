@@ -18,6 +18,11 @@ export class UserService {
       });
 
       if (user) {
+        // Check if user is flagged
+        if (user.isFlagged) {
+          throw new Error(user.flaggedReason || 'Your account has been flagged. Please contact support.');
+        }
+
         // Just update last seen, no sync needed - events handle everything
         user = await prisma.user.update({
           where: { id: user.id },
@@ -69,6 +74,10 @@ export class UserService {
           where: { walletAddress: normalizedAddress }
         });
         if (user) {
+          // Check if user is flagged
+          if (user.isFlagged) {
+            throw new Error(user.flaggedReason || 'Your account has been flagged. Please contact support.');
+          }
           return user;
         }
       }
@@ -266,5 +275,80 @@ export class UserService {
       where: { walletAddress: normalizedAddress },
       data: { status }
     });
+  }
+
+  // Flag user
+  static async flagUser(walletAddress: string, reason?: string, flaggedBy?: string) {
+    const normalizedAddress = walletAddress.toLowerCase();
+
+    const user = await prisma.user.findUnique({
+      where: { walletAddress: normalizedAddress }
+    });
+
+    if (!user) {
+      throw new Error('User not found');
+    }
+
+    if (user.isFlagged) {
+      throw new Error('User is already flagged');
+    }
+
+    return await prisma.user.update({
+      where: { walletAddress: normalizedAddress },
+      data: {
+        isFlagged: true,
+        flaggedAt: new Date(),
+        flaggedReason: reason || null,
+        flaggedBy: flaggedBy || null,
+        status: 'flagged'
+      }
+    });
+  }
+
+  // Unflag user
+  static async unflagUser(walletAddress: string) {
+    const normalizedAddress = walletAddress.toLowerCase();
+
+    const user = await prisma.user.findUnique({
+      where: { walletAddress: normalizedAddress }
+    });
+
+    if (!user) {
+      throw new Error('User not found');
+    }
+
+    if (!user.isFlagged) {
+      throw new Error('User is not flagged');
+    }
+
+    return await prisma.user.update({
+      where: { walletAddress: normalizedAddress },
+      data: {
+        isFlagged: false,
+        unflaggedAt: new Date(),
+        status: 'active'
+      }
+    });
+  }
+
+  // Validate wallet connection (check if flagged)
+  static async validateWalletConnection(walletAddress: string) {
+    const normalizedAddress = walletAddress.toLowerCase();
+
+    const user = await prisma.user.findUnique({
+      where: { walletAddress: normalizedAddress }
+    });
+
+    if (user && user.isFlagged) {
+      return {
+        allowed: false,
+        reason: user.flaggedReason || 'Your account has been flagged. Please contact support.',
+        flaggedAt: user.flaggedAt
+      };
+    }
+
+    return {
+      allowed: true
+    };
   }
 }

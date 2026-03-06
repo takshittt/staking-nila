@@ -1,6 +1,26 @@
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
 
 export const userApi = {
+  // Validate wallet connection
+  validateWallet: async (walletAddress: string) => {
+    try {
+      const response = await fetch(`${API_URL}/users/validate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ walletAddress })
+      });
+
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({}));
+        throw new Error(error.error || 'Failed to validate wallet');
+      }
+
+      return await response.json();
+    } catch (error) {
+      throw error;
+    }
+  },
+
   // Connect wallet - register user in database
   connectWallet: async (walletAddress: string, referralCode?: string) => {
     try {
@@ -12,13 +32,28 @@ export const userApi = {
 
       if (!response.ok) {
         const error = await response.json().catch(() => ({}));
-        throw new Error(error.error || 'Failed to connect wallet');
+        const errorMessage = error.error || 'Failed to connect wallet';
+        
+        // If user is flagged, throw error to block connection
+        if (errorMessage.includes('flagged') || errorMessage.includes('blocked')) {
+          throw new Error(errorMessage);
+        }
+        
+        // For other errors, log but don't block
+        console.warn('Non-critical wallet registration error:', errorMessage);
+        return null;
       }
 
       const result = await response.json();
       return result;
-    } catch (error) {
-      // Don't throw - we don't want to block the user if API fails
+    } catch (error: any) {
+      // If it's a flagged user error, re-throw it
+      if (error.message && (error.message.includes('flagged') || error.message.includes('blocked'))) {
+        throw error;
+      }
+      
+      // For other errors, don't block the user
+      console.warn('Wallet registration failed:', error);
       return null;
     }
   },

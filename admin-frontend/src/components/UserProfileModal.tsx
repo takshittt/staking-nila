@@ -1,13 +1,20 @@
-import { X, AlertCircle, CheckCircle } from 'lucide-react';
+import { X, AlertCircle, CheckCircle, Flag } from 'lucide-react';
 import type { User } from './Users';
+import { userApi } from '../api/userApi';
+import { useState } from 'react';
 
 interface UserProfileModalProps {
     isOpen: boolean;
     onClose: () => void;
     user: User;
+    onUserUpdated?: () => void;
 }
 
-const UserProfileModal = ({ isOpen, onClose, user }: UserProfileModalProps) => {
+const UserProfileModal = ({ isOpen, onClose, user, onUserUpdated }: UserProfileModalProps) => {
+    const [actionLoading, setActionLoading] = useState(false);
+    const [showFlagInput, setShowFlagInput] = useState(false);
+    const [flagReason, setFlagReason] = useState('');
+
     if (!isOpen) return null;
 
     const getStatusColor = (status: string) => {
@@ -20,6 +27,38 @@ const UserProfileModal = ({ isOpen, onClose, user }: UserProfileModalProps) => {
         ) : (
             <AlertCircle className="w-5 h-5 text-red-600" />
         );
+    };
+
+    const handleFlagUser = async () => {
+        try {
+            setActionLoading(true);
+            await userApi.flagUser(user.walletAddress, flagReason || undefined);
+            setShowFlagInput(false);
+            setFlagReason('');
+            if (onUserUpdated) onUserUpdated();
+            onClose();
+        } catch (err: any) {
+            alert(`Error: ${err.message}`);
+        } finally {
+            setActionLoading(false);
+        }
+    };
+
+    const handleUnflagUser = async () => {
+        if (!confirm('Are you sure you want to unflag this user?')) {
+            return;
+        }
+
+        try {
+            setActionLoading(true);
+            await userApi.unflagUser(user.walletAddress);
+            if (onUserUpdated) onUserUpdated();
+            onClose();
+        } catch (err: any) {
+            alert(`Error: ${err.message}`);
+        } finally {
+            setActionLoading(false);
+        }
     };
 
     return (
@@ -113,12 +152,74 @@ const UserProfileModal = ({ isOpen, onClose, user }: UserProfileModalProps) => {
                         </div>
 
                         <div className="flex gap-3 pt-4">
-                            <button
-                                onClick={onClose}
-                                className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-medium"
-                            >
-                                Close
-                            </button>
+                            {user.status === 'active' ? (
+                                showFlagInput ? (
+                                    <>
+                                        <div className="flex-1 space-y-3">
+                                            <textarea
+                                                value={flagReason}
+                                                onChange={(e) => setFlagReason(e.target.value)}
+                                                placeholder="Enter reason for flagging (optional)..."
+                                                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500"
+                                                rows={2}
+                                            />
+                                            <div className="flex gap-2">
+                                                <button
+                                                    onClick={() => {
+                                                        setShowFlagInput(false);
+                                                        setFlagReason('');
+                                                    }}
+                                                    disabled={actionLoading}
+                                                    className="flex-1 px-4 py-2 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 transition-colors font-medium disabled:opacity-50"
+                                                >
+                                                    Cancel
+                                                </button>
+                                                <button
+                                                    onClick={handleFlagUser}
+                                                    disabled={actionLoading}
+                                                    className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-medium disabled:opacity-50"
+                                                >
+                                                    {actionLoading ? 'Flagging...' : 'Confirm Flag'}
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </>
+                                ) : (
+                                    <>
+                                        <button
+                                            onClick={() => setShowFlagInput(true)}
+                                            disabled={actionLoading}
+                                            className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-medium disabled:opacity-50"
+                                        >
+                                            <Flag className="w-4 h-4" />
+                                            Flag User
+                                        </button>
+                                        <button
+                                            onClick={onClose}
+                                            className="flex-1 px-4 py-2 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 transition-colors font-medium"
+                                        >
+                                            Close
+                                        </button>
+                                    </>
+                                )
+                            ) : (
+                                <>
+                                    <button
+                                        onClick={handleUnflagUser}
+                                        disabled={actionLoading}
+                                        className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-medium disabled:opacity-50"
+                                    >
+                                        <CheckCircle className="w-4 h-4" />
+                                        {actionLoading ? 'Unflagging...' : 'Unflag User'}
+                                    </button>
+                                    <button
+                                        onClick={onClose}
+                                        className="flex-1 px-4 py-2 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 transition-colors font-medium"
+                                    >
+                                        Close
+                                    </button>
+                                </>
+                            )}
                         </div>
                     </div>
                 </div>

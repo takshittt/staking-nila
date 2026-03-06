@@ -23,5 +23,17 @@ export const userApi = {
   updateUserStatus: async (walletAddress: string, status: string) => {
     const response = await api.patch(`/users/${walletAddress}/status`, { status });
     return response.data;
+  },
+
+  // Flag user (admin)
+  flagUser: async (walletAddress: string, reason?: string) => {
+    const response = await api.post(`/users/${walletAddress}/flag`, { reason });
+    return response.data;
+  },
+
+  // Unflag user (admin)
+  unflagUser: async (walletAddress: string) => {
+    const response = await api.post(`/users/${walletAddress}/unflag`);
+    return response.data;
   }
 };
