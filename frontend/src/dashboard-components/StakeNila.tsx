@@ -103,8 +103,8 @@ const StakeNila = () => {
             return;
         }
 
-        if (amountNum < 100) {
-            toast.error('Minimum stake amount is 100 NILA');
+        if (amountNum < 10) {
+            toast.error('Minimum stake amount is 10 NILA');
             return;
         }
 
@@ -242,13 +242,13 @@ const StakeNila = () => {
                         </div>
                         <div>
                             <p className="text-amber-900 font-bold">Wrong Network Connected</p>
-                            <p className="text-amber-700 text-sm font-medium">Please switch to BSC Testnet to interact with the staking contract.</p>
+                            <p className="text-amber-700 text-sm font-medium">Please switch to BNB Smart Chain (BSC Mainnet) to interact with the staking contract.</p>
                         </div>
                     </div>
                     <button
                         onClick={async () => {
                             try {
-                                await ContractService.switchToBscTestnet();
+                                await ContractService.switchToBscMainnet();
                                 setIsCorrectNetwork(true);
                             } catch (error: any) {
                                 toast.error(error.message || 'Failed to switch network');
@@ -305,6 +305,7 @@ const StakeNila = () => {
                                     type="number"
                                     value={stakeAmount}
                                     onChange={(e) => setStakeAmount(e.target.value)}
+                                    onWheel={(e) => e.currentTarget.blur()}
                                     placeholder="0.0"
                                     className="w-full bg-transparent px-5 py-4 text-2xl font-bold text-slate-900 placeholder:text-slate-300 border-none outline-none focus:ring-0"
                                     min="0"

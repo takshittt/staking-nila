@@ -40,7 +40,7 @@ const Tokens = () => {
             const status = await treasuryApi.getStatus();
             setIsPaused(status.isPaused);
         } catch (err) {
-            console.error('Failed to fetch pause status:', err);
+            // Silent error handling
         }
     };
 
@@ -218,6 +218,15 @@ const Tokens = () => {
                     <p className="text-slate-600 mt-1">Monitor reward pool and manage liquidity</p>
                 </div>
                 <div className="flex gap-3">
+                    <button
+                        onClick={fetchStats}
+                        disabled={loading}
+                        className="flex items-center gap-2 px-4 py-2 border border-slate-200 text-slate-700 rounded-lg hover:bg-slate-50 transition-colors font-medium disabled:opacity-50"
+                        title="Refresh treasury data"
+                    >
+                        <Clock className="w-5 h-5" />
+                        {loading ? 'Refreshing...' : 'Refresh'}
+                    </button>
                     <button
                         onClick={() => setIsWithdrawOpen(true)}
                         className="flex items-center gap-2 px-4 py-2 border border-slate-200 text-slate-700 rounded-lg hover:bg-slate-50 transition-colors font-medium"
@@ -544,7 +553,7 @@ const Tokens = () => {
                         </div>
                         <div>
                             <p className="text-xs text-slate-500 uppercase tracking-wider font-semibold">Network</p>
-                            <p className="text-sm text-slate-700 font-medium">BSC Testnet</p>
+                            <p className="text-sm text-slate-700 font-medium">BSC Mainnet</p>
                         </div>
                     </div>
                 </div>

@@ -42,8 +42,8 @@ async function main() {
     console.log("✅ Verification Complete!");
     console.log("========================================");
     console.log("\nView on BSCScan:");
-    console.log(`Proxy: https://testnet.bscscan.com/address/${PROXY_ADDRESS}`);
-    console.log(`Implementation: https://testnet.bscscan.com/address/${implementationAddress}`);
+    console.log(`Proxy: https://bscscan.com/address/${PROXY_ADDRESS}`);
+    console.log(`Implementation: https://bscscan.com/address/${implementationAddress}`);
 
   } catch (error) {
     console.error("❌ Error:", error);

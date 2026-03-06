@@ -78,7 +78,6 @@ const BuyStakeNila = () => {
                 const priceData = await PriceService.fetchPrices();
                 setPrices(priceData);
             } catch (error) {
-                console.error('Failed to fetch prices:', error);
                 setPriceError('Failed to load prices. Please refresh the page.');
                 toast.error('Failed to load prices');
             } finally {
@@ -100,13 +99,14 @@ const BuyStakeNila = () => {
             try {
                 setLoadingPlans(true);
                 const lockConfigs = await stakingApi.getActiveLockConfigs();
-                setPlans(lockConfigs);
-                // Auto-select first plan if available
-                if (lockConfigs.length > 0 && !selectedPlanId) {
-                    setSelectedPlanId(lockConfigs[0].id);
+                // Sort plans by lockDuration (ascending order: 1 day, 7 days, 30 days, etc.)
+                const sortedConfigs = lockConfigs.sort((a, b) => a.lockDuration - b.lockDuration);
+                setPlans(sortedConfigs);
+                // Auto-select first plan if available (now will be shortest duration)
+                if (sortedConfigs.length > 0 && !selectedPlanId) {
+                    setSelectedPlanId(sortedConfigs[0].id);
                 }
             } catch (error) {
-                console.error('Failed to fetch staking plans:', error);
                 toast.error('Failed to load staking plans');
             } finally {
                 setLoadingPlans(false);
@@ -120,13 +120,14 @@ const BuyStakeNila = () => {
             try {
                 setLoadingPackages(true);
                 const amountConfigs = await stakingApi.getActiveAmountConfigs();
-                setPackages(amountConfigs);
-                // Auto-select first package if available
-                if (amountConfigs.length > 0 && !selectedPackageId) {
-                    setSelectedPackageId(amountConfigs[0].id);
+                // Sort packages by amount (ascending order: smallest to largest)
+                const sortedConfigs = amountConfigs.sort((a, b) => parseFloat(a.amount) - parseFloat(b.amount));
+                setPackages(sortedConfigs);
+                // Auto-select first package if available (now will be smallest amount)
+                if (sortedConfigs.length > 0 && !selectedPackageId) {
+                    setSelectedPackageId(sortedConfigs[0].id);
                 }
             } catch (error) {
-                console.error('Failed to fetch packages:', error);
                 toast.error('Failed to load packages');
             } finally {
                 setLoadingPackages(false);
@@ -154,7 +155,7 @@ const BuyStakeNila = () => {
                 try {
                     await switchToChain(selectedChain);
                 } catch (error) {
-                    console.error('Failed to switch chain:', error);
+                    // Silent error handling
                 }
             }
         };
@@ -221,17 +222,15 @@ const BuyStakeNila = () => {
                 // For TRON: wallet = EVM address (for staking), trcWallet = TRON address (for payment)
                 orderWallet = userEvmAddress;
                 trcWallet = address; // TRON address
-                
-                console.log('TRON Payment Setup:');
-                console.log('  - EVM Address (for staking):', orderWallet);
-                console.log('  - TRON Address (for payment):', trcWallet);
             }
             
             const order = await MultiChainPaymentService.createOrder({
                 wallet: orderWallet,
                 pyrandAmount: calculations.nilaStaked,
                 network,
-                trcWallet
+                trcWallet,
+                lockDays: selectedPlan?.lockDuration,
+                apr: selectedPlan?.apr
             });
 
             setOrderId(order.orderId);
@@ -294,7 +293,7 @@ const BuyStakeNila = () => {
                     status: 'confirmed'
                 });
             } catch (backendError: any) {
-                console.error('Failed to record stake in backend:', backendError);
+                // Silent error handling
             }
 
             setSuccessTxHash(result.tokenTx);
@@ -306,8 +305,6 @@ const BuyStakeNila = () => {
             );
 
         } catch (error: any) {
-            console.error('Buy & Stake error:', error);
-            
             // User rejected transaction
             if (error.message?.includes('user rejected') || 
                 error.message?.includes('User denied') ||
@@ -1010,7 +1007,7 @@ const BuyStakeNila = () => {
                                 <div className="flex items-center justify-between mb-2">
                                     <span className="text-sm text-slate-500">Staking Transaction</span>
                                     <a
-                                        href={`https://testnet.bscscan.com/tx/${successTxHash}`}
+                                        href={`https://bscscan.com/tx/${successTxHash}`}
                                         target="_blank"
                                         rel="noopener noreferrer"
                                         className="text-blue-500 hover:text-blue-600 flex items-center gap-1 text-sm"

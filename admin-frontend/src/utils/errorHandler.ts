@@ -28,8 +28,6 @@ export const extractErrorMessage = (error: any, defaultMessage: string = 'An une
  * Centralized error handler that optionally formats and displays a toast notification.
  */
 export const handleError = (error: any, customMessage?: string): string => {
-    console.error('[Admin Error] ->', error);
-
     const defaultMsg = customMessage || 'An unexpected error occurred. Please try again.';
     const message = extractErrorMessage(error, defaultMsg);
 

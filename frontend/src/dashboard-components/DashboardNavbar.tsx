@@ -1,7 +1,6 @@
-import { useState, useRef, useEffect } from 'react';
+import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Bell, LogOut, Menu } from 'lucide-react';
-import NotificationModal from './NotificationModal';
+import { LogOut, Menu } from 'lucide-react';
 import { useDisconnect, useAccount } from 'wagmi';
 
 interface DashboardNavbarProps {
@@ -9,8 +8,6 @@ interface DashboardNavbarProps {
 }
 
 export default function DashboardNavbar({ onMenuClick }: DashboardNavbarProps) {
-    const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
-    const notificationRef = useRef<HTMLDivElement>(null);
     const navigate = useNavigate();
     const { disconnect } = useDisconnect();
     const { address, isConnected } = useAccount();
@@ -31,18 +28,6 @@ export default function DashboardNavbar({ onMenuClick }: DashboardNavbarProps) {
         }
     }, [isConnected, navigate]);
 
-    useEffect(() => {
-        function handleClickOutside(event: MouseEvent) {
-            if (notificationRef.current && !notificationRef.current.contains(event.target as Node)) {
-                setIsNotificationsOpen(false);
-            }
-        }
-        document.addEventListener("mousedown", handleClickOutside);
-        return () => {
-            document.removeEventListener("mousedown", handleClickOutside);
-        };
-    }, [notificationRef]);
-
     return (
         <nav className="fixed right-0 top-0 z-40 transition-all duration-300 bg-white/90 backdrop-blur-md border-b border-gray-100 h-20 w-full md:w-[calc(100%-16rem)]">
             <div className="max-w-7xl mx-auto px-4 md:px-6 h-full font-sans">
@@ -57,8 +42,6 @@ export default function DashboardNavbar({ onMenuClick }: DashboardNavbarProps) {
 
                     {/* Right Action Section */}
                     <div className="flex items-center gap-4">
-
-
                         {/* Wallet Info */}
                         <div className="flex items-center gap-3">
                             <div className="flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-white border border-slate-200 shadow-sm hover:border-red-200 transition-colors group cursor-default">
@@ -66,18 +49,6 @@ export default function DashboardNavbar({ onMenuClick }: DashboardNavbarProps) {
                                 <span className="text-xs font-bold text-slate-900 font-mono tracking-tight">
                                     {formatAddress(address)}
                                 </span>
-                            </div>
-
-                            {/* Notifications */}
-                            <div className="relative" ref={notificationRef}>
-                                <button
-                                    onClick={() => setIsNotificationsOpen(!isNotificationsOpen)}
-                                    className={`p-2 rounded-full hover:bg-slate-100 transition-colors relative ${isNotificationsOpen ? 'bg-slate-100 text-slate-900' : 'text-slate-600'}`}
-                                >
-                                    <Bell className="w-5 h-5" />
-                                    <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full border-2 border-white"></span>
-                                </button>
-                                {isNotificationsOpen && <NotificationModal />}
                             </div>
 
                             {/* Disconnect Button */}

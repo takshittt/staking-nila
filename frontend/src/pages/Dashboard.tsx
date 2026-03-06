@@ -25,18 +25,13 @@ const Dashboard = () => {
             if (!address) return;
             try {
                 const user = await userApi.getUser(address);
-                console.log('User referral status:', {
-                    referredBy: user.referredBy,
-                    isReferralSkipped: user.isReferralSkipped,
-                    referralCode: user.referralCode
-                });
 
                 // Show modal if user hasn't been referred and hasn't skipped
                 if (!user.referredBy && !user.isReferralSkipped) {
                     setTimeout(() => setShowReferenceModal(true), 500);
                 }
             } catch (error) {
-                console.error('Failed to check referral status:', error);
+                // Silent error handling
             }
         };
 

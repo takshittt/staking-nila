@@ -11,22 +11,13 @@ export const WalletWatcher = () => {
 
   useEffect(() => {
     if (isConnected && address) {
-      console.log('🔗 Wallet connected, registering in database...', address);
-      
       // Get referral code from URL if present
       const urlParams = new URLSearchParams(window.location.search);
       const referralCode = urlParams.get('ref') || undefined;
       
       // Register user in database
-      userApi.connectWallet(address, referralCode).then((result) => {
-        if (result) {
-          console.log('✅ Wallet registered in database:', address);
-          console.log('📋 User data:', result);
-        } else {
-          console.warn('⚠️ Failed to register wallet in database');
-        }
-      }).catch((error) => {
-        console.error('❌ Error registering wallet:', error);
+      userApi.connectWallet(address, referralCode).catch(() => {
+        // Silent error handling
       });
     }
   }, [isConnected, address]);

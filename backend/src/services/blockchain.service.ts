@@ -13,8 +13,8 @@ export class BlockchainService {
   private static contract: ethers.Contract;
 
   static initialize() {
-    if (!process.env.BSC_TESTNET_RPC) {
-      throw new Error('BSC_TESTNET_RPC not configured');
+    if (!process.env.BSC_MAINNET_RPC) {
+      throw new Error('BSC_MAINNET_RPC not configured');
     }
     if (!process.env.PRIVATE_KEY) {
       throw new Error('PRIVATE_KEY not configured');
@@ -23,7 +23,7 @@ export class BlockchainService {
       throw new Error('CONTRACT_ADDRESS not configured');
     }
 
-    this.provider = new ethers.JsonRpcProvider(process.env.BSC_TESTNET_RPC);
+    this.provider = new ethers.JsonRpcProvider(process.env.BSC_MAINNET_RPC);
     this.wallet = new ethers.Wallet(process.env.PRIVATE_KEY, this.provider);
     this.contract = new ethers.Contract(
       process.env.CONTRACT_ADDRESS,

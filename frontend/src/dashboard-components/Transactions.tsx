@@ -107,12 +107,29 @@ const Transactions = () => {
 
     const formattedTransactions = transactions.map(tx => {
         const iconData = getTransactionIcon(tx.type);
+        
+        // For PAYMENT transactions, show the actual payment token and amount
+        let displayAmount = tx.amount ? `${Number(tx.amount).toLocaleString()} NILA` : '-';
+        
+        if (tx.type === 'PAYMENT' && tx.metadata) {
+            const metadata = tx.metadata as any;
+            const paymentToken = metadata.paymentToken || 'USDT';
+            const paymentAmount = metadata.paymentAmount || tx.amount;
+            
+            // Format based on token type
+            if (paymentToken === 'BNB' || paymentToken === 'ETH' || paymentToken === 'TRX') {
+                displayAmount = `${Number(paymentAmount).toLocaleString(undefined, { maximumFractionDigits: 6 })} ${paymentToken}`;
+            } else {
+                displayAmount = `${Number(paymentAmount).toLocaleString(undefined, { maximumFractionDigits: 2 })} ${paymentToken}`;
+            }
+        }
+        
         return {
             id: tx.id,
             txHash: tx.txHash,
             date: formatDate(tx.createdAt),
             type: formatType(tx.type),
-            amount: tx.amount ? `${Number(tx.amount).toLocaleString()} NILA` : '-',
+            amount: displayAmount,
             status: tx.status,
             filterCategory: getFilterCategory(tx.type),
             icon: iconData.icon,
@@ -204,7 +221,7 @@ const Transactions = () => {
                                                 </td>
                                                 <td className="px-6 py-4 whitespace-nowrap">
                                                     <a
-                                                        href={`https://testnet.bscscan.com/tx/${tx.txHash}`}
+                                                        href={`https://bscscan.com/tx/${tx.txHash}`}
                                                         target="_blank"
                                                         rel="noopener noreferrer"
                                                         className="text-slate-400 hover:text-red-500 transition-colors"

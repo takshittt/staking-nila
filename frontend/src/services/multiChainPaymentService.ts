@@ -7,6 +7,8 @@ export interface CreateOrderRequest {
   pyrandAmount: number;
   network: 'BSC_USDT' | 'BSC_USDC' | 'BSC' | 'ETH_USDT' | 'ETH_USDC' | 'ETH' | 'TRC20' | 'TRX';
   trcWallet?: string; // Required for TRON networks
+  lockDays?: number; // Lock duration in days
+  apr?: number; // APR in basis points (e.g., 1200 = 12%)
 }
 
 export interface CreateOrderResponse {

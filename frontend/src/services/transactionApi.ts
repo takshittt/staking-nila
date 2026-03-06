@@ -9,6 +9,14 @@ export interface Transaction {
   status: 'pending' | 'confirmed' | 'failed';
   createdAt: string;
   confirmedAt?: string;
+  metadata?: {
+    network?: string;
+    orderId?: string;
+    nilaAmount?: number;
+    paymentToken?: string;
+    paymentAmount?: number;
+    [key: string]: any;
+  };
 }
 
 export interface TransactionFilters {

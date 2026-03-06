@@ -5,9 +5,10 @@ const prisma = new PrismaClient();
 export interface CreateTransactionDto {
   txHash: string;
   walletAddress?: string;
-  type: 'STAKE' | 'UNSTAKE' | 'CLAIM_REWARD' | 'DEPOSIT' | 'WITHDRAW' | 'REFERRAL_REWARD' | 'CONFIG_UPDATE';
+  type: 'STAKE' | 'UNSTAKE' | 'CLAIM_REWARD' | 'DEPOSIT' | 'WITHDRAW' | 'REFERRAL_REWARD' | 'CONFIG_UPDATE' | 'PAYMENT';
   amount?: string | number; // Accept both for convenience, will be converted to string
   status?: 'pending' | 'confirmed' | 'failed';
+  metadata?: any; // Additional metadata (network, orderId, paymentToken, etc.)
 }
 
 export interface UpdateTransactionDto {
@@ -36,13 +37,17 @@ export class TransactionService {
       return existing;
     }
 
+    // Normalize wallet address to lowercase for consistent storage and querying
+    const normalizedAddress = data.walletAddress ? data.walletAddress.toLowerCase() : undefined;
+
     return await prisma.transaction.create({
       data: {
         txHash: data.txHash,
-        walletAddress: data.walletAddress,
+        walletAddress: normalizedAddress,
         type: data.type,
         amount: data.amount ? (typeof data.amount === 'number' ? data.amount.toString() : data.amount) : null,
         status: data.status || 'pending',
+        metadata: data.metadata || undefined,
         confirmedAt: data.status === 'confirmed' ? new Date() : undefined
       }
     });
@@ -102,14 +107,17 @@ export class TransactionService {
 
   // Get transactions by wallet address
   static async getWalletTransactions(walletAddress: string, page = 1, limit = 20) {
+    // Normalize wallet address to lowercase for consistent querying
+    const normalizedAddress = walletAddress.toLowerCase();
+    
     const [transactions, total] = await Promise.all([
       prisma.transaction.findMany({
-        where: { walletAddress },
+        where: { walletAddress: normalizedAddress },
         orderBy: { createdAt: 'desc' },
         skip: (page - 1) * limit,
         take: limit
       }),
-      prisma.transaction.count({ where: { walletAddress } })
+      prisma.transaction.count({ where: { walletAddress: normalizedAddress } })
     ]);
 
     return {

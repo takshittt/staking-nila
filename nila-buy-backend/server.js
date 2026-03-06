@@ -60,8 +60,8 @@ app.use(bodyParser.json());
 
 mongoose
   .connect(process.env.MON_URI)
-  .then(() => console.log("✅ MongoDB connected (shared database)"))
-  .catch((err) => console.log("❌ Error connecting DB:", err));
+  .then(() => {})
+  .catch((err) => {});
 
 // ─── Schemas (imported from models.js) ───────────────────────────────────────
 // User, Stake, Transaction, Order, ProcessedTx
@@ -105,19 +105,11 @@ function evmToTronAddress(evmAddr) {
 }
 
 
-async function adminStakeForUser(userAddress, tokenAmount, referrerAddress = null) {
-  console.log("🔄 Starting Buy & Stake process for:", userAddress);
-  console.log("💰 NILA Amount:", tokenAmount);
-
-  // Configuration
-  const LOCK_DAYS = 30;            // Lock duration in days
-  const APR = 1200;                 // APR in basis points (1200 = 12%)
-
+async function adminStakeForUser(userAddress, tokenAmount, lockDays, apr, referrerAddress = null) {
   try {
     // Step 1: Check NILA balance in backend wallet
     const nilaBalance = await nilaTokenContract.balanceOf(ownerWallet.address);
     const nilaBalanceFormatted = ethers.formatUnits(nilaBalance, 18);
-    console.log("📊 Backend NILA Balance:", nilaBalanceFormatted);
 
     const requiredAmount = ethers.parseUnits(tokenAmount.toString(), 18);
     
@@ -126,37 +118,29 @@ async function adminStakeForUser(userAddress, tokenAmount, referrerAddress = nul
     }
 
     // Step 2: Transfer NILA from backend wallet to staking contract
-    console.log("📤 Transferring NILA to staking contract...");
     const transferTx = await nilaTokenContract.transfer(
       stakingContract.stakingAddress,
       requiredAmount
     );
     
-    console.log("⏳ Waiting for NILA transfer confirmation...");
     const transferReceipt = await transferTx.wait();
-    console.log("✅ NILA transferred:", transferReceipt.hash);
 
     // Step 3: Call buyWithToken to create stake with rewards
-    console.log("📝 Creating stake with buyWithToken...");
-    
     const referrer = referrerAddress || ethers.ZeroAddress;
     
     const stakeTx = await stakingContractObj.buyWithToken(
       userAddress,
       requiredAmount,
-      LOCK_DAYS,
-      APR,
+      lockDays,
+      apr,
       referrer
     );
 
-    console.log("⏳ Waiting for stake creation confirmation...");
     const stakeReceipt = await stakeTx.wait();
-    console.log("✅ Stake created:", stakeReceipt.hash);
 
     return stakeReceipt.hash;
 
   } catch (error) {
-    console.error("❌ Buy & Stake failed:", error.message);
     throw error;
   }
 }
@@ -185,139 +169,49 @@ async function getLatestPrice() {
 // }
 async function getNativePrices() {
   try {
-    console.log(" [getNativePrices] Starting price fetch...");
-
     // ── Ethereum ETH/USD ────────────────────────────────────────
-    console.log(" [ETH] Connecting to Chainlink ETH/USD feed...");
-    console.log(" [ETH] Contract address:", ethChainlink.address);
-    console.log("[ETH] Provider:", ethProvider?.connection?.url || ethProvider?._networkName || "unknown");
-
     const ethContract = new ethers.Contract(
       ethChainlink.address,
       ethChainlink.abi,
       ethProvider
     );
-    console.log(" [ETH] Contract instance created");
 
     const ethRound = await ethContract.latestRoundData();
-    console.log(" [ETH] Raw latestRoundData:", {
-      roundId: ethRound.roundId?.toString(),
-      answer: ethRound.answer?.toString(),
-      startedAt: ethRound.startedAt?.toString(),
-      updatedAt: ethRound.updatedAt?.toString(),
-      answeredInRound: ethRound.answeredInRound?.toString(),
-    });
-
     const ethDecimals = await ethContract.decimals();
-    console.log("🔷 [ETH] Decimals:", ethDecimals.toString());
-
     const ethPrice = Number(ethRound.answer) / 10 ** Number(ethDecimals);
-    console.log(" [ETH] Final ETH/USD price:", ethPrice);
 
     // ── BNB Chain BNB/USD ───────────────────────────────────────
-    console.log(" [BNB] Connecting to Chainlink BNB/USD feed...");
-    console.log(" [BNB] Contract address:", bscChainlink.address);
-    console.log(" [BNB] Provider:", bscProvider?.connection?.url || bscProvider?._networkName || "unknown");
-
     const bnbContract = new ethers.Contract(
       bscChainlink.address,
       bscChainlink.abi,
       bscProvider
     );
-    console.log(" [BNB] Contract instance created");
 
     const bnbRound = await bnbContract.latestRoundData();
-    console.log(" [BNB] Raw latestRoundData:", {
-      roundId: bnbRound.roundId?.toString(),
-      answer: bnbRound.answer?.toString(),
-      startedAt: bnbRound.startedAt?.toString(),
-      updatedAt: bnbRound.updatedAt?.toString(),
-      answeredInRound: bnbRound.answeredInRound?.toString(),
-    });
-
     const bnbDecimals = await bnbContract.decimals();
-    console.log(" [BNB] Decimals:", bnbDecimals.toString());
-
     const bnbPrice = Number(bnbRound.answer) / 10 ** Number(bnbDecimals);
-    console.log("[BNB] Final BNB/USD price:", bnbPrice);
 
     // ── Tron TRX/USD ─────────────────────────────────────────────
-    console.log(" [TRX] Connecting to TronWeb Chainlink TRX/USD feed...");
-    console.log(" [TRX] TronWeb fullNode:", tronWeb?.fullNode?.host || "unknown");
-    console.log(" [TRX] TronWeb solidityNode:", tronWeb?.solidityNode?.host || "unknown");
-    console.log(" [TRX] Contract address:", tronChainlink.address);
-    console.log(" [TRX] TronWeb defaultAddress:", tronWeb?.defaultAddress?.base58 || "NOT SET ⚠️");
-
     const trxContract = await tronWeb.contract().at(tronChainlink.address);
-    console.log(" [TRX] Contract instance created:", !!trxContract);
-    console.log(" [TRX] Available contract methods:", Object.keys(trxContract?.methodInstances || {}).join(", ") || "none found ⚠️");
-
-    console.log(" [TRX] Calling latestRoundData()...");
     const trxRound = await trxContract.latestRoundData().call();
-    console.log(" [TRX] Raw latestRoundData response:", trxRound);
-    console.log(" [TRX] Response type:", typeof trxRound);
-    console.log(" [TRX] Response keys:", Object.keys(trxRound || {}));
-
-    console.log(" [TRX] Calling decimals()...");
     const trxDecimals = await trxContract.decimals().call();
-    console.log(" [TRX] Raw decimals response:", trxDecimals);
 
-    // Safe answer extraction with full logging
+    // Safe answer extraction
     let trxAnswerStr;
     if (trxRound.answer !== undefined && trxRound.answer !== null) {
       trxAnswerStr = trxRound.answer.toString ? trxRound.answer.toString() : String(trxRound.answer);
-      console.log(" [TRX] Answer extracted via named key 'answer':", trxAnswerStr);
     } else if (trxRound[1] !== undefined && trxRound[1] !== null) {
       trxAnswerStr = trxRound[1].toString ? trxRound[1].toString() : String(trxRound[1]);
-      console.log("[TRX] Answer extracted via index [1]:", trxAnswerStr);
     } else {
-      console.error(" [TRX]  Could not extract answer. Full trxRound dump:", JSON.stringify(trxRound, null, 2));
       throw new Error("Unexpected format from TRX/USD latestRoundData");
     }
 
     const trxPrice = Number(trxAnswerStr) / 10 ** Number(trxDecimals);
-    console.log(" [TRX] Final TRX/USD price:", trxPrice);
-
-    // ── Staleness Check ──────────────────────────────────────────
-    const now = Math.floor(Date.now() / 1000);
-    const trxUpdatedAt = Number(trxRound.updatedAt ?? trxRound[3] ?? 0);
-    const trxAge = now - trxUpdatedAt;
-    console.log("[TRX] Feed age (seconds):", trxAge);
-    if (trxUpdatedAt === 0) {
-      console.warn("[TRX] updatedAt is 0 — could not determine feed freshness");
-    } else if (trxAge > 1800) {
-      console.warn(` [TRX] Feed is stale! Last updated ${Math.round(trxAge / 60)} minutes ago`);
-    } else {
-      console.log(` [TRX] Feed is fresh (updated ${Math.round(trxAge / 60)} min ago)`);
-    }
 
     const result = { eth: ethPrice, bnb: bnbPrice, trx: trxPrice };
-    console.log("🏁 [getNativePrices] All prices fetched successfully:", result);
     return result;
 
   } catch (err) {
-    console.error(" [getNativePrices] Price fetch failed!");
-    console.error(" Error name:", err.name);
-    console.error(" Error message:", err.message);
-    console.error(" Error stack:", err.stack);
-
-    // Extra hints based on common error patterns
-    if (err.message?.includes("could not detect network")) {
-      console.error("HINT: Provider RPC URL is wrong or unreachable. Check ethProvider / bscProvider config.");
-    }
-    if (err.message?.includes("missing revert data") || err.message?.includes("call revert")) {
-      console.error("HINT: Contract call reverted. Likely wrong contract address or ABI mismatch.");
-    }
-    if (err.message?.includes("invalid address")) {
-      console.error("HINT: One of the Chainlink addresses is invalid or not checksummed correctly.");
-    }
-    if (err.message?.includes("CONTRACT_ADDRESS")) {
-      console.error("HINT: TronWeb contract address may be in wrong format (use Base58, not hex).");
-    }
-    if (err.message?.includes("timeout") || err.message?.includes("TIMEOUT")) {
-      console.error("HINT: RPC request timed out. Check your RPC endpoint or API key rate limits.");
-    }
-
     throw err;
   }
 }
@@ -330,7 +224,6 @@ app.get("/api/latest-price", async (req, res) => {
     const price = await getLatestPrice();
     return res.json({ price });
   } catch (err) {
-    console.error("Error fetching price:", err.message);
     return res.status(500).json({ error: "Failed to fetch price" });
   }
 });
@@ -347,7 +240,6 @@ app.get("/api/crypto-prices", async (req, res) => {
     });
 
   } catch (err) {
-    console.error("Error fetching crypto prices:", err.message);
     return res.status(500).json({
       error: "Failed to fetch crypto prices",
     });
@@ -377,7 +269,6 @@ app.get("/api/prices", async (req, res) => {
     });
 
   } catch (err) {
-    console.error("Error fetching prices:", err.message);
     return res.status(500).json({
       error: "Failed to fetch prices. Please try again later."
     });
@@ -387,7 +278,7 @@ app.get("/api/prices", async (req, res) => {
 // ─── Create Order ─────────────────────────────────────────────────────────────
 
 app.post("/create-order", async (req, res) => {
-  const { wallet, pyrandAmount, network, trcWallet } = req.body;
+  const { wallet, pyrandAmount, network, trcWallet, lockDays, apr } = req.body;
 
   if (!wallet || !pyrandAmount || !network) {
     return res.status(400).json({ error: "Missing required fields" });
@@ -412,6 +303,10 @@ app.post("/create-order", async (req, res) => {
   if (isNaN(pyrand) || pyrand <= 0) {
     return res.status(400).json({ error: "Invalid pyrandAmount" });
   }
+
+  // Validate lockDays and apr
+  const validLockDays = lockDays && Number(lockDays) > 0 ? Number(lockDays) : 30;
+  const validApr = apr && Number(apr) >= 0 ? Number(apr) : 1200;
 
   const orderId = "ORD_" + Date.now();
 
@@ -448,6 +343,8 @@ app.post("/create-order", async (req, res) => {
     cryptoAmount,
     cryptoRate,
     priceAtCreation: livePrice,
+    lockDays: validLockDays,
+    apr: validApr,
     status: "PENDING_PAYMENT",
   });
 
@@ -609,14 +506,16 @@ app.post("/verify-transaction", async (req, res) => {
 
     // ── 6. Transfer NILA & Create Stake ────────────────────────────────────
     console.log("\n🎯 Creating stake for EVM address:", evmAddressForStaking);
-    const stakeTxHash = await adminStakeForUser(evmAddressForStaking, pyrandToSend);
+    console.log("📅 Lock Days:", order.lockDays);
+    console.log("📈 APR:", order.apr, "bps");
+    const stakeTxHash = await adminStakeForUser(evmAddressForStaking, pyrandToSend, order.lockDays, order.apr);
 
     // ── 6. Record Stake in MongoDB ─────────────────────────────────────────
     const stakeCount = await Stake.countDocuments();
     const stakeId = `STK-${String(stakeCount + 1).padStart(3, '0')}`;
     
-    const lockDays = 30; // From adminStakeForUser
-    const apr = 12; // 1200 bps = 12%
+    const lockDays = order.lockDays;
+    const apr = order.apr; // Keep in basis points (e.g., 1000 = 10%)
     
     const startDate = new Date();
     const endDate = new Date();
@@ -629,7 +528,7 @@ app.post("/verify-transaction", async (req, res) => {
       planName: `${lockDays} Days`,
       planVersion: 1,
       amount: pyrandToSend.toString(), // Convert to string
-      apy: apr.toString(),              // Convert to string
+      apy: apr.toString(),              // Store in basis points
       startDate,
       endDate,
       status: 'active',
@@ -640,16 +539,39 @@ app.post("/verify-transaction", async (req, res) => {
     }], { session });
 
     // ── 7. Record Payment Transaction ──────────────────────────────────────
+    // Determine the payment token/currency
+    let paymentToken = 'USDT'; // default
+    let paymentAmount = order.stableAmount || order.cryptoAmount || 0;
+    
+    if (network === 'BSC_USDT' || network === 'ETH_USDT' || network === 'TRC20') {
+      paymentToken = 'USDT';
+      paymentAmount = order.stableAmount || 0;
+    } else if (network === 'BSC_USDC' || network === 'ETH_USDC') {
+      paymentToken = 'USDC';
+      paymentAmount = order.stableAmount || 0;
+    } else if (network === 'BSC') {
+      paymentToken = 'BNB';
+      paymentAmount = order.cryptoAmount || 0;
+    } else if (network === 'ETH') {
+      paymentToken = 'ETH';
+      paymentAmount = order.cryptoAmount || 0;
+    } else if (network === 'TRX') {
+      paymentToken = 'TRX';
+      paymentAmount = order.cryptoAmount || 0;
+    }
+    
     await Transaction.create([{
       txHash: txHash,
       walletAddress: normalizedAddress,
       type: 'PAYMENT',
-      amount: (order.stableAmount || order.cryptoAmount || 0).toString(), // Convert to string
+      amount: paymentAmount.toString(), // Payment amount in the actual currency used
       status: 'confirmed',
       metadata: {
         network,
         orderId,
-        nilaAmount: pyrandToSend
+        nilaAmount: pyrandToSend,
+        paymentToken, // Store which token was used for payment
+        paymentAmount // Store the payment amount
       },
       createdAt: new Date(),
       updatedAt: new Date()

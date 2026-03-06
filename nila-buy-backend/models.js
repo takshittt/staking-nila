@@ -47,6 +47,8 @@ const TransactionSchema = new mongoose.Schema({
   metadata: { type: mongoose.Schema.Types.Mixed },
   createdAt: { type: Date, default: Date.now },
   updatedAt: { type: Date, default: Date.now }
+}, {
+  collection: 'transactions' // Explicitly set collection name to match Prisma
 });
 
 export const Transaction = mongoose.model("Transaction", TransactionSchema);
@@ -75,6 +77,8 @@ const OrderSchema = new mongoose.Schema({
   stableAmount: { type: Number },
   cryptoAmount: { type: Number },
   priceAtCreation: { type: Number },
+  lockDays: { type: Number, default: 30 }, // Add lock days
+  apr: { type: Number, default: 1200 }, // Add APR in basis points
   status: { type: String, enum: ["PENDING_PAYMENT", "PAID", "FAILED"], default: "PENDING_PAYMENT" },
   txHash: { type: String, unique: true, sparse: true },
   stakeTxHash: { type: String },

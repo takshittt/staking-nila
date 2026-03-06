@@ -123,6 +123,7 @@ model Transaction {
   type          String
   amount        String?
   status        String    @default("pending")
+  metadata      Json?
   createdAt     DateTime  @default(now())
   confirmedAt   DateTime?
 

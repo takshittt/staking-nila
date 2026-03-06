@@ -136,8 +136,8 @@ export const useMultiChainWallet = () => {
    */
   const switchToChain = useCallback(async (chain: 'BSC' | 'ETH'): Promise<void> => {
     if (chain === 'BSC') {
-      // BSC Mainnet: 56, BSC Testnet: 97
-      const targetChainId = 56; // Change to 97 for testnet
+      // BSC Mainnet only
+      const targetChainId = 56;
       if (chainId !== targetChainId) {
         try {
           await switchChain({ chainId: targetChainId });
@@ -148,8 +148,8 @@ export const useMultiChainWallet = () => {
         }
       }
     } else if (chain === 'ETH') {
-      // Ethereum Mainnet: 1, Sepolia: 11155111
-      const targetChainId = 1; // Change to 11155111 for Sepolia testnet
+      // Ethereum Mainnet only
+      const targetChainId = 1;
       if (chainId !== targetChainId) {
         try {
           await switchChain({ chainId: targetChainId });
@@ -175,7 +175,7 @@ export const useMultiChainWallet = () => {
     }
 
     if (chain === 'ETH') {
-      return chainId === 1 || chainId === 11155111; // Mainnet or Sepolia
+      return chainId === 1; // Mainnet only
     }
 
     return false;
@@ -189,9 +189,7 @@ export const useMultiChainWallet = () => {
     
     switch (chainId) {
       case 56: return 'BSC Mainnet';
-      case 97: return 'BSC Testnet';
-      case 1: return 'Ethereum';
-      case 11155111: return 'Sepolia';
+      case 1: return 'Ethereum Mainnet';
       default: return `Chain ${chainId}`;
     }
   }, []);

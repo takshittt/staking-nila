@@ -395,7 +395,7 @@ const Rewards = () => {
                                         </td>
                                         <td className="px-6 py-4 text-center">
                                             <a
-                                                href={`https://testnet.bscscan.com/tx/${item.txHash}`}
+                                                href={`https://bscscan.com/tx/${item.txHash}`}
                                                 target="_blank"
                                                 rel="noopener noreferrer"
                                                 className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors inline-block"

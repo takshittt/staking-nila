@@ -15,8 +15,8 @@ if (!projectId) {
 // Create query client
 export const queryClient = new QueryClient()
 
-// Define networks - Added Ethereum mainnet and Sepolia testnet
-const networks = [bsc, bscTestnet, mainnet, sepolia] as [AppKitNetwork, ...AppKitNetwork[]]
+// Define networks - BSC and Ethereum mainnet only
+const networks = [bsc, mainnet] as [AppKitNetwork, ...AppKitNetwork[]]
 
 // Create Wagmi Adapter
 export const wagmiAdapter = new WagmiAdapter({

@@ -2,24 +2,24 @@ import { BrowserProvider, Contract, parseUnits } from 'ethers';
 
 // Contract addresses - these should match your deployed contracts
 const STAKING_CONTRACT_ADDRESS = import.meta.env.VITE_STAKING_CONTRACT_ADDRESS || '0x06a38fb94a1A35dCE9A5f2e6a640B9c559F34333';
-const NILA_TOKEN_ADDRESS = import.meta.env.VITE_NILA_TOKEN_ADDRESS || '0xA31fb7667F80306690F5DF0d9A6ea272aBF97926';
-const USDT_TOKEN_ADDRESS = '0xef4f8bdeDad6829817F802a957b8a5232644e1bC'; // BSC Testnet USDT
+const NILA_TOKEN_ADDRESS = import.meta.env.VITE_NILA_TOKEN_ADDRESS || '0x00f8Da33734FeB9b946fEC2228C25072D2e2E41f';
+const USDT_TOKEN_ADDRESS = import.meta.env.VITE_BSC_USDT_ADDRESS || '0x55d398326f99059fF775485246999027B3197955'; // BSC Mainnet USDT
 
 // Price constant
 const NILA_PRICE_USDT = 0.08; // 1 NILA = 0.08 USDT
 
-// BSC Testnet Chain ID
-const BSC_TESTNET_CHAIN_ID = '0x61'; // 97 in decimal
-const BSC_TESTNET_PARAMS = {
-  chainId: BSC_TESTNET_CHAIN_ID,
-  chainName: 'BSC Testnet',
+// BSC Mainnet Chain ID
+const BSC_MAINNET_CHAIN_ID = '0x38'; // 56 in decimal
+const BSC_MAINNET_PARAMS = {
+  chainId: BSC_MAINNET_CHAIN_ID,
+  chainName: 'BNB Smart Chain',
   nativeCurrency: {
     name: 'BNB',
-    symbol: 'tBNB',
+    symbol: 'BNB',
     decimals: 18
   },
-  rpcUrls: ['https://data-seed-prebsc-1-s1.binance.org:8545/'],
-  blockExplorerUrls: ['https://testnet.bscscan.com/']
+  rpcUrls: ['https://bsc-dataseed1.binance.org/', 'https://bsc-dataseed2.binance.org/'],
+  blockExplorerUrls: ['https://bscscan.com/']
 };
 
 // Minimal ABI for the functions we need
@@ -77,7 +77,7 @@ export interface BuyAndStakeWithUSDTParams {
 }
 
 export class ContractService {
-  // Check if user is on BSC Testnet
+  // Check if user is on BSC Mainnet
   static async checkNetwork(): Promise<boolean> {
     if (!window.ethereum) {
       throw new Error('No wallet detected');
@@ -85,23 +85,23 @@ export class ContractService {
 
     try {
       const chainId = await window.ethereum.request({ method: 'eth_chainId' });
-      return chainId === BSC_TESTNET_CHAIN_ID;
+      return chainId === BSC_MAINNET_CHAIN_ID;
     } catch (error) {
       return false;
     }
   }
 
-  // Switch to BSC Testnet
-  static async switchToBscTestnet(): Promise<void> {
+  // Switch to BSC Mainnet
+  static async switchToBscMainnet(): Promise<void> {
     if (!window.ethereum) {
       throw new Error('No wallet detected');
     }
 
     try {
-      // Try to switch to BSC Testnet
+      // Try to switch to BSC Mainnet
       await window.ethereum.request({
         method: 'wallet_switchEthereumChain',
-        params: [{ chainId: BSC_TESTNET_CHAIN_ID }],
+        params: [{ chainId: BSC_MAINNET_CHAIN_ID }],
       });
     } catch (switchError: any) {
       // This error code indicates that the chain has not been added to MetaMask
@@ -109,13 +109,13 @@ export class ContractService {
         try {
           await window.ethereum.request({
             method: 'wallet_addEthereumChain',
-            params: [BSC_TESTNET_PARAMS],
+            params: [BSC_MAINNET_PARAMS],
           });
         } catch (addError) {
-          throw new Error('Failed to add BSC Testnet to wallet');
+          throw new Error('Failed to add BSC Mainnet to wallet');
         }
       } else {
-        throw new Error('Failed to switch to BSC Testnet');
+        throw new Error('Failed to switch to BSC Mainnet');
       }
     }
   }
@@ -124,7 +124,7 @@ export class ContractService {
   static async ensureCorrectNetwork(): Promise<void> {
     const isCorrectNetwork = await this.checkNetwork();
     if (!isCorrectNetwork) {
-      await this.switchToBscTestnet();
+      await this.switchToBscMainnet();
       // Wait a bit for network switch to complete
       await new Promise(resolve => setTimeout(resolve, 1000));
     }

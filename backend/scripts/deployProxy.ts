@@ -3,7 +3,7 @@ import * as fs from "fs";
 import * as path from "path";
 
 async function main() {
-  const NILA_TOKEN = process.env.NILA_TOKEN_ADDRESS || "0xA31fb7667F80306690F5DF0d9A6ea272aBF97926";
+  const NILA_TOKEN = process.env.NILA_TOKEN_ADDRESS || "0x00f8Da33734FeB9b946fEC2228C25072D2e2E41f";
 
   console.log("========================================");
   console.log("Deploying NilaStakingUpgradeable v3.0.0 with UUPS Proxy");
