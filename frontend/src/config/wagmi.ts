@@ -1,6 +1,6 @@
 import { createAppKit } from '@reown/appkit/react'
 import { WagmiAdapter } from '@reown/appkit-adapter-wagmi'
-import { bsc, bscTestnet, mainnet, sepolia } from '@reown/appkit/networks'
+import { bsc, mainnet } from '@reown/appkit/networks'
 import { QueryClient } from '@tanstack/react-query'
 import type { AppKitNetwork } from '@reown/appkit/networks'
 
