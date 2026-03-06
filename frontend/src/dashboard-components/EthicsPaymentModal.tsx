@@ -173,7 +173,7 @@ const EthicsPaymentModal = ({
 
                 // Verify payment with backend
                 try {
-                    const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
+                    const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3005/api';
                     const response = await fetch(`${API_URL}/verify-intent`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
@@ -343,7 +343,7 @@ const EthicsPaymentModal = ({
         setPaymentStep('loading');
 
         try {
-            const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
+            const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3005/api';
 
             // Use form data for card payments, hardcoded for crypto
             const name = paymentMethod === 'card' ? formData.name : 'NILA Staker';
