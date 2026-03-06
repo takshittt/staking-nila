@@ -5,7 +5,8 @@
   "scripts": {
     "start": "node server.js",
     "dev": "nodemon server.js",
-    "prisma:generate": "prisma generate"
+    "prisma:generate": "prisma generate",
+    "clear-db": "node clear-db.js"
   },
   "keywords": [],
   "author": "",
