@@ -2,7 +2,6 @@ import api from './axiosConfig';
 export interface AmountConfig {
   id: number;
   amount: string;
-  instantRewardBps: number;
   active: boolean;
 }
 
@@ -29,11 +28,9 @@ export interface StakingStats {
 
 export interface CreateAmountConfigDto {
   amount: number;
-  instantRewardPercent: number;
 }
 
 export interface UpdateAmountConfigDto {
-  instantRewardPercent: number;
   active: boolean;
 }
 

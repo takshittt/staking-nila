@@ -20,7 +20,7 @@ contract NilaStakingUpgradeable is
     uint256 public constant BPS = 10_000;
     uint256 public constant CLAIM_INTERVAL = 30 days;
     uint256 public constant MAX_STAKES_PER_USER = 100;
-    uint256 public constant MIN_STAKE_AMOUNT = 100 * 10**18; // 100 NILA minimum
+    uint256 public constant MIN_STAKE_AMOUNT = 10 * 10**18; // 10 NILA minimum
 
     /* ================= GLOBAL ACCOUNTING ================= */
     uint256 public totalStaked;
@@ -30,7 +30,6 @@ contract NilaStakingUpgradeable is
     /* ================= CONFIG STRUCTS ================= */
     struct AmountConfig {
         uint256 amount;
-        uint256 instantRewardBps;
         bool active;
     }
 
@@ -93,8 +92,8 @@ contract NilaStakingUpgradeable is
     mapping(address => uint256) public claimableReferralRewards;
 
     /* ================= EVENTS ================= */
-    event AmountConfigAdded(uint256 indexed id, uint256 amount, uint256 instantRewardBps);
-    event AmountConfigUpdated(uint256 indexed id, uint256 instantRewardBps, bool active);
+    event AmountConfigAdded(uint256 indexed id, uint256 amount);
+    event AmountConfigUpdated(uint256 indexed id, bool active);
     event LockConfigAdded(uint256 indexed id, uint256 lockDuration, uint256 apr);
     event LockConfigUpdated(uint256 indexed id, uint256 apr, bool active);
     event RewardTierAdded(uint256 indexed id, uint256 minAmount, uint256 maxAmount, uint256 instantRewardBps);
@@ -152,19 +151,16 @@ contract NilaStakingUpgradeable is
 
     /* ================= ADMIN ================= */
 
-    function addAmountConfig(uint256 amount, uint256 instantRewardBps) external onlyOwner {
+    function addAmountConfig(uint256 amount) external onlyOwner {
         require(amount > 0, "Invalid amount");
-        require(instantRewardBps <= BPS, "Invalid reward bps");
-        amountConfigs.push(AmountConfig(amount, instantRewardBps, true));
-        emit AmountConfigAdded(amountConfigs.length - 1, amount, instantRewardBps);
+        amountConfigs.push(AmountConfig(amount, true));
+        emit AmountConfigAdded(amountConfigs.length - 1, amount);
     }
 
-    function updateAmountConfig(uint256 id, uint256 instantRewardBps, bool active) external onlyOwner {
+    function updateAmountConfig(uint256 id, bool active) external onlyOwner {
         require(id < amountConfigs.length, "Invalid config id");
-        require(instantRewardBps <= BPS, "Invalid reward bps");
-        amountConfigs[id].instantRewardBps = instantRewardBps;
         amountConfigs[id].active = active;
-        emit AmountConfigUpdated(id, instantRewardBps, active);
+        emit AmountConfigUpdated(id, active);
     }
 
     function addLockConfig(uint256 lockDays, uint256 apr) external onlyOwner {

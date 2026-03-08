@@ -3,7 +3,6 @@ const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3005/api';
 export interface AmountConfig {
   id: number;
   amount: string; // in wei
-  instantRewardBps: number; // basis points (e.g., 500 = 5%)
   active: boolean;
 }
 
@@ -21,7 +20,7 @@ export interface CreateStakeDto {
   amount: number;
   apy: number;
   lockDays: number;
-  instantRewardPercent?: number;
+  instantRewardAmount?: number; // Actual NILA amount from contract, not percentage
   txHash?: string;
   onChainStakeId?: number; // Blockchain array index
 }

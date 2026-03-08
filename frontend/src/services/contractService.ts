@@ -468,6 +468,21 @@ export class ContractService {
     }
   }
 
+  // Get claimable instant rewards for a user (used after staking to get actual reward amount)
+  static async getClaimableInstantRewards(userAddress: string): Promise<string> {
+    try {
+      const provider = await this.getProvider();
+      const stakingContract = new Contract(STAKING_CONTRACT_ADDRESS, STAKING_ABI, provider);
+      
+      // Query the claimableInstantRewards mapping
+      const rewards = await stakingContract.getClaimableRewards(userAddress);
+      return rewards.instantRewards.toString();
+    } catch (error: any) {
+      console.error('Error getting claimable instant rewards:', error);
+      return '0';
+    }
+  }
+
   // Claim instant cashback rewards
   static async claimInstantRewards(): Promise<string> {
     try {

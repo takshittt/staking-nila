@@ -22,7 +22,7 @@ export class StakeService {
     amount: number;
     apy: number;
     lockDays: number;
-    instantRewardPercent?: number;
+    instantRewardAmount?: number; // Actual NILA amount from contract, not percentage
     txHash?: string;
     onChainStakeId?: number;  // Add blockchain stake index
   }) {
@@ -82,18 +82,16 @@ export class StakeService {
     });
 
     // Create instant cashback reward if applicable
-    if (data.instantRewardPercent && data.instantRewardPercent > 0) {
-      const instantReward = data.amount * (data.instantRewardPercent / 100);
-
+    if (data.instantRewardAmount && data.instantRewardAmount > 0) {
       await RewardService.createPendingReward({
         userId: user.id,
         walletAddress: normalizedAddress,
         type: 'INSTANT_CASHBACK',
-        amount: instantReward,
+        amount: data.instantRewardAmount,
         sourceId: stake.stakeId,
         metadata: {
           stakeAmount: data.amount,
-          rewardPercent: data.instantRewardPercent
+          rewardAmount: data.instantRewardAmount
         }
       });
     }
@@ -208,7 +206,7 @@ export class StakeService {
       amount: data.amount,
       apy: data.apy,
       lockDays: data.lockDays,
-      instantRewardPercent: 0, // No instant rewards for admin stakes
+      instantRewardAmount: 0, // No instant rewards for admin stakes
       txHash: result.txHash,
       onChainStakeId: result.stakeId // Pass the blockchain stake index
     });

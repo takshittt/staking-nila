@@ -7,7 +7,7 @@ const router = Router();
 // Public endpoint - create stake
 router.post('/', async (req, res) => {
   try {
-    const { walletAddress, planName, planVersion, amount, apy, lockDays, instantRewardPercent, txHash } = req.body;
+    const { walletAddress, planName, planVersion, amount, apy, lockDays, instantRewardAmount, txHash } = req.body;
 
     if (!walletAddress || !planName || !planVersion || !amount || !apy || !lockDays) {
       return res.status(400).json({ error: 'Missing required fields' });
@@ -20,7 +20,7 @@ router.post('/', async (req, res) => {
       amount,
       apy,
       lockDays,
-      instantRewardPercent,
+      instantRewardAmount,
       txHash
     });
 

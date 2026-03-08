@@ -148,7 +148,7 @@ const StakeNila = () => {
                     amount: amountNum,
                     apy: selectedPlan?.apr || 0,
                     lockDays: selectedPlan?.lockDuration || 0,
-                    instantRewardPercent: 0, // Direct staking has no instant rewards
+                    instantRewardAmount: 0, // Direct staking has no instant rewards
                     txHash: result.txHash,
                     onChainStakeId: result.stakeIndex ?? undefined
                 });

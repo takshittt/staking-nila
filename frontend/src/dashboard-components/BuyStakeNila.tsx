@@ -270,7 +270,18 @@ const BuyStakeNila = () => {
 
             setStatusMessage('Recording stake in database...');
 
-            // Step 4: Record in our backend database
+            // Step 4: Query contract for actual instant rewards
+            let instantRewardAmount = 0;
+            try {
+                const { ContractService } = await import('../services/contractService');
+                const claimableRewards = await ContractService.getClaimableInstantRewards(address!);
+                instantRewardAmount = parseFloat(claimableRewards) / 1e18; // Convert from wei to NILA
+            } catch (rewardError) {
+                console.error('Failed to query instant rewards:', rewardError);
+                // Continue without instant rewards if query fails
+            }
+
+            // Step 5: Record in our backend database
             try {
                 await stakingApi.recordStake({
                     walletAddress: address!,
@@ -279,7 +290,7 @@ const BuyStakeNila = () => {
                     amount: result.pyrandSent,
                     apy: selectedPlan?.apr || 0,
                     lockDays: selectedPlan?.lockDuration || 0,
-                    instantRewardPercent: calculations.cashbackPercent,
+                    instantRewardAmount: instantRewardAmount,
                     txHash: result.tokenTx,
                     onChainStakeId: undefined
                 });

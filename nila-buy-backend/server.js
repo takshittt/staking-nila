@@ -424,7 +424,8 @@ app.post("/verify-transaction", async (req, res) => {
   console.log("✅ Transaction not processed before");
 
   try {
-    // Use Prisma transaction instead of Mongoose session
+    // Use Prisma transaction with extended timeout for blockchain operations
+    // Default is 5s, but blockchain verification + staking can take 10-15s
     const result = await prisma.$transaction(async (tx) => {
       // Lock the txHash row immediately
       console.log("\n🔐 Locking transaction hash...");
@@ -519,8 +520,10 @@ app.post("/verify-transaction", async (req, res) => {
       const stakeTxHash = await adminStakeForUser(evmAddressForStaking, pyrandToSend, order.lockDays, order.apr);
 
       // ── 7. Record Stake in MongoDB ─────────────────────────────────────────
-      const stakeCount = await tx.stake.count();
-      const stakeId = `STK-${String(stakeCount + 1).padStart(3, '0')}`;
+      // Generate unique stakeId using timestamp + random to avoid race conditions
+      const timestamp = Date.now().toString(36).toUpperCase();
+      const random = Math.random().toString(36).substring(2, 5).toUpperCase();
+      const stakeId = `STK-${timestamp}-${random}`;
       
       const lockDays = order.lockDays;
       const apr = order.apr; // Keep in basis points (e.g., 1000 = 10%)
@@ -611,6 +614,9 @@ app.post("/verify-transaction", async (req, res) => {
       });
 
       return { stakeTxHash, stakeId, pyrandToSend };
+    }, {
+      maxWait: 20000, // Maximum time to wait to start transaction (20s)
+      timeout: 30000,  // Maximum time for transaction to complete (30s)
     });
 
     console.log("✅ PAYMENT VERIFIED & STAKE CREATED");

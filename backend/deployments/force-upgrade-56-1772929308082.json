@@ -1,0 +1,9 @@
+{
+  "network": "bscMainnet",
+  "chainId": "56",
+  "proxy": "0xb6BFE033da936DaE74b35C98df00992675f47a3C",
+  "oldImplementation": "0xA9220AC64939a50eA343e47f0E28BE865F46c59b",
+  "newImplementation": "0xA9220AC64939a50eA343e47f0E28BE865F46c59b",
+  "minStakeAmount": "10.0",
+  "upgradedAt": "2026-03-08T00:21:48.082Z"
+}

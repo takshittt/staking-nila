@@ -39,7 +39,6 @@ export const stakeApi = {
     amount: number;
     lockDays: number;
     apy: number;
-    instantRewardPercent?: number;
   }) => {
     const response = await api.post('/stakes/manual', data);
     return response.data;

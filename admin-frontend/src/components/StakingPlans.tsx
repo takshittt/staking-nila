@@ -63,7 +63,6 @@ const StakingPlans = () => {
         setTxPending(true);
         try {
             await stakingApi.updateAmountConfig(id, {
-                instantRewardPercent: config.instantRewardBps / 100,
                 active: !config.active
             });
             await fetchConfigs();
@@ -116,7 +115,6 @@ const StakingPlans = () => {
         setTxPending(true);
         try {
             await stakingApi.updateAmountConfig(editingAmountId, {
-                instantRewardPercent: data.instantRewardPercent,
                 active: config.active // Preserve existing active state
             });
             await fetchConfigs();
@@ -175,8 +173,7 @@ const StakingPlans = () => {
     const openEditAmountModal = (config: AmountConfig) => {
         setEditingAmountId(config.id);
         setAmountInitialData({
-            amount: Number(BigInt(config.amount) / BigInt(10 ** 18)),
-            instantRewardPercent: config.instantRewardBps / 100
+            amount: Number(BigInt(config.amount) / BigInt(10 ** 18))
         });
         setIsAmountModalOpen(true);
     };
@@ -391,9 +388,6 @@ const StakingPlans = () => {
                                             Amount
                                         </th>
                                         <th className="px-6 py-4 text-left text-sm font-semibold text-slate-900">
-                                            Instant Reward
-                                        </th>
-                                        <th className="px-6 py-4 text-left text-sm font-semibold text-slate-900">
                                             Status
                                         </th>
                                         <th className="px-6 py-4 text-left text-sm font-semibold text-slate-900">
@@ -412,9 +406,6 @@ const StakingPlans = () => {
                                             </td>
                                             <td className="px-6 py-4 text-sm font-semibold text-slate-900">
                                                 {formatAmount(config.amount)} USD/USDT
-                                            </td>
-                                            <td className="px-6 py-4 text-sm text-slate-600">
-                                                {(config.instantRewardBps / 100).toFixed(1)}%
                                             </td>
                                             <td className="px-6 py-4">
                                                 <span

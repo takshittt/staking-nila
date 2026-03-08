@@ -3,7 +3,6 @@ import { useState, useEffect } from 'react';
 
 export interface AmountConfigFormData {
     amount: number;
-    instantRewardPercent: number; // Kept for backward compatibility but not used
 }
 
 export interface LockConfigFormData {
@@ -44,8 +43,7 @@ export const CreateAmountConfigModal = ({
     isLoading = false
 }: CreateAmountConfigModalProps) => {
     const [formData, setFormData] = useState<any>({
-        amount: '',
-        instantRewardPercent: '',
+        amount: ''
     });
 
     // Initialize form data when modal opens or initialData changes
@@ -56,7 +54,7 @@ export const CreateAmountConfigModal = ({
     });
 
     // Update form state if initialData changes while component is mounted
-    if (isOpen && initialData && (formData.amount !== initialData.amount || formData.instantRewardPercent !== initialData.instantRewardPercent) && !isEditing) {
+    if (isOpen && initialData && formData.amount !== initialData.amount && !isEditing) {
         // This logic is tricky with hooks. Better handled with useEffect.
     }
 
@@ -66,8 +64,7 @@ export const CreateAmountConfigModal = ({
             setFormData(initialData);
         } else if (isOpen && !isEditing) {
             setFormData({
-                amount: '',
-                instantRewardPercent: '',
+                amount: ''
             });
         }
     }, [isOpen, initialData, isEditing]);
@@ -89,16 +86,14 @@ export const CreateAmountConfigModal = ({
         e.preventDefault();
         if (validateForm()) {
             onSubmit({
-                ...formData,
-                instantRewardPercent: formData.instantRewardPercent || 0
+                ...formData
             } as AmountConfigFormData);
             setErrors({});
             // Don't close immediately, let parent handle it or close here? Parent handles it usually.
             // But we need to reset if closing.
             if (!isEditing) {
                 setFormData({
-                    amount: '',
-                    instantRewardPercent: '',
+                    amount: ''
                 });
             }
         }

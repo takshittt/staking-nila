@@ -49,8 +49,7 @@ const CreateStake = () => {
                 walletAddress: formData.walletAddress,
                 amount: Number(formData.amount),
                 lockDays: Number(formData.lockDays),
-                apy: Number(formData.apy),
-                instantRewardPercent: 0 // No instant reward for manual stakes
+                apy: Number(formData.apy)
             });
 
             setSuccess(`Stake created successfully! TX: ${result.txHash?.substring(0, 10)}...`);
