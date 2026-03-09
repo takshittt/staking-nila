@@ -105,7 +105,7 @@ const StakingPlans = () => {
         }
     };
 
-    const handleUpdateAmountConfig = async (data: AmountConfigFormData) => {
+    const handleUpdateAmountConfig = async (_data: AmountConfigFormData) => {
         if (editingAmountId === null) return;
 
         // Find existing config to preserve active state
