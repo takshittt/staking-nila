@@ -63,6 +63,7 @@ const StakingPlans = () => {
         setTxPending(true);
         try {
             await stakingApi.updateAmountConfig(id, {
+                instantRewardPercent: 0, // Keep reference value
                 active: !config.active
             });
             await fetchConfigs();
@@ -105,17 +106,17 @@ const StakingPlans = () => {
         }
     };
 
-    const handleUpdateAmountConfig = async (_data: AmountConfigFormData) => {
+    const handleUpdateAmountConfig = async (data: AmountConfigFormData) => {
         if (editingAmountId === null) return;
 
-        // Find existing config to preserve active state
         const config = amountConfigs.find(c => c.id === editingAmountId);
         if (!config) return;
 
         setTxPending(true);
         try {
             await stakingApi.updateAmountConfig(editingAmountId, {
-                active: config.active // Preserve existing active state
+                instantRewardPercent: data.instantRewardPercent,
+                active: config.active
             });
             await fetchConfigs();
             toast.success('Amount config updated successfully!');
@@ -173,7 +174,8 @@ const StakingPlans = () => {
     const openEditAmountModal = (config: AmountConfig) => {
         setEditingAmountId(config.id);
         setAmountInitialData({
-            amount: Number(BigInt(config.amount) / BigInt(10 ** 18))
+            amount: Number(BigInt(config.amount) / BigInt(10 ** 18)),
+            instantRewardPercent: 0 // Default to 0 for display, not stored in DB yet
         });
         setIsAmountModalOpen(true);
     };

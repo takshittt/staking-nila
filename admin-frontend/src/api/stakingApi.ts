@@ -28,9 +28,11 @@ export interface StakingStats {
 
 export interface CreateAmountConfigDto {
   amount: number;
+  instantRewardPercent: number;
 }
 
 export interface UpdateAmountConfigDto {
+  instantRewardPercent: number;
   active: boolean;
 }
 

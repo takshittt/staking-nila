@@ -3,6 +3,7 @@ const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3005/api';
 export interface AmountConfig {
   id: number;
   amount: string; // in wei
+  instantRewardBps: number; // Basis points (e.g., 500 = 5%)
   active: boolean;
 }
 

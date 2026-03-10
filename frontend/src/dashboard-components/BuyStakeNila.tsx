@@ -725,6 +725,13 @@ const BuyStakeNila = () => {
                                             <div className="text-xs text-slate-500 mb-3">
                                                 → {prices ? nilaAmount.toLocaleString(undefined, { maximumFractionDigits: 2 }) : '--'} NILA
                                             </div>
+
+                                            {pkg.instantRewardBps > 0 && (
+                                                <div className="inline-flex items-center gap-1.5 px-2 py-1 rounded-lg text-xs font-bold bg-yellow-100 text-yellow-700 mt-auto">
+                                                    <Zap className="w-3 h-3" />
+                                                    {(pkg.instantRewardBps / 100).toFixed(1)}% Cashback
+                                                </div>
+                                            )}
                                         </button>
                                     );
                                 })}

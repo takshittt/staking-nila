@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react';
 
 export interface AmountConfigFormData {
     amount: number;
+    instantRewardPercent: number;
 }
 
 export interface LockConfigFormData {
@@ -43,7 +44,8 @@ export const CreateAmountConfigModal = ({
     isLoading = false
 }: CreateAmountConfigModalProps) => {
     const [formData, setFormData] = useState<any>({
-        amount: ''
+        amount: '',
+        instantRewardPercent: ''
     });
 
     // Initialize form data when modal opens or initialData changes
@@ -64,7 +66,8 @@ export const CreateAmountConfigModal = ({
             setFormData(initialData);
         } else if (isOpen && !isEditing) {
             setFormData({
-                amount: ''
+                amount: '',
+                instantRewardPercent: ''
             });
         }
     }, [isOpen, initialData, isEditing]);
@@ -76,6 +79,9 @@ export const CreateAmountConfigModal = ({
 
         if (formData.amount === '' || formData.amount <= 0) {
             newErrors.amount = 'Amount must be greater than 0';
+        }
+        if (formData.instantRewardPercent === '' || formData.instantRewardPercent < 0 || formData.instantRewardPercent > 100) {
+            newErrors.instantRewardPercent = 'Instant reward must be between 0 and 100%';
         }
 
         setErrors(newErrors);
@@ -89,11 +95,10 @@ export const CreateAmountConfigModal = ({
                 ...formData
             } as AmountConfigFormData);
             setErrors({});
-            // Don't close immediately, let parent handle it or close here? Parent handles it usually.
-            // But we need to reset if closing.
             if (!isEditing) {
                 setFormData({
-                    amount: ''
+                    amount: '',
+                    instantRewardPercent: ''
                 });
             }
         }
@@ -171,6 +176,30 @@ export const CreateAmountConfigModal = ({
                             )}
                             <p className="text-xs text-slate-500 mt-1">
                                 Predefined amount shown in UI. Backend calculates NILA at $0.08 per token.
+                            </p>
+                        </div>
+
+                        <div>
+                            <label className="block text-sm font-medium text-slate-900 mb-2">
+                                Approximate Instant Reward (%)
+                            </label>
+                            <input
+                                type="number"
+                                name="instantRewardPercent"
+                                value={formData.instantRewardPercent}
+                                onChange={handleChange}
+                                min="0"
+                                max="100"
+                                step="0.1"
+                                placeholder="Enter instant reward %"
+                                className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 transition-colors ${errors.instantRewardPercent ? 'border-red-500' : 'border-slate-200'
+                                    }`}
+                            />
+                            {errors.instantRewardPercent && (
+                                <p className="text-xs text-red-600 mt-1">{errors.instantRewardPercent}</p>
+                            )}
+                            <p className="text-xs text-slate-500 mt-1">
+                                Reference value for UI display only. Actual rewards are calculated by Reward Tiers based on NILA amount.
                             </p>
                         </div>
 
