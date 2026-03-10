@@ -76,7 +76,7 @@ model Stake {
   startDate      DateTime
   endDate        DateTime
   status         String   @default("active")
-  txHash         String?
+  txHash         String?  @unique  // LAYER 3: Unique constraint prevents duplicate stakes
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
   user           User     @relation(fields: [userId], references: [id])
@@ -91,6 +91,7 @@ model Referral {
   earnings       String
   createdAt      DateTime @default(now())
 
+  @@unique([referrerWallet, referredWallet])
   @@map("referrals")
 }
 
@@ -192,6 +193,7 @@ model Order {
   priceAtCreation Float?
   lockDays        Int      @default(30)
   apr             Int      @default(1200)
+  referralCode    String?  // Referral code used when creating order
   status          String   @default("PENDING_PAYMENT")
   txHash          String?
   stakeTxHash     String?

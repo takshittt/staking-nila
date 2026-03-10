@@ -149,6 +149,17 @@ export class EventListenerService {
     const normalizedAddress = userAddress.toLowerCase();
     const txHash = event.log.transactionHash;
 
+    // LAYER 1: Check if transaction was already processed by nila-buy-backend
+    const processedTx = await prisma.processedTx.findUnique({
+      where: { txHash }
+    });
+
+    if (processedTx) {
+      console.log(`Transaction ${txHash} already processed by payment gateway, skipping event`);
+      return;
+    }
+
+    // LAYER 2: Check if stake already exists
     const existingStake = await prisma.stake.findFirst({
       where: { txHash }
     });
@@ -233,21 +244,38 @@ export class EventListenerService {
   ) {
     const normalizedAddress = userAddress.toLowerCase();
     const txHash = event.log.transactionHash;
+    const onChainStakeId = Number(stakeId);
 
-    const stake = await prisma.stake.findFirst({
+    // Try to find stake by onChainStakeId first (most accurate)
+    let stake = await prisma.stake.findFirst({
       where: {
         user: { walletAddress: normalizedAddress },
+        onChainStakeId: onChainStakeId,
         status: 'active'
-      },
-      orderBy: { createdAt: 'desc' }
+      }
     });
+
+    // Fallback: If not found by onChainStakeId, try by most recent active stake
+    // This handles legacy stakes that might not have onChainStakeId set
+    if (!stake) {
+      console.log(`⚠️ Stake not found by onChainStakeId ${onChainStakeId}, falling back to most recent active stake`);
+      stake = await prisma.stake.findFirst({
+        where: {
+          user: { walletAddress: normalizedAddress },
+          status: 'active'
+        },
+        orderBy: { createdAt: 'desc' }
+      });
+    }
 
     if (stake) {
       await prisma.stake.update({
         where: { id: stake.id },
         data: { status: 'completed' }
       });
-      console.log(`✅ Stake completed for ${normalizedAddress}`);
+      console.log(`✅ Stake ${stake.stakeId} (onChain: ${onChainStakeId}) completed for ${normalizedAddress}`);
+    } else {
+      console.log(`⚠️ No active stake found for ${normalizedAddress} with onChainStakeId ${onChainStakeId}`);
     }
   }
 }

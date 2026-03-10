@@ -6,7 +6,6 @@ import toast from 'react-hot-toast';
 import { handleError } from '../utils/errorHandler';
 import { stakingApi, type LockConfig, type AmountConfig } from '../services/stakingApi';
 import { PriceService, type PriceData } from '../services/priceService';
-import { transactionApi } from '../services/transactionApi';
 import { MultiChainPaymentService } from '../services/multiChainPaymentService';
 import { TransactionService, type TransactionProgress } from '../services/transactionService';
 import { TronLinkService } from '../services/tronLinkService';
@@ -268,44 +267,12 @@ const BuyStakeNila = () => {
                 network
             });
 
-            setStatusMessage('Recording stake in database...');
-
-            // Step 4: Query contract for actual instant rewards
-            let instantRewardAmount = 0;
-            try {
-                const { ContractService } = await import('../services/contractService');
-                const claimableRewards = await ContractService.getClaimableInstantRewards(address!);
-                instantRewardAmount = parseFloat(claimableRewards) / 1e18; // Convert from wei to NILA
-            } catch (rewardError) {
-                console.error('Failed to query instant rewards:', rewardError);
-                // Continue without instant rewards if query fails
-            }
-
-            // Step 5: Record in our backend database
-            try {
-                await stakingApi.recordStake({
-                    walletAddress: address!,
-                    planName: `${selectedPlan?.lockDuration} Days`,
-                    planVersion: 1,
-                    amount: result.pyrandSent,
-                    apy: selectedPlan?.apr || 0,
-                    lockDays: selectedPlan?.lockDuration || 0,
-                    instantRewardAmount: instantRewardAmount,
-                    txHash: result.tokenTx,
-                    onChainStakeId: undefined
-                });
-
-                // Record transaction
-                await transactionApi.createTransaction({
-                    txHash: result.tokenTx,
-                    walletAddress: address!,
-                    type: 'STAKE',
-                    amount: result.pyrandSent,
-                    status: 'confirmed'
-                });
-            } catch (backendError: any) {
-                // Silent error handling
-            }
+            // Note: The nila-buy-backend now handles:
+            // - Creating the stake in the database
+            // - Querying the contract for instant rewards
+            // - Recording the instant cashback reward
+            // - Recording the staking transaction
+            // So we don't need to do it again here
 
             setSuccessTxHash(result.tokenTx);
             setPaymentStep('success');
@@ -374,7 +341,7 @@ const BuyStakeNila = () => {
 
         if (isCustom) {
             cryptoSpent = parseFloat(customUsdtAmount) || 0;
-            cashbackPercent = 0; // No cashback for custom amounts
+            cashbackPercent = 0; // Instant rewards calculated by smart contract based on NILA amount
         } else if (selectedPackage) {
             // Amount config is now in USDT (stored as wei, so divide by 1e18)
             usdtEquivalentSpent = parseFloat(selectedPackage.amount) / 1e18;
@@ -387,7 +354,7 @@ const BuyStakeNila = () => {
                 cryptoSpent = usdtEquivalentSpent; // USDT or USDC
             }
 
-            cashbackPercent = selectedPackage.instantRewardBps / 100;
+            cashbackPercent = 0; // Instant rewards calculated by smart contract based on NILA amount
         }
 
         if (isCustom) {
@@ -715,7 +682,7 @@ const BuyStakeNila = () => {
                                     // Amount config is now in USDT (stored as wei, so divide by 1e18)
                                     const usdtAmount = parseFloat(pkg.amount) / 1e18;
                                     const nilaAmount = prices ? usdtAmount / prices.NILA : 0;
-                                    const cashbackPercent = pkg.instantRewardBps / 100;
+                                    // Instant rewards are calculated by smart contract based on NILA amount
                                     return (
                                         <button
                                             key={pkg.id}
@@ -757,14 +724,6 @@ const BuyStakeNila = () => {
 
                                             <div className="text-xs text-slate-500 mb-3">
                                                 → {prices ? nilaAmount.toLocaleString(undefined, { maximumFractionDigits: 2 }) : '--'} NILA
-                                            </div>
-
-                                            <div className="mt-auto">
-                                                <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold ${isSelected ? 'bg-yellow-100 text-yellow-700' : 'bg-slate-100 text-slate-600'
-                                                    }`}>
-                                                    <Zap className="w-3.5 h-3.5" />
-                                                    +{cashbackPercent}% CB
-                                                </div>
                                             </div>
                                         </button>
                                     );

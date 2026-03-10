@@ -517,9 +517,139 @@ app.post("/verify-transaction", async (req, res) => {
       console.log("\n🎯 Creating stake for EVM address:", evmAddressForStaking);
       console.log("📅 Lock Days:", order.lockDays);
       console.log("📈 APR:", order.apr, "bps");
-      const stakeTxHash = await adminStakeForUser(evmAddressForStaking, pyrandToSend, order.lockDays, order.apr);
+      
+      // Query instant rewards BEFORE staking to get baseline
+      let instantRewardsBefore = BigInt(0);
+      try {
+        instantRewardsBefore = await stakingContractObj.claimableInstantRewards(evmAddressForStaking);
+        console.log("📊 Instant rewards before stake:", ethers.formatUnits(instantRewardsBefore, 18), "NILA");
+      } catch (err) {
+        console.error("⚠️  Failed to query instant rewards before:", err.message);
+      }
+      
+      // Query referral rewards BEFORE staking to get baseline
+      let referralRewardsBefore = BigInt(0);
+      try {
+        referralRewardsBefore = await stakingContractObj.claimableReferralRewards(evmAddressForStaking);
+        console.log("👥 Referral rewards before stake:", ethers.formatUnits(referralRewardsBefore, 18), "NILA");
+      } catch (err) {
+        console.error("⚠️  Failed to query referral rewards before:", err.message);
+      }
+      
+      // Get referrer address from user's referredBy field (if set)
+      let referrerAddress = null;
+      if (user.referredBy) {
+        console.log("\n🔗 User has referrer set:", user.referredBy);
+        try {
+          // referredBy contains the referral code, resolve it to wallet address
+          const referrer = await tx.user.findUnique({
+            where: { referralCode: user.referredBy }
+          });
+          
+          if (referrer && referrer.walletAddress !== normalizedAddress) {
+            referrerAddress = referrer.walletAddress;
+            console.log("✅ Referrer resolved:", referrerAddress);
+          } else if (referrer && referrer.walletAddress === normalizedAddress) {
+            console.log("⚠️  Cannot refer yourself");
+          } else {
+            console.log("⚠️  Referrer not found for code:", user.referredBy);
+          }
+        } catch (err) {
+          console.error("⚠️  Failed to resolve referrer:", err.message);
+        }
+      } else {
+        console.log("\n📝 User has no referrer set");
+      }
+      
+      const stakeTxHash = await adminStakeForUser(evmAddressForStaking, pyrandToSend, order.lockDays, order.apr, referrerAddress);
+
+      // ── 6.5. Query Contract for Instant Rewards ────────────────────────────
+      console.log("\n💰 Querying contract for instant rewards after stake...");
+      let instantRewardAmount = 0;
+      try {
+        // Query the staking contract for claimable instant rewards AFTER staking
+        const instantRewardsAfter = await stakingContractObj.claimableInstantRewards(evmAddressForStaking);
+        console.log("📊 Instant rewards after stake:", ethers.formatUnits(instantRewardsAfter, 18), "NILA");
+        
+        // Calculate the difference to get the reward for THIS stake only
+        const instantRewardDelta = instantRewardsAfter - instantRewardsBefore;
+        instantRewardAmount = Number(ethers.formatUnits(instantRewardDelta, 18));
+        console.log("✅ Instant rewards for this stake:", instantRewardAmount, "NILA");
+      } catch (rewardError) {
+        console.error("⚠️  Failed to query instant rewards:", rewardError.message);
+        // Continue without instant rewards if query fails
+      }
+      
+      // ── 6.6. Query Contract for Referral Rewards ───────────────────────────
+      console.log("\n👥 Querying contract for referral rewards after stake...");
+      let referralRewardAmount = 0;
+      let referrerRewardAmount = 0;
+      
+      try {
+        // Query the staking contract for claimable referral rewards AFTER staking
+        const referralRewardsAfter = await stakingContractObj.claimableReferralRewards(evmAddressForStaking);
+        console.log("📊 Referral rewards after stake:", ethers.formatUnits(referralRewardsAfter, 18), "NILA");
+        
+        // Calculate the difference to get the reward for THIS stake only
+        const referralRewardDelta = referralRewardsAfter - referralRewardsBefore;
+        referralRewardAmount = Number(ethers.formatUnits(referralRewardDelta, 18));
+        console.log("✅ Referral rewards for this stake:", referralRewardAmount, "NILA");
+        
+        // If there's a referrer, also query their rewards
+        if (referrerAddress) {
+          try {
+            const referrerRewardsBefore = await stakingContractObj.claimableReferralRewards(referrerAddress);
+            console.log("📊 Referrer rewards (should have increased):", ethers.formatUnits(referrerRewardsBefore, 18), "NILA");
+            // Note: We can't easily calculate the delta for referrer without querying before
+            // But we know from contract logic: referrer gets 5% of stake amount
+            referrerRewardAmount = pyrandToSend * 0.05; // 5% = 500 bps
+            console.log("✅ Estimated referrer reward:", referrerRewardAmount, "NILA");
+          } catch (err) {
+            console.error("⚠️  Failed to query referrer rewards:", err.message);
+          }
+        }
+      } catch (rewardError) {
+        console.error("⚠️  Failed to query referral rewards:", rewardError.message);
+        // Continue without referral rewards if query fails
+      }
 
       // ── 7. Record Stake in MongoDB ─────────────────────────────────────────
+      
+      // LAYER 2: Check if stake with this txHash already exists (prevents duplicates)
+      const existingStake = await tx.stake.findFirst({
+        where: { txHash: stakeTxHash }
+      });
+
+      if (existingStake) {
+        console.log(`⚠️  Stake already exists for txHash ${stakeTxHash}, reusing existing stake`);
+        // Update order to reference existing stake
+        await tx.order.update({
+          where: { id: order.id },
+          data: { 
+            status: 'PAID',
+            stakeTxHash: existingStake.stakeId
+          }
+        });
+        
+        // Skip creating duplicate stake and rewards
+        return res.json({
+          success: true,
+          message: 'Payment confirmed (stake already recorded)',
+          orderId: order.orderId,
+          stakeTxHash: stakeTxHash,
+          existingStakeId: existingStake.stakeId
+        });
+      }
+
+      // LAYER 1: Mark transaction as processed to prevent event listener from creating duplicate
+      await tx.processedTx.create({
+        data: {
+          txHash: stakeTxHash,
+          createdAt: new Date()
+        }
+      });
+      console.log("✅ Transaction marked as processed");
+
       // Generate unique stakeId using timestamp + random to avoid race conditions
       const timestamp = Date.now().toString(36).toUpperCase();
       const random = Math.random().toString(36).substring(2, 5).toUpperCase();
@@ -546,6 +676,113 @@ app.post("/verify-transaction", async (req, res) => {
           txHash: stakeTxHash
         }
       });
+
+      // ── 7.5. Record Instant Cashback Reward if applicable ──────────────────
+      if (instantRewardAmount > 0) {
+        console.log("\n🎁 Recording instant cashback reward:", instantRewardAmount, "NILA");
+        await tx.pendingReward.create({
+          data: {
+            userId: user.id,
+            walletAddress: normalizedAddress,
+            type: 'INSTANT_CASHBACK',
+            amount: instantRewardAmount.toString(),
+            status: 'pending',
+            sourceId: stakeId,
+            metadata: {
+              stakeAmount: pyrandToSend,
+              rewardAmount: instantRewardAmount,
+              paymentMethod: 'CRYPTO'
+            }
+          }
+        });
+        console.log("✅ Instant cashback reward recorded");
+      }
+      
+      // ── 7.6. Record Referral Rewards if applicable ─────────────────────────
+      if (referralRewardAmount > 0) {
+        console.log("\n🎁 Recording referral bonus for new user:", referralRewardAmount, "NILA");
+        await tx.pendingReward.create({
+          data: {
+            userId: user.id,
+            walletAddress: normalizedAddress,
+            type: 'REFERRAL_REWARD',
+            amount: referralRewardAmount.toString(),
+            status: 'pending',
+            sourceId: stakeId,
+            metadata: {
+              stakeAmount: pyrandToSend,
+              rewardAmount: referralRewardAmount,
+              referrerAddress: referrerAddress,
+              rewardType: 'referral_bonus' // 2% bonus for being referred
+            }
+          }
+        });
+        console.log("✅ Referral bonus recorded for new user");
+      }
+      
+      if (referrerAddress && referrerRewardAmount > 0) {
+        console.log("\n🎁 Recording referral reward for referrer:", referrerRewardAmount, "NILA");
+        
+        // Find or create referrer user
+        let referrerUser = await tx.user.findUnique({
+          where: { walletAddress: referrerAddress }
+        });
+        
+        if (referrerUser) {
+          await tx.pendingReward.create({
+            data: {
+              userId: referrerUser.id,
+              walletAddress: referrerAddress,
+              type: 'REFERRAL_REWARD',
+              amount: referrerRewardAmount.toString(),
+              status: 'pending',
+              sourceId: stakeId,
+              metadata: {
+                stakeAmount: pyrandToSend,
+                rewardAmount: referrerRewardAmount,
+                referredUser: normalizedAddress,
+                rewardType: 'referrer_commission' // 5% commission for referring
+              }
+            }
+          });
+          console.log("✅ Referral reward recorded for referrer");
+          
+          // Create or update referral relationship (non-critical, wrapped in try-catch)
+          // This is just for tracking/stats, not essential for rewards
+          try {
+            const existingReferral = await tx.referral.findFirst({
+              where: {
+                referrerWallet: referrerAddress,
+                referredWallet: normalizedAddress
+              }
+            });
+            
+            if (!existingReferral) {
+              await tx.referral.create({
+                data: {
+                  referrerWallet: referrerAddress,
+                  referredWallet: normalizedAddress,
+                  earnings: referrerRewardAmount.toString(),
+                  createdAt: new Date()
+                }
+              });
+              console.log("✅ Referral relationship created");
+            } else {
+              const newEarnings = parseFloat(existingReferral.earnings) + referrerRewardAmount;
+              await tx.referral.update({
+                where: { id: existingReferral.id },
+                data: { earnings: newEarnings.toString() }
+              });
+              console.log("✅ Referral earnings updated");
+            }
+          } catch (referralTrackingError) {
+            console.error("⚠️  Failed to update referral tracking (non-critical):", referralTrackingError.message);
+            // Continue - this is just for stats, rewards are already recorded
+          }
+        } else {
+          console.log("⚠️  Referrer user not found in database, skipping referrer reward recording");
+        }
+      }
 
       // ── 8. Record Payment Transaction ──────────────────────────────────────
       // Determine the payment token/currency
@@ -597,7 +834,8 @@ app.post("/verify-transaction", async (req, res) => {
           metadata: {
             stakeId,
             lockDays,
-            apr
+            apr,
+            instantRewardAmount // Include instant reward in metadata
           }
         }
       });
@@ -634,7 +872,17 @@ app.post("/verify-transaction", async (req, res) => {
     });
 
   } catch (err) {
+    // Handle duplicate transaction errors (Prisma unique constraint violations)
     if (err.code === 'P2002') {
+      const target = err.meta?.target;
+      if (target && target.includes('txHash')) {
+        console.log("⚠️  Duplicate stake detected (txHash already exists)");
+        return res.status(200).json({ 
+          success: true,
+          message: "Payment already processed",
+          note: "This transaction was already recorded"
+        });
+      }
       return res.status(400).json({ error: "Transaction already being processed" });
     }
 

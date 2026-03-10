@@ -7,11 +7,13 @@ import Privacy from './pages/Privacy';
 import Cookies from './pages/Cookies';
 import ScrollToTop from './components/ScrollToTop';
 import { WalletWatcher } from './components/WalletWatcher';
+import { WalletReconnect } from './components/WalletReconnect';
 
 function App() {
   return (
     <Router>
       <ScrollToTop />
+      <WalletReconnect />
       <WalletWatcher />
       <Toaster
         position="top-right"

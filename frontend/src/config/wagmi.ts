@@ -25,7 +25,10 @@ export const wagmiAdapter = new WagmiAdapter({
   ssr: false
 })
 
-// Create AppKit instance
+// Configure wagmi to enable auto-reconnection
+export const wagmiConfig = wagmiAdapter.wagmiConfig
+
+// Create AppKit instance with auto-reconnection enabled
 export const modal = createAppKit({
   adapters: [wagmiAdapter],
   networks,
@@ -45,5 +48,8 @@ export const modal = createAppKit({
   themeVariables: {
     '--w3m-accent': '#E31E24',
     '--w3m-border-radius-master': '12px'
-  }
+  },
+  enableWalletConnect: true,
+  enableInjected: true,
+  enableCoinbase: true
 })

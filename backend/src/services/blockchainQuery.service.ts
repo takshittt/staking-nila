@@ -111,16 +111,22 @@ export class BlockchainQueryService {
 
       // Mark stakes as completed if they're no longer active on-chain
       for (const dbStake of dbStakes) {
-        const existsOnChain = blockchainStakes.some(
-          bs => bs.stakeId === dbStake.stakeId && bs.isActive
-        );
-        
-        if (!existsOnChain) {
-          await prisma.stake.update({
-            where: { id: dbStake.id },
-            data: { status: 'completed' }
-          });
-          console.log(`[Sync] Marked stake ${dbStake.stakeId} as completed`);
+        // Compare using onChainStakeId if available, otherwise skip
+        if (dbStake.onChainStakeId !== null && dbStake.onChainStakeId !== undefined) {
+          const onChainStake = blockchainStakes.find(
+            bs => bs.stakeId === dbStake.onChainStakeId
+          );
+          
+          // If stake doesn't exist on-chain or is marked as unstaked, mark as completed
+          if (!onChainStake || !onChainStake.isActive) {
+            await prisma.stake.update({
+              where: { id: dbStake.id },
+              data: { status: 'completed' }
+            });
+            console.log(`[Sync] Marked stake ${dbStake.stakeId} (onChain: ${dbStake.onChainStakeId}) as completed`);
+          }
+        } else {
+          console.log(`[Sync] Skipping stake ${dbStake.stakeId} - no onChainStakeId set`);
         }
       }
 

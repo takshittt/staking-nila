@@ -26,7 +26,8 @@
     "check:users": "tsx scripts/checkUsers.ts",
     "rewards:sync": "tsx scripts/syncAllAPYRewards.ts",
     "db:clear": "tsx scripts/clearDatabase.ts",
-    "test:sync": "tsx scripts/testSyncSystem.ts"
+    "test:sync": "tsx scripts/testSyncSystem.ts",
+    "fix:unstaked": "tsx scripts/fix-unstaked-stakes.ts"
   },
   "keywords": [],
   "author": "",
